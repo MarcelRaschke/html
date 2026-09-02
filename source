@@ -79816,7 +79816,7 @@ dictionary <dfn dictionary>ValidityStateFlags</dfn> {
 
    <li><p>If the <var>state</var> argument of the function is omitted, set <var>element</var>'s
    <span data-x="face-state">state</span> to its <span data-x="face-submission-value">submission
-   value</span>.
+   value</span>.</p></li>
 
    <li><p>Otherwise, if <var>state</var> is a <code>FormData</code> object, set <var>element</var>'s
    <span data-x="face-state">state</span> to a <span data-x="list clone">clone</span> of
