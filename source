@@ -105483,7 +105483,7 @@ interface <dfn interface>NotRestoredReasons</dfn> {
   <p><span data-x="Jake diagram">Jake diagrams</span> are a powerful tool for visualizing the
   interactions of multiple navigables, navigations, and traversals. They cannot capture every
   possible interaction &mdash; for example, they only work with a single level of nesting &mdash;
-  but we will have ocassion to use them to illustrate several complex situations throughout this
+  but we will have occasion to use them to illustrate several complex situations throughout this
   standard.</p>
 
   <p class="note"><span data-x="Jake diagram">Jake diagrams</span> are named after their creator,
