@@ -153633,10 +153633,10 @@ progress { appearance: auto; }</code></pre>
   <code>option</code> element in the element's <span data-x="concept-select-option-list">list of
   options</span> (including its indent, if any). If the <code>select</code> has the <code
   data-x="attr-select-multiple">multiple</code> attribute and is being rendered as a
-  <span>drop-down box</span>, then the width should also be wide enough to accomodate the text
+  <span>drop-down box</span>, then the width should also be wide enough to accommodate the text
   rendered in the <code>select</code> with any combination of <code>option</code>s selected.</p>
 
-  <p class="note">The <span>width of the <code>select</code>'s labels</span> has an accomodation for
+  <p class="note">The <span>width of the <code>select</code>'s labels</span> has an accommodation for
   <code data-x="attr-select-multiple">multiple</code> because some implementations use special text
   to represent multiple options being selected, such as "2 selected." In this case, the select needs
   to be wide enough to render "2 selected" in addition to the individual <code>option</code>s.</p>
