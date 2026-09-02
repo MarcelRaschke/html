@@ -36442,7 +36442,7 @@ interface <dfn interface>HTMLEmbedElement</dfn> : <span>HTMLElement</span> {
    <li>
     <p>If the <span data-x="concept-url-path">path</span> component of <var>response</var>'s
     <span data-x="concept-response-url">url</span> matches a pattern that a <span>plugin</span>
-    supports, then return the type that that plugin can handle.</p>
+    supports, then return the type that the plugin can handle.</p>
 
     <p class="example">For example, a plugin might say that it can handle URLs with <span
     data-x="concept-url-path">path</span> components that end with the four character string
@@ -36864,7 +36864,7 @@ interface <dfn interface>HTMLObjectElement</dfn> : <span>HTMLElement</span> {
         <p>If applying the <span>URL parser</span> algorithm to the <span>URL</span> of the
         specified resource (after any redirects) results in a <span>URL record</span> whose <span
         data-x="concept-url-path">path</span> component matches a pattern that a <span>plugin</span>
-        supports, then let <var>resource type</var> be the type that that plugin can
+        supports, then let <var>resource type</var> be the type that the plugin can
         handle.</p>
 
         <p class="example">For example, a plugin might say that it can handle resources with <span
@@ -128605,7 +128605,7 @@ dictionary <dfn dictionary>SanitizerConfig</dfn> {
 
   <p class="note">It's expected that the configuration being passed in has previously been run
   through the <span>canonicalize the configuration</span> steps. We will simply assert conditions
-  that that algorithm is guaranteed to hold.</p>
+  that the algorithm is guaranteed to hold.</p>
 
   <ol>
    <li><p><span>Assert</span>: <var>config</var>["<code
