@@ -104900,7 +104900,7 @@ interface <dfn interface>NotRestoredReasons</dfn> {
    representation of a series of documents. They correspond 1:1 with <code>WindowProxy</code>
    objects. Each navigable can present a series of browsing contexts, with <a
    href="#browsing-context-group-switches-due-to-cross-origin-opener-policy">switches</a> between
-   those browsing contexts occuring under certain well-defined circumstances.</p></li>
+   those browsing contexts occurring under certain well-defined circumstances.</p></li>
   </ul>
 
   <p>Most of this standard works in the language of navigables, but certain APIs expose the
@@ -111588,7 +111588,7 @@ location.href = '#foo';</code></pre>
         state</span> to <span>StructuredSerializeForStorage</span>(null).</p>
 
         <p class="note">This clears history state when the origin changed vs a previous load of
-        <var>targetEntry</var> without a redirect occuring. This can happen due to a change in CSP
+        <var>targetEntry</var> without a redirect occurring. This can happen due to a change in CSP
         sandbox headers.</p>
        </li>
 
