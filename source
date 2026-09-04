@@ -2534,7 +2534,7 @@ a.setAttribute('href', 'https://example.com/'); // change the content attribute 
      data-x-href="https://www.rfc-editor.org/rfc/rfc6694#section-2"><code>about:</code></dfn> scheme
      <ref>ABOUT</ref></li>
      <li>The <dfn data-x="blob protocol"
-     data-x-href="https://w3c.github.io/FileAPI/#DefinitionOfScheme"><code>blob:</code></dfn> scheme
+     data-x-href="https://w3c.github.io/FileAPI/#blob-url"><code>blob:</code></dfn> scheme
      <ref>FILEAPI</ref></li>
      <li>The <dfn data-x="data protocol"
      data-x-href="https://www.rfc-editor.org/rfc/rfc2397#section-2"><code>data:</code></dfn> scheme
@@ -2712,7 +2712,7 @@ a.setAttribute('href', 'https://example.com/'); // change the content attribute 
        <li><dfn data-x="concept-response-location-url" data-x-href="https://fetch.spec.whatwg.org/#concept-response-location-url">location URL</dfn></li>
        <li><dfn data-x="concept-response-timing-info" data-x-href="https://fetch.spec.whatwg.org/#concept-response-timing-info">timing info</dfn></li>
        <li><dfn data-x="concept-response-service-worker-timing-info" data-x-href="https://fetch.spec.whatwg.org/#response-service-worker-timing-info">service worker timing info</dfn></li>
-       <li><dfn data-x="concept-response-has-cross-origin-redirects" data-x-href="https://fetch.spec.whatwg.org/#response-has-cross-origin-redirects">has-cross-origin-redirects</dfn></li>
+       <li><dfn data-x="concept-response-redirect-taint" data-x-href="https://fetch.spec.whatwg.org/#response-redirect-taint">redirect taint</dfn></li>
        <li><dfn data-x="concept-response-timing-allow-passed" data-x-href="https://fetch.spec.whatwg.org/#concept-response-timing-allow-passed">timing allow passed</dfn></li>
        <li>
         <dfn data-x-href="https://wicg.github.io/background-fetch/#extract-content-range-values">extract content-range values</dfn>
@@ -2741,7 +2741,6 @@ a.setAttribute('href', 'https://example.com/'); // change the content attribute 
        <li><dfn data-x="concept-request-priority" data-x-href="https://fetch.spec.whatwg.org/#request-priority">priority</dfn></li>
        <li><dfn data-x="concept-request-origin" data-x-href="https://fetch.spec.whatwg.org/#concept-request-origin">origin</dfn></li>
        <li><dfn data-x="concept-request-referrer" data-x-href="https://fetch.spec.whatwg.org/#concept-request-referrer">referrer</dfn></li>
-       <li><dfn data-x-href="https://fetch.spec.whatwg.org/#synchronous-flag">synchronous flag</dfn></li>
        <li><dfn data-x="concept-request-mode" data-x-href="https://fetch.spec.whatwg.org/#concept-request-mode">mode</dfn></li>
        <li><dfn data-x="concept-request-credentials-mode" data-x-href="https://fetch.spec.whatwg.org/#concept-request-credentials-mode">credentials mode</dfn></li>
        <li><dfn data-x-href="https://fetch.spec.whatwg.org/#concept-request-use-url-credentials-flag">use-URL-credentials flag</dfn></li>
@@ -3378,7 +3377,7 @@ a.setAttribute('href', 'https://example.com/'); // change the content attribute 
      <li>The <dfn data-x="concept-event-dispatch" data-x-href="https://dom.spec.whatwg.org/#concept-event-dispatch">dispatch</dfn> algorithm</li>
      <li><dfn data-x-href="https://dom.spec.whatwg.org/#dictdef-eventinit"><code>EventInit</code></dfn> dictionary type</li>
      <li><dfn data-x="dom-Event-type" data-x-href="https://dom.spec.whatwg.org/#dom-event-type"><code>type</code></dfn> attribute</li>
-     <li>An event's <dfn data-x="concept-event-target" data-x-href="https://dom.spec.whatwg.org/#concept-event-target">target</dfn></li>
+     <li>An event's <dfn data-x="concept-event-target" data-x-href="https://dom.spec.whatwg.org/#event-target">target</dfn></li>
      <li><dfn data-x="dom-Event-currentTarget" data-x-href="https://dom.spec.whatwg.org/#dom-event-currenttarget"><code>currentTarget</code></dfn> attribute</li>
      <li><dfn data-x="dom-Event-bubbles" data-x-href="https://dom.spec.whatwg.org/#dom-event-bubbles"><code>bubbles</code></dfn> attribute</li>
      <li><dfn data-x="dom-Event-cancelable" data-x-href="https://dom.spec.whatwg.org/#dom-event-cancelable"><code>cancelable</code></dfn> attribute</li>
@@ -3668,7 +3667,7 @@ a.setAttribute('href', 'https://example.com/'); // change the content attribute 
     <p>The following features are defined in <cite>Battery Status API</cite>: <ref>BATTERY</ref></p>
 
     <ul class="brief">
-     <li><dfn data-x="dom-navigator-getBattery" data-x-href="https://w3c.github.io/battery/#widl-Navigator-getBattery-Promise-BatteryManager"><code>getBattery()</code></dfn> method</li>
+     <li><dfn data-x="dom-navigator-getBattery" data-x-href="https://w3c.github.io/battery/#dom-navigator-getbattery"><code>getBattery()</code></dfn> method</li>
     </ul>
    </dd>
 
@@ -3907,8 +3906,8 @@ a.setAttribute('href', 'https://example.com/'); // change the content attribute 
      <li>The <dfn data-x-href="https://drafts.csswg.org/css-align/#propdef-align-items">'align-items'</dfn> property</li>
      <li>The <dfn data-x-href="https://drafts.csswg.org/css-align/#propdef-align-self">'align-self'</dfn> property</li>
      <li>The <dfn data-x-href="https://drafts.csswg.org/css-align/#propdef-justify-self">'justify-self'</dfn> property</li>
-     <li>The <dfn data-x-href="https://drafts.csswg.org/css-align/#propdef-propdef-justify-content">'justify-content'</dfn> property</li>
-     <li>The <dfn data-x-href="https://drafts.csswg.org/css-align/#propdef-propdef-justify-items">'justify-items'</dfn> property</li>
+     <li>The <dfn data-x-href="https://drafts.csswg.org/css-align/#propdef-justify-content">'justify-content'</dfn> property</li>
+     <li>The <dfn data-x-href="https://drafts.csswg.org/css-align/#propdef-justify-items">'justify-items'</dfn> property</li>
     </ul>
 
     <p>The following terms and features are defined in <cite>CSS Display</cite>:
@@ -4190,7 +4189,7 @@ a.setAttribute('href', 'https://example.com/'); // change the content attribute 
     <ref>CSSSYNTAX</ref></p>
 
     <ul class="brief">
-     <li><dfn data-x-href="https://drafts.csswg.org/css-syntax/#conform-classes">conformant style sheet</dfn></li>
+     <li><dfn data-x-href="https://drafts.csswg.org/css-syntax/#w3c-conformance-classes">conformant style sheet</dfn></li>
      <li><dfn data-x-href="https://drafts.csswg.org/css-syntax/#parse-a-list-of-component-values">parse a list of component values</dfn></li>
      <li><dfn data-x-href="https://drafts.csswg.org/css-syntax/#parse-a-comma-separated-list-of-component-values">parse a comma-separated list of component values</dfn></li>
      <li><dfn data-x-href="https://drafts.csswg.org/css-syntax/#component-value">component value</dfn></li>
@@ -4227,7 +4226,7 @@ a.setAttribute('href', 'https://example.com/'); // change the content attribute 
      <li>The <dfn data-x-href="https://drafts.csswg.org/css-values/#in">'in'</dfn> unit</li>
      <li>The <dfn data-x-href="https://drafts.csswg.org/css-values/#px">'px'</dfn> unit</li>
      <li>The <dfn data-x-href="https://drafts.csswg.org/css-values/#pt">'pt'</dfn> unit</li>
-     <li>The <dfn data-x-href="https://drafts.csswg.org/css-values/#funcdef-attr">'attr()'</dfn> function</li>
+     <li>The <dfn data-x-href="https://drafts.csswg.org/css-values-5/#funcdef-attr">'attr()'</dfn> function</li>
      <li>The <dfn data-x-href="https://drafts.csswg.org/css-values/#math-function">math functions</dfn></li>
     </ul>
 
@@ -4405,7 +4404,7 @@ a.setAttribute('href', 'https://example.com/'); // change the content attribute 
 
     <ul class="brief">
      <li><dfn data-x-href="https://w3c.github.io/webvtt/#webvtt-file">WebVTT file</dfn></li>
-     <li><dfn data-x-href="https://w3c.github.io/webvtt/#webvtt-file-using-cue-text">WebVTT file using cue text</dfn></li>
+     <li><dfn data-x-href="https://w3c.github.io/webvtt/#webvtt-file-using-caption-or-subtitle-cue-text">WebVTT file using caption or subtitle cue text</dfn></li>
      <li><dfn data-x-href="https://w3c.github.io/webvtt/#webvtt-file-using-only-nested-cues">WebVTT file using only nested cues</dfn></li>
      <li><dfn data-x-href="https://w3c.github.io/webvtt/#webvtt-parser">WebVTT parser</dfn></li>
      <li>The <dfn data-x-href="https://w3c.github.io/webvtt/#rules-for-updating-the-display-of-webvtt-text-tracks">rules for updating the display of WebVTT text tracks</dfn></li>
@@ -4443,12 +4442,23 @@ a.setAttribute('href', 'https://example.com/'); // change the content attribute 
 
     <ul class="brief">
      <li><dfn data-x-href="https://w3c.github.io/aria/#dfn-role">role</dfn></li>
-     <li><dfn data-x-href="https://w3c.github.io/aria/#dfn-accessible-name" data-x="concept-accessible-name">accessible name</dfn></li>
      <li>The <dfn data-x-href="https://w3c.github.io/aria/#ARIAMixin"><code>ARIAMixin</code></dfn> interface, with its associated
              <dfn data-x-href="https://w3c.github.io/aria/#dfn-ariamixin-getter-steps"><code>ARIAMixin</code> getter steps</dfn> and
              <dfn data-x-href="https://w3c.github.io/aria/#dfn-ariamixin-setter-steps"><code>ARIAMixin</code> setter steps</dfn> hooks, and its
              <dfn data-x="dom-ARIAMixin-role" data-x-href="https://w3c.github.io/aria/#idl-def-ariamixin-role"><code>role</code></dfn> and
              <dfn data-x="dom-ARIAMixin-aria*" data-x-href="https://w3c.github.io/aria/#idl-def-ariamixin-ariaactivedescendantelement"><code>aria*</code></dfn> attributes</li>
+    </ul>
+   </dd>
+
+
+   <dt>Accessible Name and Description Computation</dt>
+
+   <dd>
+    <p>The following term is defined in <cite>Accessible Name and Description
+    Computation</cite>: <ref>ACCNAME</ref></p>
+
+    <ul class="brief">
+     <li><dfn data-x-href="https://w3c.github.io/accname/#dfn-accessible-name" data-x="concept-accessible-name">accessible name</dfn></li>
     </ul>
    </dd>
 
@@ -5238,6 +5248,11 @@ a.setAttribute('href', 'https://example.com/'); // change the content attribute 
   <div w-nodev>
 
   <h4>Interactions with XPath and XSLT</h4>
+
+  <p class="critical">Avoid using client-side XSLT in browsers. The browser implementations of XSLT
+  are highly susceptible to memory safety vulnerabilities, and the web platform has evolved toward
+  JavaScript as the safe replacement. For these reasons, this feature is in the process of being
+  removed from the web platform. (This is a long process that takes many years.)</p>
 
   <p id="xpath-1.0-processors">Implementations of XPath 1.0 that operate on <span>HTML
   documents</span> parsed or created in the manners described in this specification (e.g. as part of
@@ -12681,28 +12696,18 @@ partial interface <dfn id="document" data-lt="">Document</dfn> {
   <div algorithm>
   <p id="dom-document-namedItem-which">The <code>Document</code> interface <span data-x="support
   named properties">supports named properties</span>. The <span>supported property names</span> of a
-  <code>Document</code> object <var>document</var> at any moment consist of the following, in
-  <span>tree order</span> according to the element that contributed them, ignoring later duplicates,
-  and with values from <code data-x="attr-id">id</code> attributes coming before values from <code
-  data-x="">name</code> attributes when the same element contributes both:</p>
+  <code>Document</code> object <var>document</var> at any moment consist of the following, for each
+  element <var>element</var> <span>in a document tree</span> with <var>document</var> as its
+  <span>root</span>, in <span>tree order</span>, ignoring later duplicates:</p>
 
-  <!-- KEEP THIS LIST IN SYNC WITH "NAMED ELEMENTS" DEFINITION BELOW -->
   <ul>
-   <li><p>the value of the <code data-x="">name</code> content attribute for all
-   <span>exposed</span> <code>embed</code>, <code>form</code>, <code>iframe</code>,
-   <code>img</code>, and <span>exposed</span> <code>object</code> elements that have a non-empty
-   <code data-x="">name</code> content attribute and are <span>in a document tree</span> with
-   <var>document</var> as their <span>root</span>;</p></li>
+   <li><p>the value of <var>element</var>'s <code data-x="attr-id">id</code> content attribute, if
+   <var>element</var> is a <span data-x="dom-document-namedItem-filter">named element</span> with
+   that value as its name; and then</p></li>
 
-   <li><p>the value of the <code data-x="attr-id">id</code> content attribute for all
-   <span>exposed</span> <code>object</code> elements that have a non-empty
-   <code data-x="attr-id">id</code> content attribute and are <span>in a document tree</span> with
-   <var>document</var> as their <span>root</span>; and</p></li>
-
-   <li><p>the value of the <code data-x="attr-id">id</code> content attribute for all
-   <code>img</code> elements that have both a non-empty <code data-x="attr-id">id</code> content
-   attribute and a non-empty <code data-x="">name</code> content attribute, and are <span>in a
-   document tree</span> with <var>document</var> as their <span>root</span>.</p></li>
+   <li><p>the value of <var>element</var>'s <code data-x="">name</code> content attribute, if
+   <var>element</var> is a <span data-x="dom-document-namedItem-filter">named element</span> with
+   that value as its name.</p></li>
   </ul>
   </div>
 
@@ -12746,28 +12751,21 @@ partial interface <dfn id="document" data-lt="">Document</dfn> {
   </div>
 
   <div algorithm>
-  <p><dfn data-x="dom-document-nameditem-filter">Named elements</dfn> with the name <var>name</var>, for the purposes of the above algorithm, are those that are either:</p>
+  <p>An element is a <dfn data-x="dom-document-nameditem-filter">named element</dfn> with the name
+  <var>name</var> if <var>name</var> is not the empty string and any of the following are true:</p>
 
-  <!-- KEEP THIS LIST IN SYNC WITH SUPPORTED PROPERTY VALUES ABOVE -->
   <ul>
-   <li><span>Exposed</span> <code>embed</code>, <code>form</code>, <code>iframe</code>,
-   <code>img</code>, or <span>exposed</span> <code>object</code> elements that have a <code
-   data-x="">name</code> content attribute whose value is <var>name</var>, or</li>
+   <li>it is an <code>embed</code>, <code>form</code>, <code>iframe</code>, <code>img</code>, or
+   <code>object</code> element whose <code data-x="">name</code> content attribute's value is
+   <var>name</var>;</li>
 
-   <li><span>Exposed</span> <code>object</code> elements that have an <code
-   data-x="attr-id">id</code> content attribute whose value is <var>name</var>, or</li>
+   <li>it is an <code>object</code> element whose <code data-x="attr-id">id</code> content
+   attribute's value is <var>name</var>; or</li>
 
-   <li><code>img</code> elements that have an <code data-x="attr-id">id</code> content attribute
-   whose value is <var>name</var>, and that have a non-empty <code data-x="">name</code>
-   content attribute present also.</li>
+   <li>it is an <code>img</code> element whose <code data-x="attr-id">id</code> content attribute's
+   value is <var>name</var>, and that has a non-empty <code data-x="">name</code> content attribute
+   present also.</li>
   </ul>
-  </div>
-
-  <div algorithm>
-  <p>An <code>embed</code> or <code>object</code> element is said to be <dfn>exposed</dfn> if it has
-  no <span>exposed</span> <code>object</code> ancestor, and, for <code>object</code> elements, is
-  additionally either not showing its <span>fallback content</span> or has no <code>object</code> or
-  <code>embed</code> descendants.</p>
   </div>
 
   </div>
@@ -17064,8 +17062,6 @@ interface <dfn interface>HTMLLinkElement</dfn> : <span>HTMLElement</span> {
 
    <li><p>If <var>request</var> is null, then return.</p></li>
 
-   <li><p>Set <var>request</var>'s <span>synchronous flag</span>.</p></li>
-
    <li><p>Run the <span>linked resource fetch setup steps</span>, given <var>el</var> and
    <var>request</var>. If the result is false, then return.</p></li>
 
@@ -19139,8 +19135,8 @@ console.log(style.disabled); // false</code></pre>
    </li>
 
    <li><p>If the <span>Should element's inline behavior be blocked by Content Security
-   Policy?</span> algorithm returns "<code data-x="">Blocked</code>" when executed upon the
-   <code>style</code> element, "<code data-x="">style</code>", and the <code>style</code> element's
+   Policy?</span> algorithm returns "<code data-x="">Blocked</code>" when executed upon
+   <var>element</var>, "<code data-x="">style</code>", and <var>element</var>'s
    <span>child text content</span>, then return. <ref>CSP</ref></p></li>
 
    <li>
@@ -27402,23 +27398,22 @@ document.body.appendChild(wbr);</code></pre>
     </ol>
    </li>
 
+   <li><p>Optionally, the user agent may return, if it believes doing so would safeguard the user
+   from a potentially hostile download.</p></li>
+
+   <li><p>Let <var>request</var> be a new <span data-x="concept-request">request</span> whose <span
+   data-x="concept-request-url">URL</span> is <var>urlString</var>, <span
+   data-x="concept-request-client">client</span> is <span>entry settings object</span>, <span
+   data-x="concept-request-initiator">initiator</span> is "<code data-x="">download</code>", <span
+   data-x="concept-request-destination">destination</span> is the empty string, and whose
+   <span>use-URL-credentials flag</span> is set.</p></li>
+
    <li>
-    <p>Run these steps <span>in parallel</span>:</p>
+    <p><span data-x="concept-fetch">Fetch</span> <var>request</var>, with <i
+    data-x="processResponse">processResponse</i> set to the following steps given <span
+    data-x="concept-response">response</span> <var>response</var>:</p>
 
     <ol>
-     <li><p>Optionally, the user agent may abort these steps, if it believes doing so would
-     safeguard the user from a potentially hostile download.</p></li>
-
-     <li><p>Let <var>request</var> be a new <span data-x="concept-request">request</span> whose
-     <span data-x="concept-request-url">URL</span> is <var>urlString</var>, <span
-     data-x="concept-request-client">client</span> is <span>entry settings object</span>, <span
-     data-x="concept-request-initiator">initiator</span> is "<code data-x="">download</code>", <span
-     data-x="concept-request-destination">destination</span> is the empty string, and whose
-     <span>synchronous flag</span> and <span>use-URL-credentials flag</span> are set.</p></li>
-
-     <li><p>Let <var>response</var> be the result of <span data-x="concept-fetch">fetching</span>
-     <var>request</var>.</p></li>
-
      <!--FETCH--><li><p><span>Handle as a download</span> <var>response</var> with
      <var>subject</var>'s <span>node navigable</span> and null.</p></li>
     </ol>
@@ -28665,7 +28660,7 @@ document.body.appendChild(wbr);</code></pre>
   <p>In the absence of a <code>link</code> with the <code data-x="rel-icon">icon</code> keyword, for
   <code>Document</code> objects whose <span data-x="concept-document-url">URL</span>'s
   <span data-x="concept-url-scheme">scheme</span> is an <span>HTTP(S) scheme</span>, user agents may
-  instead run these steps <span>in parallel</span>:</p>
+  instead run these steps:</p>
 
   <ol>
    <li><p>Let <var>request</var> be a new <span data-x="concept-request">request</span> whose
@@ -28674,16 +28669,20 @@ document.body.appendChild(wbr);</code></pre>
    <code>Document</code> object's <span data-x="concept-document-url">URL</span>, <span
    data-x="concept-request-client">client</span> is the <code>Document</code> object's
    <span>relevant settings object</span>, <span
-   data-x="concept-request-destination">destination</span> is "<code data-x="">image</code>",
-   <span>synchronous flag</span> is set, <span data-x="concept-request-credentials-mode">credentials
-   mode</span> is "<code data-x="">include</code>", and whose <span>use-URL-credentials flag</span>
-   is set.</p></li>
+   data-x="concept-request-destination">destination</span> is "<code data-x="">image</code>", <span
+   data-x="concept-request-credentials-mode">credentials mode</span> is "<code
+   data-x="">include</code>", and whose <span>use-URL-credentials flag</span> is set.</p></li>
 
-   <!--FETCH--><li><p>Let <var>response</var> be the result of <span
-   data-x="concept-fetch">fetching</span> <var>request</var>.</p></li>
+   <!--FETCH--><li>
+    <p><span data-x="concept-fetch">Fetch</span> <var>request</var>, with <i
+    data-x="processResponse">processResponse</i> set to the following steps given <span
+    data-x="concept-response">response</span> <var>response</var>:</p>
 
-   <li><p>Use <var>response</var>'s <span>unsafe response</span> as an icon as if it had been
-   declared using the <code data-x="rel-icon">icon</code> keyword.</p></li>
+    <ol>
+     <li><p>Use <var>response</var>'s <span>unsafe response</span> as an icon as if it had been
+     declared using the <code data-x="rel-icon">icon</code> keyword.</p></li>
+    </ol>
+   </li>
   </ol>
   </div>
 
@@ -31566,8 +31565,11 @@ interface <dfn interface>HTMLImageElement</dfn> : <span>HTMLElement</span> {
    <dt><code data-x=""><var>image</var>.<span subdfn data-x="dom-img-height">height</span> [ = <var>value</var> ]</code></dt>
 
    <dd>
-    <p>These attributes return the actual rendered dimensions of the image, or 0 if the dimensions
-    are not known.</p>
+    <p>These attributes return the rendered dimensions of the image. When the image is not being
+    rendered, they return the <code data-x="attr-dim-width">width</code> and <code
+    data-x="attr-dim-height">height</code> content attributes' values, defaulting to <code
+    data-x="dom-img-naturalWidth">naturalWidth</code> and <code
+    data-x="dom-img-naturalHeight">naturalHeight</code>.</p>
 
     <p>They can be set, to change the corresponding content attributes.</p>
    </dd>
@@ -31617,15 +31619,14 @@ interface <dfn interface>HTMLImageElement</dfn> : <span>HTMLElement</span> {
   <var>image</var>:</p>
 
   <ol>
-   <li><p>If <var>image</var> is <span>being rendered</span>, then return its rendered width and
-   height, in <span data-x="'px'">CSS pixels</span>. <ref>CSS</ref></p></li>
+   <li><p>Let <var>naturalDimensions</var> be null.</p></li>
 
-   <li><p>If <var>image</var> is <i data-x="img-available">available</i> and has
-   <span>density-corrected natural width and height</span>, then return its
-   <span>density-corrected natural width and height</span>, in <span data-x="'px'">CSS
-   pixels</span>.</p></li>
+   <li><p>If <var>image</var> is <i data-x="img-available">available</i>, then set
+   <var>naturalDimensions</var> to <var>image</var>'s <span>density-corrected natural width and
+   height</span>.</p></li>
 
-   <li><p>Return a width of 0 and a height of 0.</p></li>
+   <li><p>Return the result of <span data-x="determine-dimensions">determining the
+   dimensions</span> of <var>image</var> given <var>naturalDimensions</var>.</p></li>
   </ol>
   </div>
 
@@ -34237,52 +34238,7 @@ was an English &lt;a href="/wiki/Music_hall">music hall&lt;/a> singer, ...</code
    <span>in parallel</span>.</p></li>
 
    <li>
-    <p>If the <span>list of available images</span> contains an entry for <var>key</var>,
-    then set <var>image request</var>'s <span data-x="img-req-data">image data</span> to that of the entry.
-    Continue to the next step.</p>
-
-    <p>Otherwise:</p>
-
-    <ol>
-     <li><p>Let <var>request</var> be the result of <span
-     data-x="create a potential-CORS request">creating a potential-CORS request</span> given
-     <var>urlString</var>, "<code data-x="">image</code>", and
-     <var>corsAttributeState</var>.</p></li>
-
-     <li><p>Set <var>request</var>'s <span data-x="concept-request-client">client</span> to
-     <var>client</var>, set <var>request</var>'s <span data-x="concept-request-initiator">initiator</span> to "<code
-     data-x="">imageset</code>", and set <var>request</var>'s <span>synchronous
-     flag</span>.</p></li>
-
-     <li><p>Set <var>request</var>'s
-     <span data-x="concept-request-referrer-policy">referrer policy</span> to the current state of
-     the element's <code data-x="attr-img-referrerpolicy">referrerpolicy</code> attribute.</p></li>
-
-     <li><p>Set <var>request</var>'s <span
-     data-x="concept-request-priority">priority</span> to the current state of the element's <code
-     data-x="attr-img-fetchpriority">fetchpriority</code> attribute.</p></li>
-
-     <!--FETCH--><li><p>Let <var>response</var> be the result of <span
-     data-x="concept-fetch">fetching</span> <var>request</var>.</p></li>
-
-     <li><p>If <var>response</var>'s <span>unsafe response</span> is a <span>network error</span> or
-     if the image format is unsupported (as determined by applying the <span
-     data-x="Content-Type sniffing: image">image sniffing rules</span>, again as mentioned earlier),
-     or if the user agent is able to determine that <var>image request</var>'s image is corrupted in
-     some fatal way such that the image dimensions cannot be obtained, or if the resource type is
-     <code>multipart/x-mixed-replace</code>, then set the <span>pending request</span> to null and abort
-     these steps.</p></li>
-
-     <li><p>Otherwise, <var>response</var>'s <span>unsafe response</span> is <var>image
-     request</var>'s <span data-x="img-req-data">image data</span>. It can be either
-     <span>CORS-same-origin</span> or <span>CORS-cross-origin</span>; this affects the image's
-     interaction with other APIs (e.g., when used on a <code>canvas</code>).</p></li>
-    </ol>
-   </li>
-
-   <li>
-    <p><span>Queue an element task</span> on the <span>DOM manipulation task source</span> given
-    the <code>img</code> element and the following steps:</p>
+    <p>Let <var>finishUpdate</var> be the following steps:</p>
 
     <ol>
      <li><p>If the <code>img</code> element has experienced <span>relevant mutations</span>
@@ -34306,6 +34262,66 @@ was an English &lt;a href="/wiki/Music_hall">music hall&lt;/a> singer, ...</code
 
      <li><p><span data-x="concept-event-fire">Fire an event</span> named <code
      data-x="event-load">load</code> at the <code>img</code> element.</p></li>
+    </ol>
+   </li>
+
+   <li>
+    <p>If the <span>list of available images</span> contains an entry for <var>key</var>:</p>
+
+    <ol>
+     <li><p>Set <var>image request</var>'s <span data-x="img-req-data">image data</span> to that of
+     the entry.</p></li>
+
+     <li><p><span>Queue an element task</span> on the <span>DOM manipulation task source</span>
+     given the <code>img</code> element and <var>finishUpdate</var>.</p></li>
+    </ol>
+   </li>
+
+   <li>
+    <p>Otherwise:</p>
+
+    <ol>
+     <li><p>Let <var>request</var> be the result of <span
+     data-x="create a potential-CORS request">creating a potential-CORS request</span> given
+     <var>urlString</var>, "<code data-x="">image</code>", and
+     <var>corsAttributeState</var>.</p></li>
+
+     <li><p>Set <var>request</var>'s <span data-x="concept-request-client">client</span> to
+     <var>client</var> and set <var>request</var>'s <span
+     data-x="concept-request-initiator">initiator</span> to "<code
+     data-x="">imageset</code>".</p></li>
+
+     <li><p>Set <var>request</var>'s
+     <span data-x="concept-request-referrer-policy">referrer policy</span> to the current state of
+     the element's <code data-x="attr-img-referrerpolicy">referrerpolicy</code> attribute.</p></li>
+
+     <li><p>Set <var>request</var>'s <span
+     data-x="concept-request-priority">priority</span> to the current state of the element's <code
+     data-x="attr-img-fetchpriority">fetchpriority</code> attribute.</p></li>
+
+     <!--FETCH--><li>
+      <p><span data-x="concept-fetch">Fetch</span> <var>request</var>, with <i
+      data-x="processResponse">processResponse</i> set to the following steps given <span
+      data-x="concept-response">response</span> <var>response</var>:</p>
+
+      <ol>
+       <li><p>If <var>response</var>'s <span>unsafe response</span> is a <span>network error</span>
+       or if the image format is unsupported (as determined by applying the <span
+       data-x="Content-Type sniffing: image">image sniffing rules</span>, again as mentioned
+       earlier), or if the user agent is able to determine that <var>image request</var>'s image is
+       corrupted in some fatal way such that the image dimensions cannot be obtained, or if the
+       resource type is <code>multipart/x-mixed-replace</code>, then set the <span>pending
+       request</span> to null and return.</p></li>
+
+       <li><p>Otherwise, <var>response</var>'s <span>unsafe response</span> is <var>image
+       request</var>'s <span data-x="img-req-data">image data</span>. It can be either
+       <span>CORS-same-origin</span> or <span>CORS-cross-origin</span>; this affects the image's
+       interaction with other APIs (e.g., when used on a <code>canvas</code>).</p></li>
+
+       <li><p><span>Queue an element task</span> on the <span>DOM manipulation task source</span>
+       given the <code>img</code> element and <var>finishUpdate</var>.</p></li>
+      </ol>
+     </li>
     </ol>
    </li>
   </ol>
@@ -36273,7 +36289,7 @@ interface <dfn interface>HTMLEmbedElement</dfn> : <span>HTMLElement</span> {
   value must be a <span>valid MIME type string</span>. If both the <code
   data-x="attr-embed-type">type</code> attribute and the <code data-x="attr-embed-src">src</code>
   attribute are present, then the <code data-x="attr-embed-type">type</code> attribute must specify
-  the same type as the <span data-x="Content-Type">explicit Content-Type metadata</span> of the
+  the same type as the explicit <span data-x="Content-Type">Content-Type metadata</span> of the
   resource given by the <code data-x="attr-embed-src">src</code> attribute.</p>
 
   <div w-nodev>
@@ -36441,7 +36457,7 @@ interface <dfn interface>HTMLEmbedElement</dfn> : <span>HTMLElement</span> {
 
    <li>
     <p>If the <span data-x="concept-url-path">path</span> component of <var>response</var>'s
-    <span data-x="concept-response-url">url</span> matches a pattern that a <span>plugin</span>
+    <span data-x="concept-response-url">URL</span> matches a pattern that a <span>plugin</span>
     supports, then return the type that the plugin can handle.</p>
 
     <p class="example">For example, a plugin might say that it can handle URLs with <span
@@ -36452,7 +36468,7 @@ interface <dfn interface>HTMLEmbedElement</dfn> : <span>HTMLElement</span> {
     <!-- see also <object> which has a similar step -->
    </li>
 
-   <li><p>If <var>response</var> has <span data-x="Content-Type">explicit Content-Type
+   <li><p>If <var>response</var> has explicit <span data-x="Content-Type">Content-Type
    metadata</span>, and that value is a type that a <span>plugin</span> supports, then return that
    value.</p></li>
 
@@ -36765,9 +36781,9 @@ interface <dfn interface>HTMLObjectElement</dfn> : <span>HTMLElement</span> {
         <!-- by request: https://www.w3.org/Bugs/Public/show_bug.cgi?id=8479 -->
 
         <p>If the user agent is configured to strictly obey Content-Type headers for this resource,
-        and the resource has <span data-x="Content-Type">associated Content-Type metadata</span>,
-        then let the <var>resource type</var> be the type specified in <span
-        data-x="Content-Type">the resource's Content-Type metadata</span>, and jump to the step below
+        and the resource has associated <span data-x="Content-Type">Content-Type metadata</span>,
+        then let the <var>resource type</var> be the type specified in the resource's <span
+        data-x="Content-Type">Content-Type metadata</span>, and jump to the step below
         labeled <i>handler</i>.</p>
 
         <p class="warning">This can introduce a vulnerability, wherein a site is trying to embed a
@@ -36784,7 +36800,7 @@ interface <dfn interface>HTMLObjectElement</dfn> : <span>HTMLElement</span> {
 
         <dl class="switch">
 
-         <dt>If the resource has <span data-x="Content-Type">associated Content-Type
+         <dt>If the resource has associated <span data-x="Content-Type">Content-Type
          metadata</span></dt>
 
          <dd>
@@ -36794,7 +36810,7 @@ interface <dfn interface>HTMLObjectElement</dfn> : <span>HTMLElement</span> {
            </li>
 
            <li>
-            <p>If the type specified in <span data-x="Content-Type">the resource's Content-Type
+            <p>If the type specified in the resource's <span data-x="Content-Type">Content-Type
             metadata</span> is "<code>text/plain</code>", and the result of applying the <span
             data-x="Content-Type sniffing: text or binary">rules for distinguishing if a resource is
             text or binary</span> to the resource is that the resource is not
@@ -36802,14 +36818,14 @@ interface <dfn interface>HTMLObjectElement</dfn> : <span>HTMLElement</span> {
            </li>
 
            <li>
-            <p>If the type specified in <span data-x="Content-Type">the resource's Content-Type
+            <p>If the type specified in the resource's <span data-x="Content-Type">Content-Type
             metadata</span> is "<code>application/octet-stream</code>", then set <var>binary</var> to true.</p>
            </li>
 
            <li>
-            <p>If <var>binary</var> is false, then let the <var>resource
-            type</var> be the type specified in <span data-x="Content-Type">the resource's
-            Content-Type metadata</span>, and jump to the step below labeled <i>handler</i>.</p>
+            <p>If <var>binary</var> is false, then let the <var>resource type</var> be the type
+            specified in the resource's <span data-x="Content-Type">Content-Type metadata</span>,
+            and jump to the step below labeled <i>handler</i>.</p>
            </li>
 
            <li>
@@ -36832,8 +36848,8 @@ interface <dfn interface>HTMLObjectElement</dfn> : <span>HTMLElement</span> {
           </ol>
          </dd>
 
-         <dt>Otherwise, if the resource does not have <span data-x="Content-Type">associated
-         Content-Type metadata</span></dt>
+         <dt>Otherwise, if the resource does not have associated <span
+         data-x="Content-Type">Content-Type metadata</span></dt>
 
          <dd>
           <ol>
@@ -37864,7 +37880,7 @@ interface <dfn interface>HTMLTrackElement</dfn> : <span>HTMLElement</span> {
   data-x="attr-track-kind">kind</code> attribute is not in the <span
   data-x="attr-track-kind-chapters">chapters metadata</span> or <span
   data-x="attr-track-kind-metadata">metadata</span> state, then the WebVTT file must be a
-  <span>WebVTT file using cue text</span>. <ref>WEBVTT</ref></p>
+  <span>WebVTT file using caption or subtitle cue text</span>. <ref>WEBVTT</ref></p>
 
   <p>The <dfn element-attr for="track"><code data-x="attr-track-srclang">srclang</code></dfn>
   attribute gives the language of the text track data. The value must be a valid BCP 47 language
@@ -39986,7 +40002,7 @@ interface <dfn interface>MediaError</dfn> {
   origin is not negative (i.e. gives each frame a specific time offset and gives the first frame a
   zero or positive offset), then the <span>media timeline</span> should be that timeline. (Whether
   the <span>media resource</span> can specify a timeline or not depends on the <span data-x="media
-  resource">media resource's</span> format.) If the <span>media resource</span> specifies an
+  resource">media resource</span>'s format.) If the <span>media resource</span> specifies an
   explicit start time <em>and date</em>, then that time and date should be considered the zero point
   in the <span>media timeline</span>; the <span>timeline offset</span> will be the time and date,
   exposed using the <code data-x="dom-media-getStartDate">getStartDate()</code> method.</p>
@@ -45339,7 +45355,53 @@ interface <dfn interface>HTMLAreaElement</dfn> : <span>HTMLElement</span> {
 
   <p class="note">The corresponding IDL attributes for <code data-x="dom-img-height">img</code> and
   <code data-x="dom-input-height">input</code> elements are defined in those respective elements'
-  sections, as they are slightly more specific to those elements' other behaviors.</p>
+  sections, as they are slightly more specific to those elements' other behaviors. Both are defined
+  in terms of the algorithm below.</p>
+
+  <div algorithm>
+  <p>To <dfn data-x="determine-dimensions">determine the dimensions</dfn> of an <code>img</code> or
+  <code>input</code> element <var>element</var> given a struct consisting of a width and a height,
+  or null, <var>naturalDimensions</var>:</p>
+
+  <ol>
+   <li><p>If <var>element</var> is <span>being rendered</span>, then return the width and height of
+   <var>element</var>'s <span>content box</span>, in <span data-x="'px'">CSS pixels</span>.
+   <ref>CSS</ref></p></li>
+
+   <li><p>Let <var>width</var> and <var>height</var> be 0.</p></li>
+
+   <li><p>If <var>naturalDimensions</var> is not null, then set <var>width</var> to
+   <var>naturalDimensions</var>'s width and <var>height</var> to <var>naturalDimensions</var>'s
+   height.</p></li>
+
+   <li>
+    <p>If <var>element</var> has a <code data-x="attr-dim-width">width</code> attribute:</p>
+
+    <ol>
+     <li><p>Let <var>attributeWidth</var> be the result of <span data-x="rules for parsing
+     non-negative integers">parsing that attribute's value</span>.</p></li>
+
+     <li><p>If <var>attributeWidth</var> is not an error, then set <var>width</var> to
+     <var>attributeWidth</var>.</p></li>
+    </ol>
+   </li>
+
+   <li>
+    <p>If <var>element</var> has a <code data-x="attr-dim-height">height</code> attribute:</p>
+
+    <ol>
+     <li><p>Let <var>attributeHeight</var> be the result of <span data-x="rules for parsing
+     non-negative integers">parsing that attribute's value</span>.</p></li>
+
+     <li><p>If <var>attributeHeight</var> is not an error, then set <var>height</var> to
+     <var>attributeHeight</var>.</p></li>
+    </ol>
+   </li>
+
+   <li><p>Return a width of <var>width</var> and a height of <var>height</var>, in <span
+   data-x="'px'">CSS pixels</span>.</p></li>
+  </ol>
+  </div>
 
   </div>
 
@@ -51353,17 +51415,31 @@ interface <dfn interface>HTMLInputElement</dfn> : <span>HTMLElement</span> {
   </div>
 
   <div algorithm>
-  <p>The IDL attributes <dfn attribute for="HTMLInputElement"><code
-  data-x="dom-input-width">width</code></dfn> and <dfn attribute for="HTMLInputElement"><code
-  data-x="dom-input-height">height</code></dfn> must return the rendered width and height of the
-  image, in <span data-x="'px'">CSS pixels</span>, if an image is <span>being rendered</span>; or
-  else the <span data-x="natural dimensions">natural width and height</span> of the image, in
-  <span data-x="'px'">CSS pixels</span>, if an image is <i
-  data-x="input-img-available">available</i> but not <span>being rendered</span>; or else 0,
-  if no image is <i data-x="input-img-available">available</i>. When the <code>input</code>
-  element's <code data-x="attr-input-type">type</code> attribute is not in the <span
-  data-x="attr-input-type-image">Image Button</span> state, then no image is <i
-  data-x="input-img-available">available</i>. <ref>CSS</ref></p>
+  <p>The <dfn attribute for="HTMLInputElement"><code data-x="dom-input-width">width</code></dfn> and
+  <dfn attribute for="HTMLInputElement"><code data-x="dom-input-height">height</code></dfn> getter
+  steps are to return the respective component of the result of determining the <span
+  data-x="input-img-dimensions">dimensions</span> of <span>this</span>.</p>
+  </div>
+
+  <div algorithm>
+  <p>To determine the <dfn data-x="input-img-dimensions">dimensions</dfn> of an <code>input</code>
+  element <var>input</var>:</p>
+
+  <ol>
+   <li><p>If <var>input</var>'s <code data-x="attr-input-type">type</code> attribute is not in the
+   <span data-x="attr-input-type-image">Image Button</span> state, then return a width of 0 and a
+   height of 0. (In that case no image is <i data-x="input-img-available">available</i>.)</p></li>
+
+   <li><p>Let <var>naturalDimensions</var> be null.</p></li>
+
+   <li><p>If an image is <i data-x="input-img-available">available</i>, then set
+   <var>naturalDimensions</var> to the result of applying the <span>default sizing algorithm</span>
+   with that image's <span data-x="natural dimensions">natural width, natural height, and natural
+   aspect ratio</span>, if any, using a <span>default object size</span> of 300 by 150.</p></li>
+
+   <li><p>Return the result of <span data-x="determine-dimensions">determining the
+   dimensions</span> of <var>input</var> given <var>naturalDimensions</var>.</p></li>
+  </ol>
   </div>
 
   <p>The <code data-x="dom-cva-willValidate">willValidate</code>, <code
@@ -54692,8 +54768,10 @@ ldh-str       = &lt; as defined in <a href="https://www.rfc-editor.org/rfc/rfc10
    <dt><code data-x=""><var>image</var>.<span subdfn data-x="dom-input-height">height</span> [ = <var>value</var> ]</code></dt>
 
    <dd>
-    <p>These attributes return the actual rendered dimensions of the image, or 0 if the dimensions
-    are not known.</p>
+    <p>These attributes return the rendered dimensions of the image. When the image is not being
+    rendered, they return the <code data-x="attr-dim-width">width</code> and <code
+    data-x="attr-dim-height">height</code> content attributes' values, defaulting to the image's
+    <span>natural dimensions</span>, if any; otherwise 0.</p>
 
     <p>They can be set, to change the corresponding content attributes.</p>
    </dd>
@@ -57338,7 +57416,7 @@ interface <dfn interface>HTMLSelectElement</dfn> : <span>HTMLElement</span> {
    then return.</p></li>
 
    <li><p>If <var>event</var> is a <code>MouseEvent</code> and <var>event</var>'s <code
-   data-x="dom-MouseEvent-button">button</code> attribute is not 1, then return.</p></li>
+   data-x="dom-MouseEvent-button">button</code> attribute is not 0, then return.</p></li>
 
    <li><p>Set <var>option</var>'s <span data-x="concept-option-selectedness">selectedness</span> to
    true.</p></li>
@@ -57391,8 +57469,8 @@ interface <dfn interface>HTMLSelectElement</dfn> : <span>HTMLElement</span> {
   <ol>
    <li><p>If <var>event</var>'s <span>canceled flag</span> is set, then return.</p></li>
 
-   <li><p>If <var>event</var>'s <code data-x="dom-MouseEvent-button">button</code> attribute is not
-   1, then return.</p></li>
+   <li><p>If <var>event</var> is a <code>MouseEvent</code> and <var>event</var>'s <code
+   data-x="dom-MouseEvent-button">button</code> attribute is not 0, then return.</p></li>
 
    <li><p>Run the <span>show popover</span> algorithm given <var>select</var>'s <span>select
    popover</span>, false, and <var>select</var>.</p></li>
@@ -58397,8 +58475,8 @@ interface <dfn interface>HTMLOptionElement</dfn> : <span>HTMLElement</span> {
    <li><p>Let <var>oldSelect</var> be <var>option</var>'s <span>cached nearest ancestor
    <code>select</code> element</span>.</p></li>
 
-   <li><p>Let <var>newSelect</var> be <var>option</var>'s <span><code>option</code> element
-   nearest ancestor <code>select</code></span>.</p></li>
+   <li><p>Let <var>newSelect</var> be <var>option</var>'s <span data-x="option element nearest
+   ancestor select">nearest ancestor <code>select</code></span>.</p></li>
 
    <li>
     <p>If <var>oldSelect</var> is not <var>newSelect</var>:</p>
@@ -58476,8 +58554,8 @@ interface <dfn interface>HTMLOptionElement</dfn> : <span>HTMLElement</span> {
   <code>option</code> <var>option</var>:</p>
 
   <ol>
-   <li><p>Let <var>select</var> be <var>option</var>'s <span><code>option</code> element nearest
-   ancestor <code>select</code></span>.</p></li>
+   <li><p>Let <var>select</var> be <var>option</var>'s <span data-x="option element nearest ancestor
+   select">nearest ancestor <code>select</code></span>.</p></li>
 
    <li>
     <p>If all of the following conditions are true:</p>
@@ -58624,8 +58702,8 @@ interface <dfn interface>HTMLOptionElement</dfn> : <span>HTMLElement</span> {
   getter steps are:</p>
 
   <ol>
-   <li><p>Let <var>select</var> be <span>this</span>'s <span><code>option</code> element nearest
-   ancestor <code>select</code></span>.</p></li>
+   <li><p>Let <var>select</var> be <span>this</span>'s <span data-x="option element nearest ancestor
+   select">nearest ancestor <code>select</code></span>.</p></li>
 
    <li><p>If <var>select</var> is null, then return null.</p></li>
 
@@ -59026,7 +59104,7 @@ interface <dfn interface>HTMLTextAreaElement</dfn> : <span>HTMLElement</span> {
 
   <div algorithm>
   <p>The element's <span data-x="concept-fe-value">value</span> is defined to be the element's <span
-  data-x="concept-textarea-raw-value">API value</span> with the <span>textarea wrapping
+  data-x="concept-fe-api-value">API value</span> with the <span>textarea wrapping
   transformation</span> applied. The <dfn>textarea wrapping transformation</dfn> is the following
   algorithm, as applied to a string:</p>
 
@@ -62297,7 +62375,7 @@ MIT Room 32-G524
 
    <li>
     <p>If <var>category</var> is Contact and the <var>index</var>th token in <var>tokens</var> is an <span>ASCII case-insensitive</span> match for one of the strings in
-    the following list, then run the substeps that follow:</p>
+    the following list:</p>
 
     <ul class="brief">
      <li>"<code data-x="attr-fe-autocomplete-home">home</code>"
@@ -62307,7 +62385,7 @@ MIT Room 32-G524
      <li>"<code data-x="attr-fe-autocomplete-pager">pager</code>"
     </ul>
 
-    <p>The substeps are:</p>
+    <p>then:</p>
 
     <ol>
      <li><p>Let <var>contact</var> be the matching string from the list above.</p></li>
@@ -62329,15 +62407,14 @@ MIT Room 32-G524
 
    <li>
     <p>If the <var>index</var>th token in <var>tokens</var> is an <span>ASCII
-    case-insensitive</span> match for one of the strings in the following list, then run the
-    substeps that follow:</p>
+    case-insensitive</span> match for one of the strings in the following list:</p>
 
     <ul class="brief">
      <li>"<code data-x="attr-fe-autocomplete-shipping">shipping</code>"
      <li>"<code data-x="attr-fe-autocomplete-billing">billing</code>"
     </ul>
 
-    <p>The substeps are:</p>
+    <p>then:</p>
 
     <ol>
      <li><p>Let <var>mode</var> be the matching string from the list above.</p></li>
@@ -68312,8 +68389,9 @@ document.body.append(script1, script2);
      event</span> to true.</p></li>
 
      <li><p>If <var>el</var> is currently <span>render-blocking</span>, then set
-     <var>options</var>'s <span data-x="concept-script-fetch-options-render-blocking">
-     render-blocking</span> to true.</p></li>
+     <var>options</var>'s
+     <span data-x="concept-script-fetch-options-render-blocking">render-blocking</span>
+     to true.</p></li>
 
      <li>
       <p>Let <var>onComplete</var> given <var>result</var> be the following steps:</p>
@@ -68924,6 +69002,11 @@ not-slash     = %x0000-002E / %x0030-10FFFF
   <div w-nodev>
 
   <h5 id="scriptTagXSLT">Interaction of <code>script</code> elements and XSLT</h5>
+
+  <p class="critical">Avoid using client-side XSLT in browsers. The browser implementations of XSLT
+  are highly susceptible to memory safety vulnerabilities, and the web platform has evolved toward
+  JavaScript as the safe replacement. For these reasons, this feature is in the process of being
+  removed from the web platform. (This is a long process that takes many years.)</p>
 
   <!-- NON-NORMATIVE SECTION -->
 
@@ -69745,6 +69828,11 @@ interface <dfn interface>HTMLTemplateElement</dfn> : <span>HTMLElement</span> {
   <div w-nodev>
 
   <h5 id="template-XSLT-XPath">Interaction of <code>template</code> elements with XSLT and XPath</h5>
+
+  <p class="critical">Avoid using client-side XSLT in browsers. The browser implementations of XSLT
+  are highly susceptible to memory safety vulnerabilities, and the web platform has evolved toward
+  JavaScript as the safe replacement. For these reasons, this feature is in the process of being
+  removed from the web platform. (This is a long process that takes many years.)</p>
 
   <!-- NON-NORMATIVE SECTION -->
 
@@ -71277,7 +71365,7 @@ context.fillRect(100,0,50,50); // only this square remains</code></pre>
   <ol>
    <li><p>Clear canvas's bitmap to <span>transparent black</span>.</p></li>
 
-   <li><p>Empty the list of subpaths in context's <span>current default path</span>.</p></li>
+   <li><p>Empty the list of subpaths in the context's <span>current default path</span>.</p></li>
 
    <li><p>Clear the context's drawing state stack.</p></li>
 
@@ -74073,10 +74161,10 @@ try {
   <p id="interpolation">Once a gradient has been created (see below), stops are placed along it to
   define how the colors are distributed along the gradient. <span w-nodev>The color of the
   gradient at each stop is the color specified for that stop, <span
-  data-x="Converting Colors">converted</span> to the <span
-  data-x="concept-canvas-color-space">context's color space</span>. Between each such stop, the
-  colors and the alpha component must be linearly interpolated in the <span
-  data-x="concept-canvas-color-space">context's color space</span> without premultiplying the
+  data-x="Converting Colors">converted</span> to the context's <span
+  data-x="concept-canvas-color-space">color space</span>. Between each such stop, the
+  colors and the alpha component must be linearly interpolated in the context's <span
+  data-x="concept-canvas-color-space">color space</span> without premultiplying the
   alpha value to find the color to use at that offset. Before the first stop, the color must be the
   color of the first stop. After the last stop, the color must be the color of the last stop. When
   there are no stops, the gradient is <span>transparent black</span>.</span></p>
@@ -75369,9 +75457,9 @@ try {
 
    <li><p><span data-x="Initialize an ImageData object">Initialize</span> <var>newImageData</var>
    given the absolute magnitude of <var>sw</var>, the absolute magnitude of <var>sh</var>,
-   <var>settings</var>, and <i><span data-x="initialize-imagedata-defaultcolorspace">
-   defaultColorSpace</span></i> set to <span>this</span>'s
-   <span data-x="concept-canvas-color-space">color space</span>.</p></li>
+   <var>settings</var>, and
+   <i><span data-x="initialize-imagedata-defaultcolorspace">defaultColorSpace</span></i> set to
+   <span>this</span>'s <span data-x="concept-canvas-color-space">color space</span>.</p></li>
 
    <li><p>Initialize the image data of <var>newImageData</var> to <span>transparent
    black</span>.</p></li>
@@ -76083,8 +76171,8 @@ console.log(pixels.data[2]);
    transformation matrix.</p></li>
 
    <li>
-    <p>Convert the image <var>A</var> to the <span data-x="concept-canvas-color-space">context's
-    color space</span>.</p>
+    <p>Convert the image <var>A</var> to the context's <span
+    data-x="concept-canvas-color-space">color space</span>.</p>
 
     <p class="note">There do not exist any inputs to a 2D context for which the color space is
     undefined. The color space for CSS colors is defined in <cite>CSS Color</cite>. The color space
@@ -79857,15 +79945,20 @@ dictionary <dfn dictionary>ValidityStateFlags</dfn> {
    <li><p>If <var>element</var> is not a <span>form-associated custom element</span>, then throw a
    <span>"<code>NotSupportedError</code>"</span> <code>DOMException</code>.</p></li>
 
-   <li><p>If <var>flags</var> contains one or more true values and <var>message</var> is not given
-   or is the empty string, then throw a <code>TypeError</code>.</p></li>
+   <li><p>If <var>message</var> is not given, then set it to the empty string.</p></li>
+
+   <li><p>If <var>flags</var> contains one or more true values and <var>message</var> is the empty
+   string, then throw a <code>TypeError</code>.</p></li>
+
+   <li><p>Set <var>message</var> to the result of <span data-x="normalize newlines">normalizing
+   newlines</span> given <var>message</var>.</p></li>
 
    <li><p>For each entry <var>flag</var> → <var>value</var> of <var>flags</var>, set
    <var>element</var>'s validity flag with the name <var>flag</var> to <var>value</var>.</p></li>
 
    <li><p>Set <var>element</var>'s <span data-x="face-validation-message">validation message</span>
-   to the empty string if <var>message</var> is not given or all of <var>element</var>'s validity
-   flags are false, or to <var>message</var> otherwise.</p></li>
+   to the empty string if all of <var>element</var>'s validity flags are false; otherwise to
+   <var>message</var>.</p></li>
 
    <li><p>If <var>element</var>'s <code data-x="">customError</code> validity flag is true, then set
    <var>element</var>'s <span>custom validity error message</span> to <var>element</var>'s
@@ -81224,7 +81317,7 @@ Demos:
   <p>To create an item, the <code data-x="attr-itemscope">itemscope</code> attribute is used.</p>
 
   <p>To add a property to an item, the <code data-x="attr-itemprop">itemprop</code> attribute is used
-  on one of the <span data-x="concept-item">item's</span> descendants.</p>
+  on one of the <span data-x="concept-item">item</span>'s descendants.</p>
 
   <div class="example">
 
@@ -83404,7 +83497,7 @@ Demos:
 
 
        <dt>If the property's <span data-x="concept-property-value">value</span> is not an <span
-       data-x="concept-item">item</span> and its <var>name</var> is <code
+       data-x="concept-item">item</span> and <var>name</var> is <code
        data-x="md-vcard-sex">sex</code></dt>
 
        <dd>
@@ -83414,7 +83507,7 @@ Demos:
 
 
        <dt>If the property's <span data-x="concept-property-value">value</span> is not an <span
-       data-x="concept-item">item</span> and its <var>name</var> is <code
+       data-x="concept-item">item</span> and <var>name</var> is <code
        data-x="md-vcard-gender-identity">gender-identity</code></dt>
 
        <dd>
@@ -94827,7 +94920,7 @@ interface <dfn interface data-x="dom-Origin-interface">Origin</dfn> {
      </li>
 
      <li>
-      <p>If <var>navigationParams</var>'s <span data-x="navigation-params-user-involvement"> user
+      <p>If <var>navigationParams</var>'s <span data-x="navigation-params-user-involvement">user
       involvement</span> is "<code data-x="uni-browser-ui">browser UI</code>", optionally set
       <var>swapGroup</var> to true.</p>
 
@@ -95714,11 +95807,11 @@ interface <dfn interface data-x="dom-Origin-interface">Origin</dfn> {
    export>reporting endpoint</dfn> string, initially the empty string.</p></li>
 
    <li><p>A <dfn data-x="embedder-policy-report-only-value" for="embedder policy"
-   export>report only value</dfn>, which is an <span>embedder policy value</span>, initially
+   export>report-only value</dfn>, which is an <span>embedder policy value</span>, initially
    "<code data-x="coep-unsafe-none">unsafe-none</code>".</p></li>
 
    <li><p>A <dfn data-x="embedder-policy-report-only-reporting-endpoint" for="embedder
-   policy" export>report only reporting endpoint</dfn> string, initially the empty
+   policy" export>report-only reporting endpoint</dfn> string, initially the empty
    string.</p></li>
   </ul>
 
@@ -95822,7 +95915,7 @@ interface <dfn interface data-x="dom-Origin-interface">Origin</dfn> {
 
      <li><p>If <var>parsedItem</var>[1]["<code data-x="coep-report-to">report-to</code>"] <span
      data-x="map exists">exists</span>, then set <var>policy</var>'s <span
-     data-x="embedder-policy-reporting-endpoint">endpoint</span> to
+     data-x="embedder-policy-reporting-endpoint">reporting endpoint</span> to
      <var>parsedItem</var>[1]["<code data-x="coep-report-to">report-to</code>"].</p></li>
     </ol>
    </li>
@@ -95838,12 +95931,12 @@ interface <dfn interface data-x="dom-Origin-interface">Origin</dfn> {
 
     <ol>
      <li><p>Set <var>policy</var>'s <span
-     data-x="embedder-policy-report-only-value">report only value</span> to
+     data-x="embedder-policy-report-only-value">report-only value</span> to
      <var>parsedItem</var>[0].</p></li>
 
      <li><p>If <var>parsedItem</var>[1]["<code data-x="coep-report-to">report-to</code>"] <span
      data-x="map exists">exists</span>, then set <var>policy</var>'s <span
-     data-x="embedder-policy-report-only-reporting-endpoint">endpoint</span> to
+     data-x="embedder-policy-report-only-reporting-endpoint">report-only reporting endpoint</span> to
      <var>parsedItem</var>[1]["<code data-x="coep-report-to">report-to</code>"].</p></li>
     </ol>
    </li>
@@ -95874,7 +95967,7 @@ interface <dfn interface data-x="dom-Origin-interface">Origin</dfn> {
    <var>responsePolicy</var>'s <span data-x="embedder-policy-value">value</span> is not, then
    <span>queue a cross-origin embedder policy inheritance violation</span> with <var>response</var>,
    "<code data-x="">navigation</code>", <var>parentPolicy</var>'s <span
-   data-x="embedder-policy-report-only-reporting-endpoint">report only reporting endpoint</span>,
+   data-x="embedder-policy-report-only-reporting-endpoint">report-only reporting endpoint</span>,
    "<code data-x="">reporting</code>", and <var>navigable</var>'s <span
    data-x="nav-container-document">container document</span>'s <span>relevant settings
    object</span>.</p></li>
@@ -95916,7 +96009,7 @@ interface <dfn interface data-x="dom-Origin-interface">Origin</dfn> {
    <span data-x="embedder-policy-value">value</span> is not, then <span>queue a cross-origin
    embedder policy inheritance violation</span> with <var>response</var>, "<code data-x="">worker
    initialization</code>", <var>ownerPolicy</var>'s <span
-   data-x="embedder-policy-report-only-reporting-endpoint">report only reporting endpoint</span>,
+   data-x="embedder-policy-report-only-reporting-endpoint">report-only reporting endpoint</span>,
    "<code data-x="">reporting</code>", and <var>owner</var>.</p></li>
 
    <li><p>If <var>ownerPolicy</var>'s <span data-x="embedder-policy-value">value</span> is not
@@ -96393,7 +96486,7 @@ interface <dfn interface data-x="dom-Origin-interface">Origin</dfn> {
    <span data-x="integrity policy">integrity policy</span>.</p></li>
 
    <li><p>A <dfn export for="policy container"
-   data-x="policy-container-report-only-integrity-policy">report only integrity policy</dfn>, which
+   data-x="policy-container-report-only-integrity-policy">report-only integrity policy</dfn>, which
    is an <span data-x="integrity policy">integrity policy</span>, initially a new <span
    data-x="integrity policy">integrity policy</span>.</p></li>
   </ul>
@@ -96461,8 +96554,8 @@ interface <dfn interface data-x="dom-Origin-interface">Origin</dfn> {
    data-x="concept-url-scheme">scheme</span> is "<code data-x="">blob</code>", then return a <span
    data-x="clone a policy container">clone</span> of <var>response</var>'s <span
    data-x="concept-response-url">URL</span>'s <span data-x="concept-url-blob-entry">blob URL
-   entry</span>'s <span data-x="blob-url-entry-environment">environment</span>'s <span>policy
-   container</span>.</p></li>
+   entry</span>'s <span data-x="blob-url-entry-environment">environment</span>'s <span
+   data-x="concept-settings-object-policy-container">policy container</span>.</p></li>
 
    <li><p>Let <var>result</var> be a new <span>policy container</span>.</p></li>
 
@@ -97240,8 +97333,12 @@ dictionary <dfn dictionary>WindowPostMessageOptions</dfn> : <span>StructuredSeri
     </ol>
    </li>
 
-   <li><p>If <var>noopener</var> is true or <var>windowType</var> is "<code data-x="">new with no
-   opener</code>", then return null.</p></li>
+   <li><p>If <var>windowType</var> is "<code data-x="">new with no opener</code>", then return
+   null.</p></li>
+
+   <li><p>If <var>noopener</var> is true and <var>target</var> is not an <span>ASCII
+   case-insensitive</span> match for "<code data-x="">_self</code>", "<code
+   data-x="">_parent</code>", or "<code data-x="">_top</code>", then return null.</p></li>
 
    <li><p>Return <var>targetNavigable</var>'s <span data-x="nav-wp">active
    <code>WindowProxy</code></span>.</p></li>
@@ -97699,10 +97796,9 @@ dictionary <dfn dictionary>WindowPostMessageOptions</dfn> : <span>StructuredSeri
    tree</span> with <var>window</var>'s <span data-x="concept-document-window">associated
    <code>Document</code></span> as their <span>root</span>; and</p></li>
 
-   <li><p>the value of the <code data-x="attr-id">id</code> content attribute for all <span>HTML
-   elements</span> that have a non-empty <code data-x="attr-id">id</code> content attribute and are
-   <span>in a document tree</span> with <var>window</var>'s <span
-   data-x="concept-document-window">associated <code>Document</code></span> as their
+   <li><p>the <span data-x="concept-id">ID</span> of all elements that have an <span
+   data-x="concept-id">ID</span> and are <span>in a document tree</span> with <var>window</var>'s
+   <span data-x="concept-document-window">associated <code>Document</code></span> as their
    <span>root</span>.</p></li>
   </ul>
   </div>
@@ -97763,9 +97859,9 @@ dictionary <dfn dictionary>WindowPostMessageOptions</dfn> : <span>StructuredSeri
    data-x="concept-document-window">associated <code>Document</code></span> as their
    <span>root</span>; and</p></li>
 
-   <li><p><span>HTML elements</span> that have an <code data-x="attr-id">id</code> content attribute
-   whose value is <var>name</var> and are <span>in a document tree</span> with <var>window</var>'s
-   <span data-x="concept-document-window">associated <code>Document</code></span> as their
+   <li><p>elements whose <span data-x="concept-id">ID</span> is <var>name</var> and that are
+   <span>in a document tree</span> with <var>window</var>'s <span
+   data-x="concept-document-window">associated <code>Document</code></span> as their
    <span>root</span>.</p></li>
   </ul>
   </div>
@@ -104519,8 +104615,8 @@ interface <dfn interface>NotRestoredReasons</dfn> {
    data-x="dom-Navigator-requestMIDIAccess">navigator.requestMIDIAccess()</code>.</dd>
 
    <dt>"<dfn data-x="blocking-modals" export><code>modals</code></dfn>"</dt>
-   <dd><a href="#user-prompts">User prompts</a> were shown while <span data-x="unload a document">
-   unloading</span>.</dd>
+   <dd><a href="#user-prompts">User prompts</a> were shown while
+   <span data-x="unload a document">unloading</span>.</dd>
 
    <dt>"<dfn data-x="blocking-navigating" export><code>navigating</code></dfn>"</dt>
    <dd>While <span data-x="unload a document">unloading</span>, loading was still ongoing, and so
@@ -106054,9 +106150,9 @@ interface <dfn interface>NotRestoredReasons</dfn> {
    data-x="nav-traversable">traversable navigable</span>.</p></li>
 
    <li><p>Otherwise, if <var>name</var> is not an <span>ASCII case-insensitive</span> match for
-   "<code data-x="">_blank</code>" and <var>noopener</var> is false, then set <var>chosen</var> to
-   the result of <span data-x="find a navigable by target name">finding a navigable by target
-   name</span> given <var>name</var> and <var>currentNavigable</var>.</p></li>
+   "<code data-x="">_blank</code>", then set <var>chosen</var> to the result of <span
+   data-x="find a navigable by target name">finding a navigable by target name</span> given
+   <var>name</var> and <var>currentNavigable</var>.</p></li>
 
    <li>
     <p>If <var>chosen</var> is null, then a new <span>top-level traversable</span> is being
@@ -106172,6 +106268,8 @@ interface <dfn interface>NotRestoredReasons</dfn> {
   context</span> has a corresponding <code>WindowProxy</code> object, as well as the following:</p>
 
   <ul>
+   <li><p>An <dfn>active document</dfn>, a <code>Document</code> or null, initially null.</p></li>
+
    <li><p>An <dfn export>opener browsing context</dfn>, a <span>browsing context</span> or null,
    initially null.</p></li>
 
@@ -106200,9 +106298,7 @@ interface <dfn interface>NotRestoredReasons</dfn> {
 
   <div algorithm>
   <p>A <span>browsing context</span>'s <dfn>active window</dfn> is its <code>WindowProxy</code>
-  object's <span data-x="concept-windowproxy-window">[[Window]]</span> internal slot value. A
-  <span>browsing context</span>'s <dfn>active document</dfn> is its <span>active window</span>'s
-  <span data-x="concept-document-window">associated <code>Document</code></span>.</p>
+  object's <span data-x="concept-windowproxy-window">[[Window]]</span> internal slot value.</p>
   </div>
 
   <div algorithm>
@@ -108523,7 +108619,7 @@ location.href = '#foo';</code></pre>
       <ol>
        <li><p><span data-x="tn-append-session-history-traversal-steps">Append session history
        traversal steps</span> to <var>navigable</var>'s <span
-       data-x="nav-traversable">traversable</span> to <span>finalize a cross-document
+       data-x="nav-traversable">traversable navigable</span> to <span>finalize a cross-document
        navigation</span> given <var>navigable</var>, <var>historyHandling</var>,
        <var>userInvolvement</var>, and <var>historyEntry</var>.</p></li>
       </ol>
@@ -108552,7 +108648,7 @@ location.href = '#foo';</code></pre>
 
   <ol>
    <li><p><span>Assert</span>: this is running on <var>navigable</var>'s <span
-   data-x="nav-traversable">traversable navigable's</span> <span
+   data-x="nav-traversable">traversable navigable</span>'s <span
    data-x="tn-session-history-traversal-queue">session history traversal queue</span>.</p></li>
 
    <li><p>Set <var>navigable</var>'s <span>is delaying <code data-x="event-load">load</code>
@@ -108779,7 +108875,7 @@ location.href = '#foo';</code></pre>
    </li>
 
    <li><p><span data-x="tn-append-session-history-traversal-steps">Append session history traversal
-   steps</span> to <var>targetNavigable</var>'s <span data-x="nav-traversable">traversable</span>
+   steps</span> to <var>targetNavigable</var>'s <span data-x="nav-traversable">traversable navigable</span>
    to <span>finalize a cross-document navigation</span> with <var>targetNavigable</var>,
    <var>historyHandling</var>, <var>userInvolvement</var>, and <var>historyEntry</var>.</p></li>
   </ol>
@@ -110383,7 +110479,7 @@ location.href = '#foo';</code></pre>
     <p>Let <var>request</var> be a new <span data-x="concept-request">request</span>, with</p>
 
     <dl class="props">
-     <dt><span data-x="concept-request-url">url</span></dt>
+     <dt><span data-x="concept-request-url">URL</span></dt>
      <dd><var>entry</var>'s <span data-x="she-url">URL</span></dd>
 
      <dt><span data-x="concept-request-client">client</span></dt>
@@ -112136,7 +112232,7 @@ location.href = '#foo';</code></pre>
 
      <li>
       <p>If <var>targetEntry</var>'s <span data-x="she-document">document</span> is
-      <var>navigable</var>'s <span data-x="nav-document">document</span>, and
+      <var>navigable</var>'s <span data-x="nav-document">active document</span>, and
       <var>targetEntry</var>'s <span data-x="she-document-state">document state</span>'s <span
       data-x="document-state-reload-pending">reload pending</span> is false, then <span
       data-x="list extend">extend</span> <var>navigablesToCheck</var> with the <span data-x="child
@@ -112290,7 +112386,7 @@ location.href = '#foo';</code></pre>
 
      <li>
       <p>If <var>targetEntry</var>'s <span data-x="she-document">document</span> is not
-      <var>navigable</var>'s <span data-x="nav-document">document</span> or
+      <var>navigable</var>'s <span data-x="nav-document">active document</span> or
       <var>targetEntry</var>'s <span data-x="she-document-state">document state</span>'s <span
       data-x="document-state-reload-pending">reload pending</span> is true, then <span data-x="list
       append">append</span> <var>navigable</var> to <var>results</var>.</p>
@@ -112298,7 +112394,7 @@ location.href = '#foo';</code></pre>
       <p class="note">Although <var>navigable</var>'s <span
       data-x="nav-active-history-entry">active history entry</span> can change synchronously, the
       new entry will always have the same <code>Document</code>, so accessing
-      <var>navigable</var>'s <span data-x="nav-document">document</span> is reliable.</p>
+      <var>navigable</var>'s <span data-x="nav-document">active document</span> is reliable.</p>
      </li>
 
      <li>
@@ -112452,7 +112548,7 @@ location.href = '#foo';</code></pre>
        <var>document</var>'s <span data-x="concept-document-origin">origin</span>; and</p></li>
 
        <li><p><var>previousEntryForActivation</var>'s <span data-x="she-document">document</span>'s
-       <span data-x="is initial about:blank">initial <code>about:blank</code></span> is
+       <span data-x="is initial about:blank">is initial <code>about:blank</code></span> is
        false,</p></li>
       </ul>
 
@@ -112539,6 +112635,9 @@ location.href = '#foo';</code></pre>
   <ol>
    <li><p>Let <var>window</var> be <var>document</var>'s <span>relevant global
    object</span>.</p></li>
+
+   <li><p>Set <var>document</var>'s <span data-x="concept-document-bc">browsing context</span>'s
+   <span>active document</span> to <var>document</var>.</p></li>
 
    <li><p>Set <var>document</var>'s <span data-x="concept-document-bc">browsing context</span>'s
    <code>WindowProxy</code>'s <span data-x="concept-windowproxy-window">[[Window]]</span> internal
@@ -113286,9 +113385,10 @@ location.href = '#foo';</code></pre>
      <dd><var>loadTimingInfo</var></dd>
 
      <dt><span>was created via cross-origin redirects</span></dt>
-     <dd><var>navigationParams</var>'s <span data-x="navigation-params-response">response</span>'s
-     <span data-x="concept-response-has-cross-origin-redirects">has cross-origin
-     redirects</span></dd>
+     <dd>true if <var>navigationParams</var>'s <span
+     data-x="navigation-params-response">response</span>'s <span
+     data-x="concept-response-redirect-taint">redirect taint</span> is not "<code
+     data-x="">same-origin</code>"; otherwise false</dd>
 
      <dt><span data-x="concept-document-navigation-id">during-loading navigation ID for WebDriver BiDi</span></dt>
      <dd><var>navigationParams</var>'s <span data-x="navigation-params-id">id</span></dd>
@@ -113365,8 +113465,8 @@ location.href = '#foo';</code></pre>
      <li>
       <p>If <var>navigationParams</var>'s <span
       data-x="navigation-params-response">response</span>'s <span
-      data-x="concept-response-has-cross-origin-redirects">has cross-origin redirects</span> is
-      false, or all of the following are true:</p>
+      data-x="concept-response-redirect-taint">redirect taint</span> is "<code
+      data-x="">same-origin</code>", or all of the following are true:</p>
 
       <ul>
        <li><p><var>navigationParams</var>'s <span
@@ -113538,9 +113638,10 @@ new PaymentRequest(&hellip;); // Allowed to use
 
     <p class="note">This special case, where even non-<span data-x="is initial about:blank">initial
     <code>about:blank</code></span> <code>Document</code>s are synchronously given their element
-    nodes, is necessary for compatible with deployed content. In other words, it is not compatible
-    to instead go down the "otherwise" branch and feed the empty <span>byte sequence</span> into
-    an <span>HTML parser</span> to asynchronously populate <var>document</var>.</p>
+    nodes, is necessary for compatibility with deployed content. In other words, it is not
+    compatible to instead go down the "otherwise" branch and feed the empty <span>byte
+    sequence</span> into an <span>HTML parser</span> to asynchronously populate
+    <var>document</var>.</p>
    </li>
 
    <!-- See https://github.com/whatwg/html/issues/8095 for improving this step. -->
@@ -115931,7 +116032,7 @@ new PaymentRequest(&hellip;); // Allowed to use
       <p><var>prefetchCandidate</var>'s <span data-x="sl-candidate-nvs-hint">No-Vary-Search
       hint</span> can also be useful in implementing the heuristics defined for the
       <span>speculation rule eagerness</span> values. For example, a user hovering of a link whose
-      <span data-x="concept-hyperlink-url">URL</span> is <span>equivalent modulo search
+      <span data-x="concept-hyperlink-url">url</span> is <span>equivalent modulo search
       variance</span> to <var>prefetchCandidate</var>'s <span data-x="sl-candidate-url">URL</span>
       given <var>prefetchCandidate</var>'s <span data-x="sl-candidate-nvs-hint">No-Vary-Search
       hint</span> could indicate to the user agent that performing this step would be useful.</p>
@@ -118175,7 +118276,7 @@ document.querySelector("button").addEventListener("click", bound);
   data-x="concept-script">script</span>. It has no additional <span data-x="struct
   item">items</span>.</p>
 
-  <p><span data-x="module script">Module scripts</span> can be classified into four types:</p>
+  <p><span data-x="module script">Module scripts</span> can be classified into five types:</p>
 
   <ul>
    <li>
@@ -119072,8 +119173,9 @@ document.querySelector("button").addEventListener("click", bound);
    <li><p><span>Assert</span>: the result of running the <span>module type allowed</span> steps
    given <var>moduleType</var> and <var>settingsObject</var> is true. Otherwise, we would not have
    reached this point because a failure would have been raised when inspecting
-   <var>moduleRequest</var>.[[Attributes]] in <a href="#validate-requested-module-specifiers">
-   HostLoadImportedModule</a> or <span>fetch a single imported module script</span>.</p></li>
+   <var>moduleRequest</var>.[[Attributes]] in
+   <a href="#validate-requested-module-specifiers">HostLoadImportedModule</a> or <span>fetch a
+   single imported module script</span>.</p></li>
 
    <li><p>Let <var>moduleMap</var> be <var>settingsObject</var>'s <span
    data-x="concept-settings-object-module-map">module map</span>.</p></li>
@@ -119301,7 +119403,7 @@ document.querySelector("button").addEventListener("click", bound);
 
     <p class="note">When <var>mutedErrors</var> is true, <var>baseURL</var> is the script's
     <span>CORS-cross-origin</span> <span data-x="concept-response">response</span>'s <span
-    data-x="concept-response-url">url</span>, which shouldn't be exposed to JavaScript. Therefore,
+    data-x="concept-response-url">URL</span>, which shouldn't be exposed to JavaScript. Therefore,
     <var>baseURL</var> is sanitized here.</p>
    </li>
 
@@ -125775,11 +125877,16 @@ enum <dfn enum>DOMParserSupportedType</dfn> {
    object</span>, <var>string</var>, "<code data-x="">DOMParser parseFromString</code>", and "<code
    data-x="">script</code>".</p></li>
 
+   <li><p>Let <var>relevantDocument</var> be <span>this</span>'s <span>relevant global
+   object</span>'s <span data-x="concept-document-window">associated
+   <code>Document</code></span>.</p></li>
+
    <li>
     <p>Let <var>document</var> be a new <code>Document</code>, whose <span
-    data-x="concept-document-content-type">content type</span> is <var>type</var> and <span
-    data-x="concept-document-URL">URL</span> is <span>this</span>'s <span>relevant global object</span>'s <span
-    data-x="concept-document-window">associated <code>Document</code></span>'s <span
+    data-x="concept-document-content-type">content type</span> is <var>type</var>, <span
+    data-x="concept-document-origin">origin</span> is <var>relevantDocument</var>'s <span
+    data-x="concept-document-origin">origin</span>, and <span
+    data-x="concept-document-URL">URL</span> is <var>relevantDocument</var>'s <span
     data-x="concept-document-URL">URL</span>.</p>
     <!-- When https://github.com/whatwg/html/issues/4792 gets fixed we need to investigate which of
          HTMLDocument vs. XMLDocument gets returned, and when, with tests. In particular we'll want
@@ -126012,7 +126119,10 @@ enum <dfn enum>DOMParserSupportedType</dfn> {
    <li>
     <p>Let <var>document</var> be a new <code>Document</code>, whose <span
     data-x="concept-document-content-type">content type</span> is "<code
-    data-x="">text/html</code>".</p>
+    data-x="">text/html</code>" and <span data-x="concept-document-origin">origin</span> is
+    <span>this</span>'s <span>relevant global object</span>'s <span
+    data-x="concept-document-window">associated <code>Document</code></span>'s <span
+    data-x="concept-document-origin">origin</span>.</p>
 
     <p class="note">Since <var>document</var> does not have a <span
     data-x="concept-document-bc">browsing context</span>, <span data-x="concept-n-script">scripting
@@ -126044,14 +126154,17 @@ enum <dfn enum>DOMParserSupportedType</dfn> {
   <ol>
    <li><p>Let <var>compliantHTML</var> be the result of invoking the <span
    data-x="tt-getcompliantstring">get trusted type compliant string</span> algorithm with <code
-   data-x="tt-trustedhtml">TrustedHTML</code>, <span>this</span>'s <span>relevant global
-   object</span>, <var>html</var>, "<code data-x="">Document parseHTMLUnsafe</code>", and "<code
+   data-x="tt-trustedhtml">TrustedHTML</code>, the <span>current global object</span>,
+   <var>html</var>, "<code data-x="">Document parseHTMLUnsafe</code>", and "<code
    data-x="">script</code>".</p></li>
 
    <li>
     <p>Let <var>document</var> be a new <code>Document</code>, whose <span
     data-x="concept-document-content-type">content type</span> is "<code
-    data-x="">text/html</code>".</p>
+    data-x="">text/html</code>" and <span data-x="concept-document-origin">origin</span> is
+    <span>this</span>'s <span>relevant global object</span>'s <span
+    data-x="concept-document-window">associated <code>Document</code></span>'s <span
+    data-x="concept-document-origin">origin</span>.</p>
 
     <p class="note">Since <var>document</var> does not have a <span
     data-x="concept-document-bc">browsing context</span>, <span data-x="concept-n-script">scripting
@@ -126656,6 +126769,7 @@ interface <dfn interface>Sanitizer</dfn> {
   boolean <span data-x="dom-Sanitizer-removeAttribute">removeAttribute</span>(<span>SanitizerAttribute</span> attribute);
   boolean <span data-x="dom-Sanitizer-setComments">setComments</span>(boolean allow);
   boolean <span data-x="dom-Sanitizer-setDataAttributes">setDataAttributes</span>(boolean allow);
+  boolean <span data-x="dom-Sanitizer-setJavascriptURLs">setJavascriptURLs</span>(boolean allow);
 
   // Remove markup that executes script.
   boolean <span data-x="dom-Sanitizer-removeUnsafe">removeUnsafe</span>();
@@ -126695,6 +126809,10 @@ interface <dfn interface>Sanitizer</dfn> {
    <dd><p>Sets whether the sanitizer preserves custom data attributes (e.g., <code
    data-x="attr-data-*">data-*</code>).</p></dd>
 
+   <dt><code data-x=""><var>sanitizer</var>.<span data-x="dom-Sanitizer-setJavascriptURLs">setJavascriptURLs</span>(<var>allow</var>)</code></dt>
+   <dd><p>Sets whether the sanitizer preserves attributes containing <code data-x="javascript
+   protocol">javascript:</code> URLs.</p></dd>
+
    <dt><code data-x=""><var>sanitizer</var>.<span data-x="dom-Sanitizer-removeUnsafe">removeUnsafe</span>()</code></dt>
    <dd><p>Modifies the configuration to automatically remove elements and attributes that are
    considered unsafe.</p></dd>
@@ -126728,11 +126846,11 @@ interface <dfn interface>Sanitizer</dfn> {
   <div algorithm>
   <p>To <dfn export for="Sanitizer" data-x="configure a sanitizer">configure</dfn> a
   <code>Sanitizer</code> <var>sanitizer</var>, given a dictionary <var>configuration</var> and a
-  boolean <var>allowCommentsPIsAndDataAttributes</var>:</p>
+  boolean <var>permissiveDefaults</var>:</p>
 
   <ol>
    <li><p><span>Canonicalize the configuration</span> <var>configuration</var> with
-   <var>allowCommentsPIsAndDataAttributes</var>.</p></li>
+   <var>permissiveDefaults</var>.</p></li>
 
    <li><p>If <var>configuration</var> is not <span data-x="dom-SanitizerConfig-valid">valid</span>,
    then throw a <code>TypeError</code>.</p></li>
@@ -126744,7 +126862,7 @@ interface <dfn interface>Sanitizer</dfn> {
 
   <div algorithm>
   <p>To <dfn>canonicalize the configuration</dfn> <span>SanitizerConfig</span>
-  <var>configuration</var> with a boolean <var>allowCommentsPIsAndDataAttributes</var>:</p>
+  <var>configuration</var> with a boolean <var>permissiveDefaults</var>:</p>
 
   <ol>
    <li><p>If neither <var>configuration</var>["<code
@@ -126768,8 +126886,7 @@ interface <dfn interface>Sanitizer</dfn> {
     <span data-x="map exists">exists</span>:</p>
 
     <ol>
-     <li><p>If <var>allowCommentsPIsAndDataAttributes</var> is true, then set
-     <var>configuration</var>["<code
+     <li><p>If <var>permissiveDefaults</var> is true, then set <var>configuration</var>["<code
      data-x="dom-SanitizerConfig-removeProcessingInstructions">removeProcessingInstructions</code>"]
      to an empty list.</p></li>
 
@@ -126846,13 +126963,17 @@ interface <dfn interface>Sanitizer</dfn> {
 
    <li><p>If <var>configuration</var>["<code data-x="dom-SanitizerConfig-comments">comments</code>"]
    does not <span data-x="map exists">exist</span>, then set it to
-   <var>allowCommentsPIsAndDataAttributes</var>.</p></li>
+   <var>permissiveDefaults</var>.</p></li>
 
    <li><p>If <var>configuration</var>["<code
    data-x="dom-SanitizerConfig-attributes">attributes</code>"] <span data-x="map
    exists">exists</span> and <var>configuration</var>["<code
    data-x="dom-SanitizerConfig-dataAttributes">dataAttributes</code>"] does not <span data-x="map
-   exists">exist</span>, then set it to <var>allowCommentsPIsAndDataAttributes</var>.</p></li>
+   exists">exist</span>, then set it to <var>permissiveDefaults</var>.</p></li>
+
+   <li><p>If <var>configuration</var>["<code
+   data-x="dom-SanitizerConfig-javascriptURLs">javascriptURLs</code>"] does not <span data-x="map
+   exists">exist</span>, then set it to <var>permissiveDefaults</var>.</p></li>
   </ol>
   </div>
 
@@ -127428,8 +127549,7 @@ interface <dfn interface>Sanitizer</dfn> {
    data-x="dom-SanitizerConfig-valid">valid</span>.</p></li>
 
    <li><p>If <var>configuration</var>["<code data-x="dom-SanitizerConfig-comments">comments</code>"]
-   <span data-x="map exists">exists</span> and is equal to <var>allow</var>, then return
-   false.</p></li>
+   is <var>allow</var>, then return false.</p></li>
 
    <li><p>Set <var>configuration</var>["<code
    data-x="dom-SanitizerConfig-comments">comments</code>"] to <var>allow</var>.</p></li>
@@ -127490,6 +127610,28 @@ interface <dfn interface>Sanitizer</dfn> {
 
    <li><p>Set <var>configuration</var>["<code
    data-x="dom-SanitizerConfig-dataAttributes">dataAttributes</code>"] to <var>allow</var>.</p></li>
+
+   <li><p>Return true.</p></li>
+  </ol>
+  </div>
+
+  <div algorithm>
+  <p>The <dfn method for="Sanitizer"><code
+  data-x="dom-Sanitizer-setJavascriptURLs">setJavascriptURLs(<var>allow</var>)</code></dfn> method
+  steps are:</p>
+
+  <ol>
+   <li><p>Let <var>configuration</var> be <span>this</span>'s <span>configuration</span>.</p></li>
+
+   <li><p><span>Assert</span>: <var>configuration</var> is <span
+   data-x="dom-SanitizerConfig-valid">valid</span>.</p></li>
+
+   <li><p>If <var>configuration</var>["<code
+   data-x="dom-SanitizerConfig-javascriptURLs">javascriptURLs</code>"] is <var>allow</var>, then
+   return false.</p></li>
+
+   <li><p>Set <var>configuration</var>["<code
+   data-x="dom-SanitizerConfig-javascriptURLs">javascriptURLs</code>"] to <var>allow</var>.</p></li>
 
    <li><p>Return true.</p></li>
   </ol>
@@ -127654,6 +127796,7 @@ dictionary <dfn dictionary>SanitizerConfig</dfn> {
 
   boolean <dfn dict-member for="SanitizerConfig" data-x="dom-SanitizerConfig-comments">comments</dfn>;
   boolean <dfn dict-member for="SanitizerConfig" data-x="dom-SanitizerConfig-dataAttributes">dataAttributes</dfn>;
+  boolean <dfn dict-member for="SanitizerConfig" data-x="dom-SanitizerConfig-javascriptURLs">javascriptURLs</dfn>;
 };</code></pre>
 
   <p><code>SanitizerElementNamespace</code>, <code>SanitizerAttributeNamespace</code>,
@@ -128011,11 +128154,11 @@ dictionary <dfn dictionary>SanitizerConfig</dfn> {
     <ol>
      <li><p>Let <var>sanitizer</var> be a new <code>Sanitizer</code> object.</p></li>
 
-     <li><p>Let <var>allowCommentsAndDataAttributes</var> be true if <var>safe</var> is false; false
+     <li><p>Let <var>permissiveDefaults</var> be true if <var>safe</var> is false; false
      otherwise.</p></li>
 
      <li><p><span data-x="configure a sanitizer">Configure</span> <var>sanitizer</var> given
-     <var>sanitizerSpec</var> and <var>allowCommentsAndDataAttributes</var>.</p></li>
+     <var>sanitizerSpec</var> and <var>permissiveDefaults</var>.</p></li>
 
      <li><p>Set <var>sanitizerSpec</var> to <var>sanitizer</var>.</p></li>
     </ol>
@@ -128039,15 +128182,14 @@ dictionary <dfn dictionary>SanitizerConfig</dfn> {
    <li><p>If <var>safe</var> is true, then <span>remove unsafe</span> from
    <var>configuration</var>.</p></li>
 
-   <li><p>Run the <span>inner sanitize steps</span> given <var>node</var>, <var>configuration</var>,
-   and <var>safe</var>.</p></li>
+   <li><p>Run the <span>inner sanitize steps</span> given <var>node</var> and
+   <var>configuration</var>.</p></li>
   </ol>
   </div>
 
   <div algorithm>
-  <p>To perform the <dfn>inner sanitize steps</dfn> given a <code>Node</code> <var>node</var>, a
-  <span>SanitizerConfig</span> <var>configuration</var>, and a boolean
-  <var>handleJavascriptNavigationUrls</var>:</p>
+  <p>To perform the <dfn>inner sanitize steps</dfn> given a <code>Node</code> <var>node</var> and a
+  <span>SanitizerConfig</span> <var>configuration</var>:</p>
 
   <ol>
    <li>
@@ -128124,8 +128266,8 @@ dictionary <dfn dictionary>SanitizerConfig</dfn> {
         <ol>
          <li><p><span>Assert</span>: <var>node</var> is not a <code>Document</code>.</p></li>
 
-         <li><p>Run the <span>inner sanitize steps</span> given <var>child</var>,
-         <var>configuration</var>, and <var>handleJavascriptNavigationUrls</var>.</p></li>
+         <li><p>Run the <span>inner sanitize steps</span> given <var>child</var> and
+         <var>configuration</var>.</p></li>
 
          <li><p>Let <var>fragment</var> be the result of <span data-x="create a document
          fragment">creating a document fragment</span> given <var>node</var>'s
@@ -128175,12 +128317,11 @@ dictionary <dfn dictionary>SanitizerConfig</dfn> {
        <var>elementName</var>["<code
        data-x="dom-SanitizerElementNamespace-namespace">namespace</code>"] is the <span>HTML
        namespace</span>, then run the <span>inner sanitize steps</span> given <var>child</var>'s
-       <span>template contents</span>, <var>configuration</var>, and
-       <var>handleJavascriptNavigationUrls</var>.</p></li>
+       <span>template contents</span> and <var>configuration</var>.</p></li>
 
        <li><p>If <var>child</var> is a <span>shadow host</span>, then run the <span>inner sanitize
-       steps</span> given <var>child</var>'s <span>shadow root</span>, <var>configuration</var>, and
-       <var>handleJavascriptNavigationUrls</var>.</p></li>
+       steps</span> given <var>child</var>'s <span>shadow root</span> and
+       <var>configuration</var>.</p></li>
 
        <li><p>Let <var>elementWithLocalAttributes</var> be «[ ]».</p></li>
 
@@ -128250,7 +128391,8 @@ dictionary <dfn dictionary>SanitizerConfig</dfn> {
          </li>
 
          <li>
-          <p>If <var>handleJavascriptNavigationUrls</var> is true:</p>
+          <p>If <var>configuration</var>["<code
+          data-x="dom-SanitizerConfig-javascriptURLs">javascriptURLs</code>"] is not true:</p>
 
           <ol>
            <li><p>If the pair (<var>elementName</var>, <var>attrName</var>) matches an entry in the
@@ -128259,11 +128401,11 @@ dictionary <dfn dictionary>SanitizerConfig</dfn> {
            data-x="concept-element-attributes-remove">remove</span> <var>attribute</var>.</p></li>
 
            <li><p>If <var>child</var>'s <span data-x="concept-element-namespace">namespace</span> is
-           the <span>MathML Namespace</span>, <var>attribute</var>'s <span
+           the <span>MathML namespace</span>, <var>attribute</var>'s <span
            data-x="concept-attribute-local-name">local name</span> is "<code data-x="">href</code>",
            <var>attribute</var>'s <span data-x="concept-attribute-namespace">namespace</span> is
            null or the <span>XLink namespace</span>, and <var>attribute</var> <span>contains a
-           javascript: URL</span>, then <span
+           <code>javascript:</code> URL</span>, then <span
            data-x="concept-element-attributes-remove">remove</span> <var>attribute</var>.</p></li>
 
            <li><p>If the <span>built-in animating URL attributes list</span> <span data-x="list
@@ -128276,8 +128418,8 @@ dictionary <dfn dictionary>SanitizerConfig</dfn> {
         </ol>
        </li>
 
-       <li><p>Run the <span>inner sanitize steps</span> given <var>child</var>,
-       <var>configuration</var>, and <var>handleJavascriptNavigationUrls</var>.</p></li>
+       <li><p>Run the <span>inner sanitize steps</span> given <var>child</var> and
+       <var>configuration</var>.</p></li>
       </ol>
      </li>
     </ol>
@@ -128511,6 +128653,18 @@ dictionary <dfn dictionary>SanitizerConfig</dfn> {
      <li><p>If <span data-x="remove an attribute from sanitizer config">removing</span>
      <var>attribute</var> from <var>configuration</var> is true, then set <var>result</var> to
      true.</p></li>
+    </ol>
+   </li>
+
+   <li>
+    <p>If <var>configuration</var>["<code
+    data-x="dom-SanitizerConfig-javascriptURLs">javascriptURLs</code>"] is true:</p>
+
+    <ol>
+     <li><p>Set <var>result</var> to true.</p></li>
+
+     <li><p>Set <var>configuration</var>["<code
+     data-x="dom-SanitizerConfig-javascriptURLs">javascriptURLs</code>"] to false.</p></li>
     </ol>
    </li>
 
@@ -128986,6 +129140,9 @@ dictionary <dfn dictionary>SanitizerConfig</dfn> {
    <dd>false</dd>
 
    <dt><code data-x="dom-SanitizerConfig-dataAttributes">dataAttributes</code></dt>
+   <dd>false</dd>
+
+   <dt><code data-x="dom-SanitizerConfig-javascriptURLs">javascriptURLs</code></dt>
    <dd>false</dd>
 
    <dt><code data-x="dom-SanitizerConfig-elements">elements</code></dt>
@@ -135812,11 +135969,11 @@ interface <dfn interface>SharedWorkerGlobalScope</dfn> : <span>WorkerGlobalScope
       <ol>
        <li><p>Set <var>worker global scope</var>'s <span
        data-x="concept-WorkerGlobalScope-url">url</span> to <var>response</var>'s <span
-       data-x="concept-response-url">url</span>.</p></li>
+       data-x="concept-response-url">URL</span>.</p></li>
 
        <li><p>Set <var>inside settings</var>'s <span
        data-x="concept-environment-creation-url">creation URL</span> to <var>response</var>'s <span
-       data-x="concept-response-url">url</span>.</p></li>
+       data-x="concept-response-url">URL</span>.</p></li>
 
        <li><p><span data-x="initialize worker policy container">Initialize worker global scope's
        policy container</span> given <var>worker global scope</var>, <var>response</var>, and
@@ -135859,7 +136016,7 @@ interface <dfn interface>SharedWorkerGlobalScope</dfn> : <span>WorkerGlobalScope
 
        <li>
         <p>If <var>is shared</var> is false and <var>response</var>'s
-        <span data-x="concept-response-url">url</span>'s <span
+        <span data-x="concept-response-url">URL</span>'s <span
         data-x="concept-url-scheme">scheme</span> is "<code data-x="">data</code>", then set
         <var>worker global scope</var>'s <span
         data-x="concept-WorkerGlobalScope-cross-origin-isolated-capability">cross-origin isolated
@@ -136151,7 +136308,8 @@ interface <dfn interface>SharedWorkerGlobalScope</dfn> : <span>WorkerGlobalScope
 
    <li><p>Set <var>settings object</var>'s <span data-x="concept-environment-id">id</span> to a new
    unique opaque string, <span data-x="concept-environment-creation-url">creation URL</span> to
-   <var>worker global scope</var>'s <span>url</span>, <span>top-level creation URL</span> to null,
+   <var>worker global scope</var>'s <span data-x="concept-WorkerGlobalScope-url">url</span>,
+   <span>top-level creation URL</span> to null,
    <span data-x="concept-environment-target-browsing-context">target browsing context</span> to
    null, and <span data-x="concept-environment-active-service-worker">active service worker</span>
    to null.</p></li>
@@ -136481,8 +136639,9 @@ dictionary <dfn dictionary>SharedWorkerOptions</dfn> : <span>WorkerOptions</span
           <li><var>scope</var>'s <span data-x="dom-WorkerGlobalScope-closing">closing</span> flag is
           false;</li>
 
-          <li><var>scope</var>'s <span data-x="concept-SharedWorkerGlobalScope-constructor-url">
-          constructor URL</span> <span data-x="concept-url-equals">equals</span>
+          <li><var>scope</var>'s
+          <span data-x="concept-SharedWorkerGlobalScope-constructor-url">constructor URL</span>
+          <span data-x="concept-url-equals">equals</span>
           <var>urlRecord</var>; and</li>
 
           <li><var>scope</var>'s <span data-x="concept-WorkerGlobalScope-name">name</span> equals
@@ -141373,9 +141532,8 @@ dictionary <dfn dictionary>StorageEventInit</dfn> : <span>EventInit</span> {
    elements</span>.</p></li>
 
    <li><p><i>Loop</i>: If <var>node</var> is the first node in the stack of open elements, then set
-   <var>last</var> to true, and, if the parser was created as part of the <span>HTML fragment
-   parsing algorithm</span> (<span>fragment case</span>), set <var>node</var> to the <var
-   data-x="concept-frag-parse-context">context</var> element passed to that algorithm.</p></li>
+   <var>last</var> to true, and, if the parser's <span>fragment context element</span> is non-null,
+   then set <var>node</var> to that element (<span>fragment case</span>).</p></li>
 
    <li><p>If <var>node</var> is a <code>td</code> or <code>th</code> element and <var>last</var> is
    false, then switch the <span>insertion mode</span> to "<span data-x="insertion mode: in cell">in
@@ -141481,10 +141639,10 @@ dictionary <dfn dictionary>StorageEventInit</dfn> : <span>EventInit</span> {
   </div>
 
   <div algorithm>
-  <p>The <dfn>adjusted current node</dfn> is the <i data-x="concept-frag-parse-context">context</i>
-  element if the parser was created as part of the <span>HTML fragment parsing algorithm</span> and
-  the <span>stack of open elements</span> has only one element in it (<span>fragment case</span>);
-  otherwise, the <span>adjusted current node</span> is the <span>current node</span>.</p>
+  <p>The <dfn>adjusted current node</dfn> is the parser's <span>fragment context element</span> if
+  that element is non-null and the <span>stack of open elements</span> has only one element in it
+  (<span>fragment case</span>); otherwise, the <span>adjusted current node</span> is the
+  <span>current node</span>.</p>
   </div>
 
   <div algorithm>
@@ -141776,9 +141934,15 @@ dictionary <dfn dictionary>StorageEventInit</dfn> : <span>EventInit</span> {
   <p>The <dfn>root insertion target</dfn>, which is null or a <code>DocumentFragment</code>
   (initially null).</p>
 
+  <p>An <code>Element</code>-or-null <dfn>fragment context element</dfn>, initially null.</p>
+
   <p>A boolean <dfn>allow declarative shadow roots</dfn> (initially false).</p>
 
-  <p>The <dfn>scripting mode</dfn>, which is a <span>parser scripting mode</span>.</p>
+  <p>The <dfn>scripting mode</dfn>, which is a <span>parser scripting mode</span>. It is initially
+  set to <span data-x="scripting-mode-normal">Normal</span> if <span
+  data-x="concept-n-script">scripting was enabled</span> for the <code>Document</code> with which
+  the parser is associated when the parser was created, and <span
+  data-x="scripting-mode-disabled">Disabled</span> otherwise.</p>
 
   <p>A <dfn>parser scripting mode</dfn> is one of the following:</p>
 
@@ -143459,7 +143623,7 @@ dictionary <dfn dictionary>StorageEventInit</dfn> : <span>EventInit</span> {
 
    <dt>EOF</dt>
    <dd>This is an <span data-x="parse-error-eof-in-doctype">eof-in-doctype</span> <span>parse
-   error</span>. Create a new DOCTYPE token. Set its <i data-x="force-quirks flag"> force-quirks
+   error</span>. Create a new DOCTYPE token. Set its <i data-x="force-quirks flag">force-quirks
    flag</i> to <i>on</i>. Emit the current token. Emit an end-of-file token.</dd>
 
    <dt>Anything else</dt>
@@ -144585,10 +144749,9 @@ dictionary <dfn dictionary>StorageEventInit</dfn> : <span>EventInit</span> {
   </ul>
   </div>
 
-  <p class="note">If the node in question is the <var ignore
-  data-x="concept-frag-parse-context">context</var> element passed to the <span>HTML fragment
-  parsing algorithm</span>, then the start tag token for that element is the "fake" token created
-  during by that <span>HTML fragment parsing algorithm</span>.</p>
+  <p class="note">If the node in question is the parser's <span>fragment context element</span>,
+  then the start tag token for that element is the "fake" token created by the <span>HTML fragment
+  parsing algorithm</span>.</p>
 
   <hr>
 
@@ -144606,119 +144769,79 @@ dictionary <dfn dictionary>StorageEventInit</dfn> : <span>EventInit</span> {
 
   <h5>Creating and inserting nodes</h5>
 
+  <p>An <dfn>insertion location</dfn> is a <span>tuple</span> consisting of a <dfn
+  data-x="insertion-location-target-parent">target parent</dfn> (a <code>Node</code>) and a <dfn
+  data-x="insertion-location-reference-child">reference child</dfn> (a <code>Node</code> or
+  null).</p>
+
   <p>While the parser is processing a token, it can enable or disable <dfn data-x="foster
   parent">foster parenting</dfn>. This affects the following algorithm.</p>
 
   <div algorithm>
-  <p>The <dfn>appropriate place for inserting a node</dfn>, optionally using a particular
-  <i>override target</i>, is the position in a node returned by running the following steps:</p>
+  <p>To find the <dfn>appropriate place for inserting a node</dfn>, given an optional
+  <code>Node</code> <var>overrideTarget</var> (default null), perform the following steps. They
+  return an <span>insertion location</span>.</p>
 
   <ol>
-   <li>
-    <p>If there was an <i>override target</i> specified, then let <var>target</var> be the
-    <i>override target</i>.</p>
+   <li><p>Let <var>targetParent</var> be <var>overrideTarget</var> if it is not null; otherwise the
+   <span>current node</span>.</p></li>
 
-    <p>Otherwise, let <var>target</var> be the <span>current node</span>.</p>
-   </li>
+   <li><p>Let <var>referenceChild</var> be null.</p></li>
 
    <li>
-    <p>Determine the <var>adjusted insertion location</var> using the first matching steps
-    from the following list:</p>
+    <p>If <span data-x="foster parent">foster parenting</span> is enabled and
+    <var>targetParent</var> is a <code>table</code>, <code>tbody</code>, <code>tfoot</code>,
+    <code>thead</code>, or <code>tr</code> element:</p> <!-- same list as handling of characters
+    in "in table" mode -->
 
-    <dl class="switch">
-
-     <dt>If <span data-x="foster parent">foster parenting</span> is enabled and <var>target</var> is a <code>table</code>, <code>tbody</code>, <code>tfoot</code>,
-     <code>thead</code>, or <code>tr</code> element</dt> <!-- same list as handling of characters
-     in "in table" mode -->
-
-     <dd>
-      <p class="note">Foster parenting happens when content is misnested in tables.</p>
-
-      <p>Run these substeps:</p>
-
-      <ol>
-       <li><p>Let <var>last template</var> be the last <code>template</code> element in the
-       <span>stack of open elements</span>, if any.</p>
-
-       <li><p>Let <var>last table</var> be the last <code>table</code> element in the
-       <span>stack of open elements</span>, if any.</p>
-
-       <li><p>If there is a <var>last template</var> and either there is no <var>last table</var>, or there is one, but <var>last template</var> is lower
-       (more recently added) than <var>last table</var> in the <span>stack of open
-       elements</span>, then let <var>adjusted insertion location</var> be inside <var>last template</var>'s <span>template contents</span>, after its last child (if any),
-       and abort these steps.</p></li>
-
-       <li><p>If there is no <var>last table</var>, <!-- there's also implicitly no last
-       template, since we didn't hit the previous step --> then let <var>adjusted insertion
-       location</var> be inside the first element in the <span>stack of open elements</span> (the
-       <code>html</code> element), after its last child (if any), and abort these steps.
-       (<span>fragment case</span>)</p>
-
-       <!-- if we get here, we know there's a last table, and if there's a last template, it's older
-       than the last table. -->
-
-       <li><p>If <var>last table</var> has a parent node, then let <var>adjusted insertion location</var> be inside <var>last table</var>'s parent
-       node, immediately before <var>last table</var>, and abort these steps.</p></li>
-
-       <!-- if we get here, we know there's a last table, but it has no parent, and if there's a
-       last template, it's older than the last table. -->
-
-       <li><p>Let <var>previous element</var> be the element immediately above <var>last table</var> in the <span>stack of open elements</span>.</p></li>
-
-       <li><p>Let <var>adjusted insertion location</var> be inside <var>previous
-       element</var>, after its last child (if any).</p></li>
-      </ol>
-
-      <p class="note">These steps are involved in part because it's possible for elements, the
-      <code>table</code> element in this case in particular, to have been moved by a script around
-      in the DOM, or indeed removed from the DOM entirely, after the element was inserted by the
-      parser.</p>
-     </dd>
-
-     <dt>Otherwise</dt>
-
-     <dd>
-      <p>Let <var>adjusted insertion location</var> be inside <var>target</var>,
-      after its last child (if any).</p>
-     </dd>
-    </dl>
-   </li>
-
-   <li>
-    <p>If <var>adjusted insertion location</var> is inside a <code>template</code> element:</p>
+    <p class="note">Foster parenting happens when content is misnested in tables.</p>
 
     <ol>
-     <li><p>Let <var>template</var> be that element.</p></li>
+     <li><p>Let <var>lastTemplateOrTable</var> be the last <code>template</code> or
+     <code>table</code> element in the <span>stack of open elements</span> if there is one;
+     otherwise null.</p></li>
 
-     <li><p>Let <var>target</var> be <var>template</var>'s <span>insertion target</span>.</p></li>
+     <li><p>If <var>lastTemplateOrTable</var> is null, then return (the first element in the
+     <span>stack of open elements</span> (the <code>html</code> element), null).
+     (<span>fragment case</span>)</p></li>
 
-     <li>
-      <p>If <var>target</var> is not null:</p>
+     <li><p>If <var>lastTemplateOrTable</var> is a <code>template</code> element, then set
+     <var>targetParent</var> to <var>lastTemplateOrTable</var>.</p></li>
 
-      <ol>
-       <li>
-        <p>If <var>template</var>'s <span>insertion end marker</span> is not null and its
-        <span>parent</span> is <var>target</var>, then set <var>adjusted insertion location</var> to
-        inside <var>target</var>, before <var>template</var>'s <span>insertion end
-        marker</span>.</p>
+     <li><p>Otherwise, if <var>lastTemplateOrTable</var>'s <span>parent</span> is not null, then set
+     <var>targetParent</var> to <var>lastTemplateOrTable</var>'s <span>parent</span> and set
+     <var>referenceChild</var> to <var>lastTemplateOrTable</var>.</p></li>
 
-        <p class="note">If the end marker has been removed or moved to another node, nodes are
-        instead appended to <var>target</var> in the following step.</p>
-       </li>
-
-       <li><p>Otherwise, set <var>adjusted insertion location</var> to inside <var>target</var>,
-       after its last child (if any).</p></li>
-      </ol>
-     </li>
-
-     <li><p>Otherwise, set <var>adjusted insertion location</var> to inside <var>template</var>'s
-     <span>template contents</span>, after its last child (if any).</p></li>
+     <li><p>Otherwise, set <var>targetParent</var> to the element immediately above
+     <var>lastTemplateOrTable</var> in the <span>stack of open elements</span>.</p></li>
     </ol>
+
+    <p class="note">These steps are involved in part because it's possible for elements, the
+    <code>table</code> element in this case in particular, to have been moved by a script around in
+    the DOM, or indeed removed from the DOM entirely, after the element was inserted by the
+    parser.</p>
    </li>
+
+   <li><p>If <var>targetParent</var> is not a <code>template</code> element, then return
+   (<var>targetParent</var>, <var>referenceChild</var>).</p></li>
+
+   <li><p>Let <var>patchInsertionTarget</var> be <var>targetParent</var>'s
+   <span>insertion target</span>.</p></li>
+
+   <li><p>If <var>patchInsertionTarget</var> is null, then return (<var>targetParent</var>'s
+   <span>template contents</span>, null).</p></li>
 
    <li>
-    <p>Return the <var>adjusted insertion location</var>.</p>
+    <p>If <var>targetParent</var>'s <span>insertion end marker</span> is not null and its
+    <span>parent</span> is <var>patchInsertionTarget</var>, then return
+    (<var>patchInsertionTarget</var>, <var>targetParent</var>'s
+    <span>insertion end marker</span>).</p>
+
+    <p class="note">If the end marker has been removed or moved to another node, nodes are
+    instead appended to <var>patchInsertionTarget</var> in the following step.</p>
    </li>
+
+   <li><p>Return (<var>patchInsertionTarget</var>, null).</p></li>
   </ol>
   </div>
 
@@ -144760,8 +144883,7 @@ dictionary <dfn dictionary>StorageEventInit</dfn> : <span>EventInit</span> {
    <var>namespace</var>, <var>localName</var>, and <var>is</var>.</p></li>
 
    <li><p>Let <var>willExecuteScript</var> be true if <var>definition</var> is non-null and the
-   parser was not created as part of the <span>HTML fragment parsing algorithm</span>; otherwise
-   false.</p></li>
+   parser's <span>fragment context element</span> is null; otherwise false.</p></li>
 
    <li>
     <p>If <var>willExecuteScript</var> is true:</p>
@@ -144847,22 +144969,24 @@ dictionary <dfn dictionary>StorageEventInit</dfn> : <span>EventInit</span> {
   </div>
 
   <div algorithm>
-  <p>To compute the <dfn>adjusted insertion location</dfn> with an optional insertion location
-  <var>insertionLocation</var> (default null):</p>
+  <p>To compute the <dfn>adjusted insertion location</dfn> with an optional <span>insertion
+  location</span> <var>insertionLocation</var> (default null):</p>
 
   <ol>
    <li><p>Let <var>overrideTarget</var> be null if <var>insertionLocation</var> is null;
-   otherwise the node in which <var>insertionLocation</var> finds itself.</p></li>
+   otherwise <var>insertionLocation</var>'s <span
+   data-x="insertion-location-target-parent">target parent</span>.</p></li>
 
-   <li><p>Let the <var>adjustedInsertionLocation</var> be the <span>appropriate place for inserting
-   a node</span> given <var>overrideTarget</var>.</p></li>
+   <li><p>Let <var>adjustedInsertionLocation</var> be the <span>appropriate place for inserting a
+   node</span> given <var>overrideTarget</var>.</p></li>
 
-   <li><p>If the node in which the <var>adjustedInsertionLocation</var> finds itself is the first
-   element in the <span>stack of open elements</span> and the parser's <span>root insertion
-   target</span> is non-null, then set the <var>adjustedInsertionLocation</var> to the parser's
-   <span>root insertion target</span>, after its last child (if any).</p></li>
+   <li><p>If <var>adjustedInsertionLocation</var>'s <span
+   data-x="insertion-location-target-parent">target parent</span> is the first element in the
+   <span>stack of open elements</span> and the parser's <span>root insertion target</span> is
+   non-null, then set <var>adjustedInsertionLocation</var> to (the parser's <span>root insertion
+   target</span>, null).</p></li>
 
-   <li><p>Return the <var>adjustedInsertionLocation</var>.</p></li>
+   <li><p>Return <var>adjustedInsertionLocation</var>.</p></li>
   </ol>
   </div>
 
@@ -144870,29 +144994,42 @@ dictionary <dfn dictionary>StorageEventInit</dfn> : <span>EventInit</span> {
 
   <div algorithm>
   <p>To <dfn>insert an element at the adjusted insertion location</dfn> with an element
-  <var>element</var> and an optional insertion location <var>insertionLocation</var> (default
-  null):</p>
+  <var>element</var> and an optional <span>insertion location</span> <var>insertionLocation</var>
+  (default null):</p>
 
   <ol>
-   <li><p>Set <var>insertionLocation</var> to the <span>adjusted insertion location</span> given
-   <var>insertionLocation</var>.</p></li>
+   <li><p>Let (<var>targetParent</var>, <var>referenceChild</var>) be the <span>adjusted insertion
+   location</span> given <var>insertionLocation</var>.</p></li>
 
-   <li><p>If <var>insertionLocation</var> is in a <code>Document</code> node and that
-   <code>Document</code> node has an element child, then return.</p></li>
+   <li>
+    <p>If any of the following are true:</p>
 
-   <li><p><span>Assert</span>: <span>ensure pre-insert validity</span> given <var>element</var>, the
-   node in which <var>insertionLocation</var> finds itself, null, and « » does not throw.</p></li>
+    <ul>
+     <li><var>element</var>'s <span>parent</span> is non-null;</li>
 
-   <li><p>If the parser was not created as part of the <span>HTML fragment parsing
-   algorithm</span>, then push a new <span>element queue</span> onto <var>element</var>'s
-   <span>relevant agent</span>'s <span>custom element reactions stack</span>.</p></li>
+     <li><var>element</var> is a <span>host-including inclusive ancestor</span> of
+     <var>targetParent</var>; or</li>
 
-   <li><p>Insert <var>element</var> at <var>insertionLocation</var>.</p></li>
+     <li><var>targetParent</var> is a <code>Document</code> node that already has an element
+     child,</li>
+    </ul>
 
-   <li><p>If the parser was not created as part of the <span>HTML fragment parsing
-   algorithm</span>, then pop the <span>element queue</span> from <var>element</var>'s
-   <span>relevant agent</span>'s <span>custom element reactions stack</span>, and <span>invoke
-   custom element reactions</span> in that queue.</p></li>
+    <p>then return.</p>
+   </li>
+
+   <li><p><span>Assert</span>: <span>ensure pre-insert validity</span> given <var>element</var>,
+   <var>targetParent</var>, <var>referenceChild</var>, and « » does not throw.</p></li>
+
+   <li><p>If the parser's <span>fragment context element</span> is null, then push a new
+   <span>element queue</span> onto <var>element</var>'s <span>relevant agent</span>'s <span>custom
+   element reactions stack</span>.</p></li>
+
+   <li><p><span data-x="concept-node-insert">Insert</span> <var>element</var> into
+   <var>targetParent</var> before <var>referenceChild</var>.</p></li>
+
+   <li><p>If the parser's <span>fragment context element</span> is null, then pop the <span>element
+   queue</span> from <var>element</var>'s <span>relevant agent</span>'s <span>custom element
+   reactions stack</span>, and <span>invoke custom element reactions</span> in that queue.</p></li>
   </ol>
   </div>
 
@@ -144905,14 +145042,15 @@ dictionary <dfn dictionary>StorageEventInit</dfn> : <span>EventInit</span> {
   <var>namespace</var>, and a boolean <var>onlyAddToElementStack</var>:</p>
 
   <ol>
-   <li><p>Let the <var>adjustedInsertionLocation</var> be the <span>appropriate place for inserting
-   a node</span>.</p></li>
+   <li><p>Let <var>adjustedInsertionLocation</var> be the <span>appropriate place for inserting a
+   node</span>.</p></li>
 
    <!-- this insertion stuff should be cleaned up: https://github.com/whatwg/html/issues/1706 -->
 
    <li><p>Let <var>element</var> be the result of <span data-x="create an element for the
    token">creating an element for the token</span> given <var>token</var>, <var>namespace</var>,
-   and the node in which the <var>adjustedInsertionLocation</var> finds itself.</p></li>
+   and <var>adjustedInsertionLocation</var>'s <span
+   data-x="insertion-location-target-parent">target parent</span>.</p></li>
 
    <li><p>If <var>onlyAddToElementStack</var> is false, then run <span>insert an element at the
    adjusted insertion location</span> with <var>element</var>.</p></li>
@@ -145046,24 +145184,28 @@ dictionary <dfn dictionary>StorageEventInit</dfn> : <span>EventInit</span> {
    <li><p>Let <var>data</var> be the characters passed to the algorithm, or, if no characters were
    explicitly specified, the character of the character token being processed.</p></li>
 
-   <li><p>Let <var>insertionLocation</var> be the <span>adjusted insertion location</span>.</p></li>
+   <li><p>Let (<var>targetParent</var>, <var>referenceChild</var>) be the <span>adjusted insertion
+   location</span>.</p></li>
 
    <li>
-    <p>If <var>insertionLocation</var> is in a <code>Document</code> node, then return.</p>
+    <p>If <var>targetParent</var> is a <code>Document</code> node, then return.</p>
 
     <p class="note">The DOM will not let <code>Document</code> nodes have <code>Text</code> node
     children, so they are dropped on the floor.</p>
    </li>
 
+   <li><p>Let <var>previousSibling</var> be <var>referenceChild</var>'s <span>previous
+   sibling</span> if <var>referenceChild</var> is non-null; otherwise <var>targetParent</var>'s
+   <span>last child</span>.</p></li>
+
    <li>
-    <p>If there is a <code>Text</code> node immediately before <var>insertionLocation</var>, then
-    append <var>data</var> to that <code>Text</code> node's <span
-    data-x="concept-cd-data">data</span>.</p>
+    <p>If <var>previousSibling</var> is a <code>Text</code> node, then append <var>data</var> to
+    <var>previousSibling</var>'s <span data-x="concept-cd-data">data</span>.</p>
 
     <p>Otherwise, let <var>text</var> be the result of <span data-x="create a text node">creating a
-    text node</span> given the <span>node document</span> of the node in which
-    <var>insertionLocation</var> finds itself and <var>data</var>, and insert <var>text</var> at
-    <var>insertionLocation</var>.</p>
+    text node</span> given <var>targetParent</var>'s <span>node document</span> and <var>data</var>,
+    and <span data-x="concept-node-insert">insert</span> <var>text</var> into
+    <var>targetParent</var> before <var>referenceChild</var>.</p>
    </li>
   </ol>
   </div>
@@ -145114,45 +145256,46 @@ document.body.appendChild(text);
 
   <div algorithm>
   <p>When the steps below require the user agent to <dfn>insert a comment</dfn> while processing a
-  comment token, with an optional insertion location <var>insertionLocation</var> (default null),
-  the user agent must run the following steps:</p>
+  comment token, with an optional <span>insertion location</span> <var>insertionLocation</var>
+  (default null), the user agent must run the following steps:</p>
 
   <ol>
    <li><p>Let <var>data</var> be the data given in the comment token being
    processed.</p></li>
 
-   <li><p>Set <var>insertionLocation</var> to the <span>adjusted insertion location</span> given
-   <var>insertionLocation</var>.</p></li>
+   <li><p>Let (<var>targetParent</var>, <var>referenceChild</var>) be the <span>adjusted insertion
+   location</span> given <var>insertionLocation</var>.</p></li>
 
    <li><p>Let <var>comment</var> be the result of <span data-x="create a comment node">creating a
-   comment node</span> given the <span>node document</span> of the node in which the
-   <var>insertionLocation</var> finds itself and <var>data</var>.</p>
+   comment node</span> given <var>targetParent</var>'s <span>node document</span> and
+   <var>data</var>.</p></li>
 
-   <li><p>Insert <var>comment</var> at <var>insertionLocation</var>.</p></li>
+   <li><p><span data-x="concept-node-insert">Insert</span> <var>comment</var> into
+   <var>targetParent</var> before <var>referenceChild</var>.</p></li>
   </ol>
   </div>
 
   <div algorithm>
   <p>When the steps below require the user agent to <dfn>insert a processing instruction</dfn> while
-  processing a processing instruction token, with an optional insertion location
+  processing a processing instruction token, with an optional <span>insertion location</span>
   <var>insertionLocation</var> (default null), the user agent must run the following steps:</p>
 
   <ol>
-   <li><p>Let <var>target</var> be the target given in the processing instruction token being
+   <li><p>Let <var>piTarget</var> be the target given in the processing instruction token being
    processed.</p></li>
 
    <li><p>Let <var>data</var> be the data given in the processing instruction token being
    processed.</p></li>
 
-   <li><p>Set <var>insertionLocation</var> to the <span>adjusted insertion location</span> given
-   <var>insertionLocation</var>.</p></li>
+   <li><p>Let (<var>targetParent</var>, <var>referenceChild</var>) be the <span>adjusted insertion
+   location</span> given <var>insertionLocation</var>.</p></li>
 
    <li><p>Let <var>pi</var> be the result of <span data-x="create a processing instruction
-   node">creating a processing instruction node</span> given the <span>node document</span> of the
-   node in which the <var>insertionLocation</var> finds itself, <var>target</var>, and
-   <var>data</var>.</p>
+   node">creating a processing instruction node</span> given <var>targetParent</var>'s <span>node
+   document</span>, <var>piTarget</var>, and <var>data</var>.</p></li>
 
-   <li><p>Insert <var>pi</var> at <var>insertionLocation</var>.</p></li>
+   <li><p><span data-x="concept-node-insert">Insert</span> <var>pi</var> into
+   <var>targetParent</var> before <var>referenceChild</var>.</p></li>
   </ol>
   </div>
 
@@ -145233,13 +145376,13 @@ document.body.appendChild(text);
 
    <dt>A comment token</dt>
    <dd>
-    <p><span>Insert a comment</span> as the last child of the <code>Document</code> object.</p>
+    <p><span>Insert a comment</span> given (the <code>Document</code> object, null).</p>
    </dd>
 
    <dt>A processing instruction token</dt>
    <dd>
-    <p><span>Insert a processing instruction</span> as the last child of the <code>Document</code>
-    object.</p>
+    <p><span>Insert a processing instruction</span> given (the <code>Document</code> object,
+    null).</p>
    </dd>
 
    <dt>A DOCTYPE token</dt>
@@ -145382,13 +145525,13 @@ document.body.appendChild(text);
 
    <dt>A comment token</dt>
    <dd>
-    <p><span>Insert a comment</span> as the last child of the <code>Document</code> object.</p>
+    <p><span>Insert a comment</span> given (the <code>Document</code> object, null).</p>
    </dd>
 
    <dt>A processing instruction token</dt>
    <dd>
-    <p><span>Insert a processing instruction</span> as the last child of the <code>Document</code>
-    object.</p>
+    <p><span>Insert a processing instruction</span> given (the <code>Document</code> object,
+    null).</p>
    </dd>
 
    <dt>A character token that is one of U+0009 CHARACTER TABULATION, U+000A LINE FEED (LF), U+000C
@@ -145401,8 +145544,8 @@ document.body.appendChild(text);
    <dd>
     <p><span>Create an element for the token</span> in the <span>HTML namespace</span>, with the
     <code>Document</code> as the intended parent. <span>Insert an element at the adjusted insertion
-    location</span> with that element and the <code>Document</code>, after its last child (if any).
-    Put this element in the <span>stack of open elements</span>.</p>
+    location</span> with that element and (the <code>Document</code>, null). Put this element in the
+    <span>stack of open elements</span>.</p>
 
     <p>Switch the <span>insertion mode</span> to "<span data-x="insertion mode: before head">before
     head</span>".</p>
@@ -145617,7 +145760,7 @@ document.body.appendChild(text);
     <p>Run these steps:</p>
 
     <ol>
-     <li><p>Let the <var>adjustedInsertionLocation</var> be the <span>appropriate place for
+     <li><p>Let <var>adjustedInsertionLocation</var> be the <span>appropriate place for
      inserting a node</span>.</p></li>
 
      <li><p><span>Create an element for the token</span> in the <span>HTML namespace</span>, with
@@ -145656,8 +145799,8 @@ document.body.appendChild(text);
      scripts inserted via <code data-x="dom-document-write">document.write()</code> under slow
      network conditions, or when the page has already taken a long time to load.)</p></li>
 
-     <li><p>Insert the newly created element at the <span>adjusted insertion location</span> given
-     <var>adjustedInsertionLocation</var>.</p></li>
+     <li><p><span>Insert an element at the adjusted insertion location</span> with the newly created
+     element and <var>adjustedInsertionLocation</var>.</p></li>
 
      <li><p>Push the element onto the <span>stack of open elements</span> so that it is the new
      <span>current node</span>.</p></li>
@@ -145705,7 +145848,7 @@ document.body.appendChild(text);
      <span>stack of template insertion modes</span> so that it is the new <span>current template
      insertion mode</span>.</p></li>
 
-     <li><p>Let the <var>adjustedInsertionLocation</var> be the <span>appropriate place for
+     <li><p>Let <var>adjustedInsertionLocation</var> be the <span>appropriate place for
      inserting a node</span>.</p></li>
 
      <li>
@@ -146856,9 +146999,8 @@ document.body.appendChild(text);
 
    <dt>A start tag whose tag name is "input"</dt>
    <dd>
-    <p>If the parser was created as part of the <span>HTML fragment parsing algorithm</span>
-    (<span>fragment case</span>) and the <span data-x="concept-frag-parse-context">context</span>
-    element passed to that algorithm is a <code>select</code> element:</p>
+    <p>If the parser's <span>fragment context element</span> is a <code>select</code> element
+    (<span>fragment case</span>):</p>
 
     <ol>
      <li><p><span>Parse error</span>.</p></li>
@@ -146988,9 +147130,8 @@ document.body.appendChild(text);
 
    <dt>A start tag whose tag name is "select"</dt>
    <dd>
-    <p>If the parser was created as part of the <span>HTML fragment parsing algorithm</span>
-    (<span>fragment case</span>) and the <span data-x="concept-frag-parse-context">context</span>
-    element passed to that algorithm is a <code>select</code> element:</p>
+    <p>If the parser's <span>fragment context element</span> is a <code>select</code> element
+    (<span>fragment case</span>):</p>
 
     <ol>
      <li><p><span>Parse error</span>.</p></li>
@@ -147333,18 +147474,8 @@ document.body.appendChild(text);
       </ol>
      </li>
 
-     <li><p>Let <var>insertionLocation</var> be <var>commonAncestor</var>, after its last child, if
-     any.</p></li>
-
-     <li><p>Let <var>adjustedInsertionLocation</var> be the <span>adjusted insertion location</span>
-     given <var>insertionLocation</var>.</p></li>
-
-     <li><p>Let <var>target</var> be the node in which <var>adjustedInsertionLocation</var> finds
-     itself.</p></li>
-
-     <li><p>Let <var>refNode</var> be the node <var>adjustedInsertionLocation</var> is immediately
-     before, or null if <var>adjustedInsertionLocation</var> is after <var>target</var>'s last
-     child.</p></li>
+     <li><p>Let (<var>target</var>, <var>refNode</var>) be the <span>adjusted insertion
+     location</span> given (<var>commonAncestor</var>, null).</p></li>
 
      <li><p>If <var>lastNode</var>'s <span>parent</span> is non-null, then <span
      data-x="concept-node-remove">remove</span> <var>lastNode</var>.</p></li>
@@ -147375,7 +147506,8 @@ document.body.appendChild(text);
        <li><p><span>Assert</span>: <span>ensure pre-insert validity</span> given
        <var>lastNode</var>, <var>target</var>, <var>refNode</var>, and « » does not throw.</p></li>
 
-       <li><p>Insert <var>lastNode</var> at <var>adjustedInsertionLocation</var>.</p></li>
+       <li><p><span data-x="concept-node-insert">Insert</span> <var>lastNode</var> into
+       <var>target</var> before <var>refNode</var>.</p></li>
       </ol>
      </li>
 
@@ -148445,14 +148577,14 @@ document.body.appendChild(text);
 
    <dt>A comment token</dt>
    <dd>
-    <p><span>Insert a comment</span> as the last child of the first element in the <span>stack of
-    open elements</span> (the <code>html</code> element).</p>
+    <p><span>Insert a comment</span> given (the first element in the <span>stack of open
+    elements</span> (the <code>html</code> element), null).</p>
    </dd>
 
    <dt>A processing instruction token</dt>
    <dd>
-    <p><span>Insert a processing instruction</span> as the last child of the first element in the
-    <span>stack of open elements</span> (the <code>html</code> element).</p>
+    <p><span>Insert a processing instruction</span> given (the first element in the <span>stack of
+    open elements</span> (the <code>html</code> element), null).</p>
    </dd>
 
    <dt>A DOCTYPE token</dt>
@@ -148468,8 +148600,8 @@ document.body.appendChild(text);
 
    <dt>An end tag whose tag name is "html"</dt>
    <dd>
-    <p>If the parser was created as part of the <span>HTML fragment parsing algorithm</span>, this
-    is a <span>parse error</span>; ignore the token. (<span>fragment case</span>)</p>
+    <p>If the parser's <span>fragment context element</span> is non-null, this is a <span>parse
+    error</span>; ignore the token. (<span>fragment case</span>)</p>
 
     <p>Otherwise, switch the <span>insertion mode</span> to "<span data-x="insertion mode: after
     after body">after after body</span>".</p>
@@ -148537,10 +148669,9 @@ document.body.appendChild(text);
     <p>Otherwise, pop the <span>current node</span> from the <span>stack of open
     elements</span>.</p>
 
-    <p>If the parser was not created as part of the <span>HTML fragment parsing algorithm</span>
-    (<span>fragment case</span>), and the <span>current node</span> is no longer a
-    <code>frameset</code> element, then switch the <span>insertion mode</span> to "<span
-    data-x="insertion mode: after frameset">after frameset</span>".</p>
+    <p>If the parser's <span>fragment context element</span> is null and the <span>current
+    node</span> is no longer a <code>frameset</code> element, then switch the <span>insertion
+    mode</span> to "<span data-x="insertion mode: after frameset">after frameset</span>".</p>
    </dd>
 
    <dt>A start tag whose tag name is "frame"</dt>
@@ -148650,13 +148781,13 @@ document.body.appendChild(text);
 
    <dt>A comment token</dt>
    <dd>
-    <p><span>Insert a comment</span> as the last child of the <code>Document</code> object.</p>
+    <p><span>Insert a comment</span> given (the <code>Document</code> object, null).</p>
    </dd>
 
    <dt>A processing instruction token</dt>
    <dd>
-    <p><span>Insert a processing instruction</span> as the last child of the <code>Document</code>
-    object.</p>
+    <p><span>Insert a processing instruction</span> given (the <code>Document</code> object,
+    null).</p>
    </dd>
 
    <dt>A DOCTYPE token</dt>
@@ -148693,13 +148824,13 @@ document.body.appendChild(text);
 
    <dt>A comment token</dt>
    <dd>
-    <p><span>Insert a comment</span> as the last child of the <code>Document</code> object.</p>
+    <p><span>Insert a comment</span> given (the <code>Document</code> object, null).</p>
    </dd>
 
    <dt>A processing instruction token</dt>
    <dd>
-    <p><span>Insert a processing instruction</span> as the last child of the <code>Document</code>
-    object.</p>
+    <p><span>Insert a processing instruction</span> given (the <code>Document</code> object,
+    null).</p>
    </dd>
 
    <dt>A DOCTYPE token</dt>
@@ -150094,11 +150225,11 @@ console.assert(container.firstChild instanceof SuperP);
   is the following steps. They return a <code>DocumentFragment</code>.</p>
 
   <p class="note">Parts marked <dfn>fragment case</dfn> in algorithms in the <span>HTML
-  parser</span> section are parts that only occur if the parser was created for the purposes of this
-  algorithm. The algorithms have been annotated with such markings for informational purposes only;
-  such markings have no normative weight. If it is possible for a condition described as a
-  <span>fragment case</span> to occur even when the parser wasn't created for the purposes of
-  handling this algorithm, then that is an error in the specification.</p>
+  parser</span> section are parts that only occur if the parser's <span>fragment context
+  element</span> is non-null. The algorithms have been annotated with such markings for
+  informational purposes only; such markings have no normative weight. If it is possible for a
+  condition described as a <span>fragment case</span> to occur even when the parser's <span>fragment
+  context element</span> is null, then that is an error in the specification.</p>
 
   <ol>
    <li><p><span>Assert</span>: <var>scriptingMode</var> is either <span
@@ -150128,6 +150259,9 @@ console.assert(container.firstChild instanceof SuperP);
 
    <li><p>Create a new <span>HTML parser</span> whose <span>allow declarative shadow roots</span> is
    <var>allowDeclarativeShadowRoots</var>, and associate it with <var>document</var>.</p></li>
+
+   <li><p>Set the parser's <span>fragment context element</span> to <var
+   data-x="concept-frag-parse-context">context</var>.</p></li>
 
    <li><p>If <var>contextDocument</var>'s <span data-x="concept-n-script">scripting is
    disabled</span>, then set <var>scriptingMode</var> to <span
@@ -150210,8 +150344,8 @@ console.assert(container.firstChild instanceof SuperP);
     <p><span data-x="reset the insertion mode appropriately">Reset the parser's insertion mode
     appropriately</span>.</p>
 
-    <p class="note">The parser will reference the <var
-    data-x="concept-frag-parse-context">context</var> element as part of that algorithm.</p>
+    <p class="note">The parser will reference its <span>fragment context element</span> as part of
+    that algorithm.</p>
    </li>
 
    <li><p>Set the <span>HTML parser</span>'s <span><code>form</code> element pointer</span> to the
@@ -161028,6 +161162,9 @@ INSERT INTERFACES HERE
 
    <dt id="refsABOUT">[ABOUT]</dt>
    <dd><cite><a href="https://www.rfc-editor.org/rfc/rfc6694">The 'about' URI scheme</a></cite>, S. Moonesamy. IETF.</dd>
+
+   <dt id="refsACCNAME">[ACCNAME]</dt>
+   <dd><cite><a href="https://w3c.github.io/accname/">Accessible Name and Description Computation</a></cite>, B. Garaventa, M. Sumner. W3C.</dd>
 
    <dt id="refsAPNG">[APNG]</dt>
    <dd>(Non-normative) <cite><a href="https://wiki.mozilla.org/APNG_Specification">APNG Specification</a></cite>. S. Parmenter, V. Vukicevic, A. Smith. Mozilla.</dd>
