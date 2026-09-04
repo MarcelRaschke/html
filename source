@@ -9021,7 +9021,7 @@ a.setAttribute('href', 'https://example.com/'); // change the content attribute 
   <!-- see https://www.w3.org/Bugs/Public/show_bug.cgi?id=10352
            https://bugzilla.mozilla.org/show_bug.cgi?id=586118
            https://www.w3.org/Bugs/Public/show_bug.cgi?id=17705
-       ...for why the range is clamped to 2147483647 rather the normal unsigned long maximum value
+       ...for why the range is clamped to 2147483647 rather than the normal unsigned long maximum value
        of 4294967295 -->
 
   <div var-scope>
@@ -36458,7 +36458,7 @@ interface <dfn interface>HTMLEmbedElement</dfn> : <span>HTMLElement</span> {
    <li>
     <p>If the <span data-x="concept-url-path">path</span> component of <var>response</var>'s
     <span data-x="concept-response-url">URL</span> matches a pattern that a <span>plugin</span>
-    supports, then return the type that that plugin can handle.</p>
+    supports, then return the type that the plugin can handle.</p>
 
     <p class="example">For example, a plugin might say that it can handle URLs with <span
     data-x="concept-url-path">path</span> components that end with the four character string
@@ -36880,7 +36880,7 @@ interface <dfn interface>HTMLObjectElement</dfn> : <span>HTMLElement</span> {
         <p>If applying the <span>URL parser</span> algorithm to the <span>URL</span> of the
         specified resource (after any redirects) results in a <span>URL record</span> whose <span
         data-x="concept-url-path">path</span> component matches a pattern that a <span>plugin</span>
-        supports, then let <var>resource type</var> be the type that that plugin can
+        supports, then let <var>resource type</var> be the type that the plugin can
         handle.</p>
 
         <p class="example">For example, a plugin might say that it can handle resources with <span
@@ -97770,7 +97770,7 @@ dictionary <dfn dictionary>WindowPostMessageOptions</dfn> : <span>StructuredSeri
   </div>
 
   <div class="example">
-   <p>The two seperate iterations mean that in the following example, hosted on <code
+   <p>The two separate iterations mean that in the following example, hosted on <code
    data-x="">https://example.org/</code>, assuming <code data-x="">https://elsewhere.example/</code>
    sets <code data-x="dom-name">window.name</code> to "<code data-x="">spices</code>", evaluating
    <code data-x="">window.spices</code> after everything has loaded will yield undefined:</p>
@@ -104996,7 +104996,7 @@ interface <dfn interface>NotRestoredReasons</dfn> {
    representation of a series of documents. They correspond 1:1 with <code>WindowProxy</code>
    objects. Each navigable can present a series of browsing contexts, with <a
    href="#browsing-context-group-switches-due-to-cross-origin-opener-policy">switches</a> between
-   those browsing contexts occuring under certain well-defined circumstances.</p></li>
+   those browsing contexts occurring under certain well-defined circumstances.</p></li>
   </ul>
 
   <p>Most of this standard works in the language of navigables, but certain APIs expose the
@@ -105579,7 +105579,7 @@ interface <dfn interface>NotRestoredReasons</dfn> {
   <p><span data-x="Jake diagram">Jake diagrams</span> are a powerful tool for visualizing the
   interactions of multiple navigables, navigations, and traversals. They cannot capture every
   possible interaction &mdash; for example, they only work with a single level of nesting &mdash;
-  but we will have ocassion to use them to illustrate several complex situations throughout this
+  but we will have occasion to use them to illustrate several complex situations throughout this
   standard.</p>
 
   <p class="note"><span data-x="Jake diagram">Jake diagrams</span> are named after their creator,
@@ -111684,7 +111684,7 @@ location.href = '#foo';</code></pre>
         state</span> to <span>StructuredSerializeForStorage</span>(null).</p>
 
         <p class="note">This clears history state when the origin changed vs a previous load of
-        <var>targetEntry</var> without a redirect occuring. This can happen due to a change in CSP
+        <var>targetEntry</var> without a redirect occurring. This can happen due to a change in CSP
         sandbox headers.</p>
        </li>
 
@@ -128759,7 +128759,7 @@ dictionary <dfn dictionary>SanitizerConfig</dfn> {
 
   <p class="note">It's expected that the configuration being passed in has previously been run
   through the <span>canonicalize the configuration</span> steps. We will simply assert conditions
-  that that algorithm is guaranteed to hold.</p>
+  that the algorithm is guaranteed to hold.</p>
 
   <ol>
    <li><p><span>Assert</span>: <var>config</var>["<code
@@ -153767,10 +153767,10 @@ progress { appearance: auto; }</code></pre>
   <code>option</code> element in the element's <span data-x="concept-select-option-list">list of
   options</span> (including its indent, if any). If the <code>select</code> has the <code
   data-x="attr-select-multiple">multiple</code> attribute and is being rendered as a
-  <span>drop-down box</span>, then the width should also be wide enough to accomodate the text
+  <span>drop-down box</span>, then the width should also be wide enough to accommodate the text
   rendered in the <code>select</code> with any combination of <code>option</code>s selected.</p>
 
-  <p class="note">The <span>width of the <code>select</code>'s labels</span> has an accomodation for
+  <p class="note">The <span>width of the <code>select</code>'s labels</span> has an accommodation for
   <code data-x="attr-select-multiple">multiple</code> because some implementations use special text
   to represent multiple options being selected, such as "2 selected." In this case, the select needs
   to be wide enough to render "2 selected" in addition to the individual <code>option</code>s.</p>
