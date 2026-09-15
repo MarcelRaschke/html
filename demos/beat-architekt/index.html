@@ -1130,6 +1130,23 @@ let videoExportAnalyzer = {
 let lastBeatTime = 0;
 let beatThreshold = 0.7;
 
+// Phase 12: AI-Powered Production Features
+let globalMasterGain = null; // Routes all notes → effects chain
+let effectsEnabled = {
+  compressor: false,
+  eq: false,
+  delay: false,
+  reverb: false
+};
+let effectsParams = {
+  compressor: { threshold: -24, ratio: 4 },
+  eq: { bass: 0, mid: 0, treble: 0 },
+  delay: { time: 0.5, feedback: 0.4, mix: 0 },
+  reverb: { mix: 0 }
+};
+let anthropicApiKey = null;
+let aiPatternGeneration = false;
+
 function setStepLength(len) {
   const newLen = parseInt(len);
   if (newLen === STEPS) return;
@@ -1338,7 +1355,12 @@ function clearCurrent() {
 
 // === PHASE 8: EFFECTS CHAIN INITIALIZATION ===
 function initEffectsChain() {
-  if (!audioCtx || effectsNodes.compressor) return; // Already initialized
+  if (!audioCtx) return;
+  if (globalMasterGain) return; // Already initialized
+
+  // Global master gain (input to effects chain, routes all notes through here)
+  globalMasterGain = audioCtx.createGain();
+  globalMasterGain.gain.value = 1.0;
 
   // Compressor
   effectsNodes.compressor = audioCtx.createDynamicsCompressor();
@@ -1381,7 +1403,8 @@ function initEffectsChain() {
   const impulse = createReverbImpulse(2);
   effectsNodes.reverb.buffer = impulse;
 
-  // Connect effects chain: Compressor → EQ → Delay → Reverb → Destination
+  // Connect effects chain: globalMasterGain → Compressor → EQ → Delay → Reverb → Destination
+  globalMasterGain.connect(effectsNodes.compressor);
   effectsNodes.compressor.connect(effectsNodes.eqBass);
   effectsNodes.eqBass.connect(effectsNodes.eqMid);
   effectsNodes.eqMid.connect(effectsNodes.eqTreble);
@@ -1411,6 +1434,165 @@ function createReverbImpulse(duration) {
   }
 
   return impulse;
+}
+
+// Phase 12: Effect control functions
+function toggleEffect(effectName) {
+  if (!effectsNodes[effectName === 'eq' ? 'eqBass' : effectName]) return;
+  effectsEnabled[effectName] = !effectsEnabled[effectName];
+  updateEffectUI(effectName);
+}
+
+function updateCompressor(threshold, ratio) {
+  if (!effectsNodes.compressor) return;
+  effectsParams.compressor = { threshold, ratio };
+  effectsNodes.compressor.threshold.setTargetAtTime(threshold, audioCtx.currentTime, 0.01);
+  effectsNodes.compressor.ratio.setTargetAtTime(ratio, audioCtx.currentTime, 0.01);
+}
+
+function updateEQ(bass, mid, treble) {
+  if (!effectsNodes.eqBass) return;
+  effectsParams.eq = { bass, mid, treble };
+  effectsNodes.eqBass.gain.setTargetAtTime(bass, audioCtx.currentTime, 0.01);
+  effectsNodes.eqMid.gain.setTargetAtTime(mid, audioCtx.currentTime, 0.01);
+  effectsNodes.eqTreble.gain.setTargetAtTime(treble, audioCtx.currentTime, 0.01);
+}
+
+function updateDelay(time, feedback, mix) {
+  if (!effectsNodes.delay) return;
+  effectsParams.delay = { time, feedback, mix };
+  effectsNodes.delay.delayTime.setTargetAtTime(time, audioCtx.currentTime, 0.01);
+  effectsNodes.delayFeedback.gain.setTargetAtTime(feedback, audioCtx.currentTime, 0.01);
+  effectsNodes.delayWet.gain.setTargetAtTime(mix, audioCtx.currentTime, 0.01);
+}
+
+function updateReverb(mix) {
+  if (!effectsNodes.reverb) return;
+  effectsParams.reverb = { mix };
+  effectsNodes.reverbWet.gain.setTargetAtTime(mix, audioCtx.currentTime, 0.01);
+}
+
+function updateEffectUI(effectName) {
+  const checkbox = document.getElementById(`effect_${effectName}`);
+  const controls = document.getElementById(`${effectName}Controls`);
+  if (checkbox) checkbox.checked = effectsEnabled[effectName];
+  if (controls) controls.style.display = effectsEnabled[effectName] ? 'block' : 'none';
+}
+
+// Phase 12: AI Pattern Generation
+async function generatePatternFromPrompt() {
+  const prompt = document.getElementById('aiPrompt').value.trim();
+  if (!prompt || prompt.length < 3) {
+    updateAIStatus('error', 'Enter a pattern description (min 3 chars)');
+    return;
+  }
+
+  let apiKey = localStorage.getItem('claudeApiKey');
+  if (!apiKey) {
+    apiKey = prompt('Enter your Claude API key (from claude.ai/account/keys):\n\nYour key will be stored locally in this browser only.');
+    if (!apiKey) return;
+    localStorage.setItem('claudeApiKey', apiKey);
+  }
+
+  updateAIStatus('generating', '🔄 Generating...');
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-1',
+        max_tokens: 800,
+        messages: [{
+          role: 'user',
+          content: `Generate a 16-step drum pattern for Beat Architekt matching this vibe: "${prompt}"
+
+8 drum tracks: kick, snare, clap, hihat, perc, bass, fx, shaker
+Each track is a 16-step array (0=off, 1=on). Return valid JSON only, no markdown:
+
+{
+  "name": "pattern name",
+  "genre": "house|techno|dnb|trap|afro|progressive",
+  "grid": {
+    "kick": [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],
+    "snare": [0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0],
+    "clap": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    "hihat": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    "perc": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    "bass": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    "fx": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    "shaker": [0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1]
+  }
+}`
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error?.message || `API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.content[0].text;
+    const pattern = parseAIPattern(content);
+
+    applyAIPattern(pattern);
+    updateAIStatus('success', '✓ Pattern generated!');
+    setTimeout(() => {
+      document.getElementById('aiStatus').style.display = 'none';
+    }, 2000);
+
+  } catch (err) {
+    console.error('AI generation error:', err);
+    updateAIStatus('error', `Error: ${err.message.substring(0, 40)}`);
+  }
+}
+
+function parseAIPattern(response) {
+  const jsonMatch = response.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('No JSON found in response');
+
+  const parsed = JSON.parse(jsonMatch[0]);
+  if (!parsed.grid || Object.keys(parsed.grid).length !== 8) {
+    throw new Error('Pattern missing tracks');
+  }
+
+  const normalized = {};
+  for (const [track, pattern] of Object.entries(parsed.grid)) {
+    if (!Array.isArray(pattern) || pattern.length < 8) {
+      throw new Error(`Invalid pattern for ${track}`);
+    }
+    normalized[track] = pattern.slice(0, 16).map(v => v ? 1 : 0);
+  }
+
+  return { name: parsed.name || 'AI Pattern', genre: parsed.genre || 'house', grid: normalized };
+}
+
+function applyAIPattern(pattern) {
+  TRACKS.forEach(track => {
+    grid[track.key] = [];
+    const patternArray = pattern.grid[track.key] || [];
+    for (let i = 0; i < STEPS; i++) {
+      const isActive = i < patternArray.length ? patternArray[i] : 0;
+      grid[track.key][i] = { active: !!isActive, velocity: 1.0, pan: 0 };
+    }
+  });
+
+  renderGrid();
+  recordUndo();
+  document.getElementById('aiPrompt').value = '';
+}
+
+function updateAIStatus(state, message) {
+  const statusEl = document.getElementById('aiStatus');
+  statusEl.textContent = message;
+  statusEl.style.display = 'block';
+  statusEl.className = `ai-status-${state}`;
+  statusEl.style.color = state === 'error' ? 'var(--red)' : state === 'success' ? 'var(--lime)' : 'var(--text-secondary)';
 }
 
 // Noise buffer for synthesis
@@ -1459,9 +1641,9 @@ function playSound(track, velocity = 1.0, pan = 0) {
     output = panner;
   }
 
-  // Connect to effects chain if initialized, otherwise direct to destination
-  if (effectsNodes.compressor) {
-    output.connect(effectsNodes.compressor);
+  // Route through global master (effects chain input) or direct if not initialized
+  if (globalMasterGain) {
+    output.connect(globalMasterGain);
   } else {
     output.connect(audioCtx.destination);
   }
@@ -3647,6 +3829,101 @@ function toggleVideoExportVisualizer(analyzer) {
   </div>
 </div>
 
+<!-- Phase 12: Effects Chain Panel -->
+<div id="effectsPanel" style="position:fixed;bottom:20px;left:430px;width:360px;background:var(--bg-card);border:1px solid rgba(170,255,0,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:70vh;overflow-y:auto;display:none">
+  <div style="font-size:13px;font-weight:600;color:var(--lime);margin-bottom:12px">🎛️ Effects Chain</div>
+
+  <!-- AI Pattern Generator -->
+  <div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+    <div style="font-size:11px;font-weight:600;color:var(--cyan);margin-bottom:8px">🤖 AI Generate</div>
+    <textarea id="aiPrompt" placeholder="e.g. 'Techno 4-on-floor with tight hi-hat'" maxlength="200" style="width:100%;padding:8px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;font-size:10px;font-family:monospace;resize:vertical;height:50px;margin-bottom:8px"></textarea>
+    <button onclick="generatePatternFromPrompt()" style="width:100%;padding:8px;background:rgba(0,240,255,0.1);border:1px solid var(--cyan);color:var(--cyan);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;transition:all 0.2s">
+      Generate Pattern
+    </button>
+    <div id="aiStatus" style="display:none;font-size:10px;color:var(--text-secondary);margin-top:8px;text-align:center"></div>
+  </div>
+
+  <!-- Compressor -->
+  <div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+    <label style="display:flex;gap:8px;margin-bottom:8px;cursor:pointer">
+      <input type="checkbox" id="effect_compressor" onchange="toggleEffect('compressor')" style="cursor:pointer">
+      <span style="font-size:11px;font-weight:600;color:var(--text-primary)">Compressor</span>
+    </label>
+    <div id="compressorControls" style="display:none;margin-left:20px;gap:10px;font-size:10px">
+      <div style="margin-bottom:8px">
+        <div style="color:var(--text-secondary);margin-bottom:4px">Threshold: <span style="color:var(--cyan)">-24dB</span></div>
+        <input type="range" min="-40" max="0" value="-24" step="1" oninput="updateCompressor(this.value, document.getElementById('compressorRatio').value)" style="width:100%;cursor:pointer">
+      </div>
+      <div>
+        <div style="color:var(--text-secondary);margin-bottom:4px">Ratio: <span style="color:var(--cyan)" id="ratioDisplay">4:1</span></div>
+        <input type="range" min="1" max="20" value="4" step="0.1" id="compressorRatio" oninput="document.getElementById('ratioDisplay').textContent = (this.value + ':1'); updateCompressor(document.querySelector('input[min=\\\"-40\\\"]').value, this.value)" style="width:100%;cursor:pointer">
+      </div>
+    </div>
+  </div>
+
+  <!-- 3-Band EQ -->
+  <div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+    <label style="display:flex;gap:8px;margin-bottom:8px;cursor:pointer">
+      <input type="checkbox" id="effect_eq" onchange="toggleEffect('eq')" style="cursor:pointer">
+      <span style="font-size:11px;font-weight:600;color:var(--text-primary)">3-Band EQ</span>
+    </label>
+    <div id="eqControls" style="display:none;margin-left:20px;gap:10px;font-size:10px">
+      <div style="margin-bottom:8px">
+        <div style="color:var(--text-secondary);margin-bottom:4px">Bass: <span style="color:var(--cyan)" id="bassDisplay">0dB</span></div>
+        <input type="range" min="-12" max="12" value="0" step="1" id="bassSlider" oninput="document.getElementById('bassDisplay').textContent = (this.value > 0 ? '+' : '') + this.value + 'dB'; updateEQ(this.value, document.getElementById('midSlider').value, document.getElementById('trebleSlider').value)" style="width:100%;cursor:pointer">
+      </div>
+      <div style="margin-bottom:8px">
+        <div style="color:var(--text-secondary);margin-bottom:4px">Mid: <span style="color:var(--cyan)" id="midDisplay">0dB</span></div>
+        <input type="range" min="-12" max="12" value="0" step="1" id="midSlider" oninput="document.getElementById('midDisplay').textContent = (this.value > 0 ? '+' : '') + this.value + 'dB'; updateEQ(document.getElementById('bassSlider').value, this.value, document.getElementById('trebleSlider').value)" style="width:100%;cursor:pointer">
+      </div>
+      <div>
+        <div style="color:var(--text-secondary);margin-bottom:4px">Treble: <span style="color:var(--cyan)" id="trebleDisplay">0dB</span></div>
+        <input type="range" min="-12" max="12" value="0" step="1" id="trebleSlider" oninput="document.getElementById('trebleDisplay').textContent = (this.value > 0 ? '+' : '') + this.value + 'dB'; updateEQ(document.getElementById('bassSlider').value, document.getElementById('midSlider').value, this.value)" style="width:100%;cursor:pointer">
+      </div>
+    </div>
+  </div>
+
+  <!-- Delay -->
+  <div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+    <label style="display:flex;gap:8px;margin-bottom:8px;cursor:pointer">
+      <input type="checkbox" id="effect_delay" onchange="toggleEffect('delay')" style="cursor:pointer">
+      <span style="font-size:11px;font-weight:600;color:var(--text-primary)">Delay</span>
+    </label>
+    <div id="delayControls" style="display:none;margin-left:20px;gap:10px;font-size:10px">
+      <div style="margin-bottom:8px">
+        <div style="color:var(--text-secondary);margin-bottom:4px">Time: <span style="color:var(--cyan)" id="delayTimeDisplay">0.5s</span></div>
+        <input type="range" min="0.1" max="2" value="0.5" step="0.05" id="delayTimeSlider" oninput="document.getElementById('delayTimeDisplay').textContent = this.value + 's'; updateDelay(this.value, document.getElementById('delayFeedbackSlider').value, document.getElementById('delayMixSlider').value)" style="width:100%;cursor:pointer">
+      </div>
+      <div style="margin-bottom:8px">
+        <div style="color:var(--text-secondary);margin-bottom:4px">Feedback: <span style="color:var(--cyan)" id="delayFeedbackDisplay">40%</span></div>
+        <input type="range" min="0" max="0.8" value="0.4" step="0.05" id="delayFeedbackSlider" oninput="document.getElementById('delayFeedbackDisplay').textContent = Math.round(this.value * 100) + '%'; updateDelay(document.getElementById('delayTimeSlider').value, this.value, document.getElementById('delayMixSlider').value)" style="width:100%;cursor:pointer">
+      </div>
+      <div>
+        <div style="color:var(--text-secondary);margin-bottom:4px">Mix: <span style="color:var(--cyan)" id="delayMixDisplay">0%</span></div>
+        <input type="range" min="0" max="1" value="0" step="0.05" id="delayMixSlider" oninput="document.getElementById('delayMixDisplay').textContent = Math.round(this.value * 100) + '%'; updateDelay(document.getElementById('delayTimeSlider').value, document.getElementById('delayFeedbackSlider').value, this.value)" style="width:100%;cursor:pointer">
+      </div>
+    </div>
+  </div>
+
+  <!-- Reverb -->
+  <div style="margin-bottom:14px">
+    <label style="display:flex;gap:8px;margin-bottom:8px;cursor:pointer">
+      <input type="checkbox" id="effect_reverb" onchange="toggleEffect('reverb')" style="cursor:pointer">
+      <span style="font-size:11px;font-weight:600;color:var(--text-primary)">Reverb</span>
+    </label>
+    <div id="reverbControls" style="display:none;margin-left:20px;gap:10px;font-size:10px">
+      <div>
+        <div style="color:var(--text-secondary);margin-bottom:4px">Mix: <span style="color:var(--cyan)" id="reverbMixDisplay">0%</span></div>
+        <input type="range" min="0" max="1" value="0" step="0.05" oninput="document.getElementById('reverbMixDisplay').textContent = Math.round(this.value * 100) + '%'; updateReverb(this.value)" style="width:100%;cursor:pointer">
+      </div>
+    </div>
+  </div>
+
+  <button onclick="document.getElementById('effectsPanel').style.display='none'" style="width:100%;padding:8px;background:rgba(170,255,0,0.1);border:1px solid var(--lime);color:var(--lime);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;transition:all 0.2s">
+    ✕ Close
+  </button>
+</div>
+
 <!-- Phase 9: AI Remix Generator Panel -->
 <div id="remixPanel" style="position:fixed;bottom:20px;right:20px;width:350px;background:var(--bg-card);border:1px solid rgba(0,240,255,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:70vh;overflow-y:auto;display:none">
   <div style="font-size:13px;font-weight:600;color:var(--cyan);margin-bottom:12px">🎚️ AI Remix Generator</div>
@@ -3868,6 +4145,44 @@ document.addEventListener('DOMContentLoaded', () => {
     panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
   };
   document.body.appendChild(videoToggleBtn);
+
+  // Effects Chain toggle button (Phase 12)
+  const effectsToggleBtn = document.createElement('button');
+  effectsToggleBtn.id = 'effectsToggleBtn';
+  effectsToggleBtn.textContent = '🎛️';
+  effectsToggleBtn.title = 'Effects Chain (Phase 12)';
+  effectsToggleBtn.onclick = () => {
+    const panel = document.getElementById('effectsPanel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  };
+  effectsToggleBtn.style.cssText = `
+    position: fixed;
+    bottom: 140px;
+    left: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(170,255,0,0.2), rgba(170,255,0,0.1));
+    border: 2px solid var(--lime);
+    color: var(--lime);
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    z-index: 899;
+    box-shadow: 0 0 20px rgba(170,255,0,0.2);
+  `;
+  effectsToggleBtn.onmouseover = () => {
+    effectsToggleBtn.style.transform = 'scale(1.1)';
+    effectsToggleBtn.style.boxShadow = '0 0 30px rgba(170,255,0,0.4)';
+  };
+  effectsToggleBtn.onmouseout = () => {
+    effectsToggleBtn.style.transform = 'scale(1)';
+    effectsToggleBtn.style.boxShadow = '0 0 20px rgba(170,255,0,0.2)';
+  };
+  document.body.appendChild(effectsToggleBtn);
 
   // Initialize remix presets
   initRemixPresets();
