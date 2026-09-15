@@ -1103,6 +1103,11 @@ let effectsNodes = {
 let midiAccess = null;
 let midiEnabled = false;
 
+// Phase 9: AI Remix Generator
+let remixHistory = [];
+let currentRemixPair = null;
+let remixComparisonActive = false;
+
 function setStepLength(len) {
   const newLen = parseInt(len);
   if (newLen === STEPS) return;
@@ -2857,6 +2862,299 @@ function updateSyncStatusBadge(status) {
 
   document.getElementById('syncStatusText').textContent = statusText[status] || 'Unknown';
 }
+
+// === PHASE 9: AI REMIX GENERATOR ===
+async function remixCurrentPattern() {
+  if (!anthropicApiKey) {
+    alert('Set Claude API key first (☁️ Cloud Sync settings)');
+    return;
+  }
+
+  const prompt = document.getElementById('remixPrompt').value.trim();
+  if (!prompt || prompt.length < 5) {
+    alert('Describe your remix (min 5 characters)');
+    return;
+  }
+
+  const strategy = document.getElementById('remixStrategy').value;
+  const preserveLength = document.getElementById('remixPreserveLength').checked;
+
+  updateRemixStatus('generating', '⏳ Remixing your pattern...');
+  document.getElementById('remixApplyBtn').disabled = true;
+  document.getElementById('remixRejectBtn').disabled = true;
+
+  try {
+    // Build the remix prompt with current grid
+    const remixPrompt = buildRemixPrompt(prompt, strategy, preserveLength);
+
+    // Call Claude API
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': anthropicApiKey,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-1',
+        max_tokens: 1024,
+        messages: [{
+          role: 'user',
+          content: remixPrompt
+        }]
+      })
+    });
+
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+
+    const data = await response.json();
+    const content = data.content[0].text;
+
+    // Parse the remixed pattern
+    const remixedPattern = parseRemixResponse(content);
+
+    // Store original for comparison
+    const originalGrid = JSON.parse(JSON.stringify(grid));
+
+    // Set up comparison mode
+    currentRemixPair = {
+      original: originalGrid,
+      remixed: remixedPattern,
+      prompt: prompt,
+      strategy: strategy,
+      timestamp: new Date().toISOString()
+    };
+
+    // Add to history
+    remixHistory.unshift(currentRemixPair);
+    if (remixHistory.length > 5) remixHistory.pop();
+    populateRemixHistory();
+
+    // Enable comparison mode
+    enableRemixComparison();
+    updateRemixStatus('success', '✓ Remix complete! A/B Compare:');
+
+  } catch (err) {
+    console.error('Remix error:', err);
+    updateRemixStatus('error', `✗ Error: ${err.message}`);
+    document.getElementById('remixApplyBtn').disabled = false;
+    document.getElementById('remixRejectBtn').disabled = false;
+  }
+}
+
+function buildRemixPrompt(userRequest, strategy, preserveLength) {
+  // Convert current grid to text format for Claude
+  const gridText = TRACKS.map(t => {
+    const pattern = grid[t.key].map(s => s.active ? '1' : '0').join('');
+    return `${t.name}: ${pattern}`;
+  }).join('\n');
+
+  const strategyDesc = {
+    preserve_kick: 'Keep the kick pattern exactly as-is, remix only the other drums',
+    preserve_all: 'Keep all main drum patterns (kick, snare, clap), remix percussion and hi-hats',
+    freeform: 'Completely redesign the pattern for maximum creativity'
+  }[strategy] || 'Remix the pattern with creative freedom';
+
+  return `You are Beat Architekt's AI remix engine. Transform this drum pattern based on the user's request.
+
+Current Pattern (8 tracks, ${STEPS} steps):
+${gridText}
+
+Tracks: KICK, SNARE, CLAP, HI-HAT, PERC, BASS, FX, SHAKER
+
+User Request: "${userRequest}"
+Strategy: ${strategyDesc}
+${preserveLength ? 'Keep the same number of steps (' + STEPS + ')' : 'You can adjust density as needed'}
+
+Respond with ONLY valid JSON (no markdown, no explanation):
+{
+  "kick": [${Array(STEPS).fill(0).map(() => Math.random() > 0.7 ? '1' : '0').join(',')}],
+  "snare": [${Array(STEPS).fill(0).map(() => Math.random() > 0.6 ? '1' : '0').join(',')}],
+  "clap": [${Array(STEPS).fill(0).map(() => Math.random() > 0.8 ? '1' : '0').join(',')}],
+  "hihat": [${Array(STEPS).fill(0).map(() => Math.random() > 0.4 ? '1' : '0').join(',')}],
+  "perc": [${Array(STEPS).fill(0).map(() => Math.random() > 0.75 ? '1' : '0').join(',')}],
+  "bass": [${Array(STEPS).fill(0).map(() => Math.random() > 0.85 ? '1' : '0').join(',')}],
+  "fx": [${Array(STEPS).fill(0).map(() => Math.random() > 0.9 ? '1' : '0').join(',')}],
+  "shaker": [${Array(STEPS).fill(0).map(() => Math.random() > 0.5 ? '1' : '0').join(',')}]
+}`;
+}
+
+function parseRemixResponse(response) {
+  // Extract JSON from response
+  const jsonMatch = response.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('Invalid response format from Claude');
+
+  const parsed = JSON.parse(jsonMatch[0]);
+
+  // Validate structure
+  if (!parsed.kick || !Array.isArray(parsed.kick)) {
+    throw new Error('Invalid remix pattern structure');
+  }
+
+  // Normalize to grid format
+  const remixed = {};
+  TRACKS.forEach(t => {
+    remixed[t.key] = [];
+    const patternArray = parsed[t.key] || Array(STEPS).fill(0);
+
+    for (let i = 0; i < Math.min(patternArray.length, STEPS); i++) {
+      remixed[t.key][i] = {
+        active: !!patternArray[i],
+        velocity: 1.0,
+        pan: 0
+      };
+    }
+
+    // Pad remaining steps if needed
+    while (remixed[t.key].length < STEPS) {
+      remixed[t.key].push({ active: false, velocity: 1.0, pan: 0 });
+    }
+  });
+
+  return remixed;
+}
+
+function enableRemixComparison() {
+  remixComparisonActive = true;
+
+  const panel = document.getElementById('remixComparisonPanel');
+  if (panel) {
+    panel.style.display = 'block';
+    panel.style.background = 'rgba(0,240,255,0.05)';
+    panel.style.border = '1px solid rgba(0,240,255,0.3)';
+  }
+
+  // Show remixed grid
+  const remixedGrid = currentRemixPair.remixed;
+  TRACKS.forEach((track, trackIdx) => {
+    for (let i = 0; i < STEPS; i++) {
+      const cell = document.querySelector(`.ba-cell[data-track="${trackIdx}"][data-step="${i}"]`);
+      if (cell) {
+        const isActive = remixedGrid[track.key][i].active;
+        cell.classList.toggle('active', isActive);
+        cell.style.opacity = '0.7';
+        cell.style.background = isActive ? 'rgba(0,240,255,0.3)' : 'transparent';
+      }
+    }
+  });
+
+  // Disable grid interaction during comparison
+  document.querySelectorAll('.ba-cell').forEach(cell => {
+    cell.style.pointerEvents = 'none';
+    cell.style.opacity = '0.7';
+  });
+
+  document.getElementById('remixApplyBtn').disabled = false;
+  document.getElementById('remixRejectBtn').disabled = false;
+}
+
+function toggleRemixComparison() {
+  if (!currentRemixPair) return;
+
+  const showingRemix = document.getElementById('comparisonToggle').textContent.includes('Original');
+
+  if (showingRemix) {
+    // Show original
+    TRACKS.forEach((track, trackIdx) => {
+      for (let i = 0; i < STEPS; i++) {
+        const cell = document.querySelector(`.ba-cell[data-track="${trackIdx}"][data-step="${i}"]`);
+        if (cell) {
+          const isActive = currentRemixPair.original[track.key][i].active;
+          cell.classList.toggle('active', isActive);
+          cell.style.background = isActive ? 'rgba(170,255,0,0.3)' : 'transparent';
+        }
+      }
+    });
+    document.getElementById('comparisonToggle').textContent = 'Show Remix';
+    document.getElementById('comparisonLabel').textContent = 'Original Pattern:';
+  } else {
+    // Show remixed
+    TRACKS.forEach((track, trackIdx) => {
+      for (let i = 0; i < STEPS; i++) {
+        const cell = document.querySelector(`.ba-cell[data-track="${trackIdx}"][data-step="${i}"]`);
+        if (cell) {
+          const isActive = currentRemixPair.remixed[track.key][i].active;
+          cell.classList.toggle('active', isActive);
+          cell.style.background = isActive ? 'rgba(0,240,255,0.3)' : 'transparent';
+        }
+      }
+    });
+    document.getElementById('comparisonToggle').textContent = 'Show Original';
+    document.getElementById('comparisonLabel').textContent = 'Remixed Pattern:';
+  }
+}
+
+function applyRemix() {
+  if (!currentRemixPair) return;
+
+  grid = JSON.parse(JSON.stringify(currentRemixPair.remixed));
+  recordUndo();
+  renderGrid();
+
+  // Reset grid interaction
+  document.querySelectorAll('.ba-cell').forEach(cell => {
+    cell.style.pointerEvents = 'auto';
+    cell.style.opacity = '1';
+    cell.style.background = '';
+  });
+
+  remixComparisonActive = false;
+  document.getElementById('remixComparisonPanel').style.display = 'none';
+  currentRemixPair = null;
+  updateRemixStatus('applied', '✓ Remix applied to grid!');
+
+  document.getElementById('remixPrompt').value = '';
+}
+
+function rejectRemix() {
+  // Restore grid interaction
+  document.querySelectorAll('.ba-cell').forEach(cell => {
+    cell.style.pointerEvents = 'auto';
+    cell.style.opacity = '1';
+    cell.style.background = '';
+  });
+
+  remixComparisonActive = false;
+  document.getElementById('remixComparisonPanel').style.display = 'none';
+  renderGrid(); // Restore original display
+  currentRemixPair = null;
+  updateRemixStatus('rejected', '✗ Remix discarded');
+
+  document.getElementById('remixPrompt').value = '';
+}
+
+function populateRemixHistory() {
+  const historyEl = document.getElementById('remixHistory');
+  if (!historyEl) return;
+
+  historyEl.innerHTML = remixHistory.map((remix, idx) => `
+    <div style="padding:8px;background:rgba(0,240,255,0.08);border:1px solid rgba(0,240,255,0.2);border-radius:6px;margin-bottom:8px;cursor:pointer;font-size:11px" onclick="loadRemixFromHistory(${idx})">
+      <strong>Remix ${remixHistory.length - idx}</strong>
+      <div style="color:var(--text-secondary);margin-top:4px">${remix.prompt.substring(0, 40)}...</div>
+      <div style="color:var(--text-dim);font-size:9px;margin-top:2px">${new Date(remix.timestamp).toLocaleTimeString()}</div>
+    </div>
+  `).join('');
+}
+
+function loadRemixFromHistory(idx) {
+  if (idx < 0 || idx >= remixHistory.length) return;
+
+  const remix = remixHistory[idx];
+  document.getElementById('remixPrompt').value = remix.prompt;
+  document.getElementById('remixStrategy').value = remix.strategy;
+
+  currentRemixPair = remix;
+  enableRemixComparison();
+  updateRemixStatus('loaded', '✓ Loaded from history. Review and apply:');
+}
+
+function updateRemixStatus(state, message) {
+  const statusEl = document.getElementById('remixStatus');
+  if (!statusEl) return;
+
+  statusEl.textContent = message;
+  statusEl.style.display = 'block';
+  statusEl.style.color = state === 'error' ? 'var(--red)' : state === 'success' ? 'var(--lime)' : 'var(--cyan)';
+}
 </script>
 
 <!-- Cloud Sync Settings Modal -->
@@ -2900,6 +3198,111 @@ function updateSyncStatusBadge(status) {
     <p style="color:var(--text-dim);font-size:10px;margin-top:16px;line-height:1.4">Need help? Create a free Firebase project at firebase.google.com and enable Firestore Database + Anonymous Auth.</p>
   </div>
 </div>
+
+<!-- Phase 9: AI Remix Generator Panel -->
+<div id="remixPanel" style="position:fixed;bottom:20px;right:20px;width:350px;background:var(--bg-card);border:1px solid rgba(0,240,255,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:70vh;overflow-y:auto;display:none">
+  <div style="font-size:13px;font-weight:600;color:var(--cyan);margin-bottom:12px">🎚️ AI Remix Generator</div>
+
+  <!-- Remix Input -->
+  <div style="margin-bottom:12px">
+    <label style="display:block;font-size:10px;color:var(--text-dim);margin-bottom:4px">Transform Your Pattern</label>
+    <textarea id="remixPrompt" placeholder="e.g. 'Add more hi-hat energy, sparse kick'" maxlength="200" style="width:100%;padding:8px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;font-size:10px;font-family:monospace;resize:vertical;height:60px"></textarea>
+  </div>
+
+  <!-- Remix Strategy -->
+  <div style="margin-bottom:12px">
+    <label style="display:block;font-size:10px;color:var(--text-dim);margin-bottom:4px">Strategy</label>
+    <select id="remixStrategy" style="width:100%;padding:6px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;font-size:10px">
+      <option value="freeform">Free-form Redesign</option>
+      <option value="preserve_kick">Keep Kick Pattern</option>
+      <option value="preserve_all">Keep Main Drums</option>
+    </select>
+  </div>
+
+  <!-- Preserve Length Option -->
+  <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+    <input type="checkbox" id="remixPreserveLength" checked>
+    <label style="font-size:10px;color:var(--text-secondary)">Keep Same Length (${STEPS} steps)</label>
+  </div>
+
+  <!-- Action Buttons -->
+  <div style="display:flex;gap:8px;margin-bottom:12px">
+    <button onclick="remixCurrentPattern()" style="flex:1;padding:8px;background:rgba(0,240,255,0.1);border:1px solid var(--cyan);color:var(--cyan);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;transition:all 0.2s">
+      🤖 Remix
+    </button>
+    <button onclick="document.getElementById('remixPanel').style.display='none'" style="flex:1;padding:8px;background:rgba(255,51,85,0.1);border:1px solid var(--red);color:var(--red);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;transition:all 0.2s">
+      ✕ Close
+    </button>
+  </div>
+
+  <!-- Status -->
+  <div id="remixStatus" style="display:none;padding:8px;background:rgba(0,240,255,0.08);border-left:3px solid var(--cyan);border-radius:4px;font-size:10px;margin-bottom:12px;color:var(--cyan)"></div>
+
+  <!-- Comparison Panel -->
+  <div id="remixComparisonPanel" style="display:none;padding:12px;background:rgba(0,240,255,0.05);border:1px solid rgba(0,240,255,0.2);border-radius:6px;margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span id="comparisonLabel" style="font-size:10px;font-weight:600;color:var(--cyan)">Remixed Pattern:</span>
+      <button id="comparisonToggle" onclick="toggleRemixComparison()" style="padding:4px 8px;background:rgba(0,240,255,0.1);border:1px solid rgba(0,240,255,0.3);color:var(--cyan);border-radius:4px;font-size:9px;cursor:pointer">Show Original</button>
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <button id="remixApplyBtn" onclick="applyRemix()" style="flex:1;padding:8px;background:rgba(170,255,0,0.15);border:1px solid var(--lime);color:var(--lime);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">
+        ✓ Apply
+      </button>
+      <button id="remixRejectBtn" onclick="rejectRemix()" style="flex:1;padding:8px;background:rgba(255,51,85,0.15);border:1px solid var(--red);color:var(--red);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">
+        ✗ Reject
+      </button>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px">
+    <div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">Recent Remixes</div>
+    <div id="remixHistory" style="max-height:200px;overflow-y:auto"></div>
+  </div>
+</div>
+
+<!-- Toggle Remix Panel Button (add to Beat Architekt controls) -->
+<style>
+#remixToggleBtn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(0,240,255,0.2), rgba(255,0,170,0.2));
+  border: 2px solid var(--cyan);
+  color: var(--cyan);
+  font-size: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+  z-index: 899;
+  box-shadow: 0 0 20px rgba(0,240,255,0.2);
+}
+#remixToggleBtn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 30px rgba(0,240,255,0.4);
+}
+</style>
+
+<script>
+// Initialize remix toggle button
+document.addEventListener('DOMContentLoaded', () => {
+  const toggleBtn = document.createElement('button');
+  toggleBtn.id = 'remixToggleBtn';
+  toggleBtn.textContent = '🎚️';
+  toggleBtn.title = 'AI Remix Generator (Phase 9)';
+  toggleBtn.onclick = () => {
+    const panel = document.getElementById('remixPanel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  };
+  document.body.appendChild(toggleBtn);
+});
+</script>
 
 </body>
 </html>
