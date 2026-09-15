@@ -1244,6 +1244,30 @@ let advancedAudio = {
   ]
 };
 
+// Phase 17: AI-Assisted Mixing
+let aiMixing = {
+  analysisEnabled: false,
+  analysisRunning: false,
+  lastAnalysisTime: null,
+  frequencyBands: [
+    { freq: 60, label: 'Sub', gain: 0, suggestion: 0 },
+    { freq: 120, label: 'Bass', gain: 0, suggestion: 0 },
+    { freq: 250, label: 'Low-Mid', gain: 0, suggestion: 0 },
+    { freq: 500, label: 'Mid', gain: 0, suggestion: 0 },
+    { freq: 1000, label: 'Mid', gain: 0, suggestion: 0 },
+    { freq: 2000, label: 'Presence', gain: 0, suggestion: 0 },
+    { freq: 4000, label: 'Presence', gain: 0, suggestion: 0 },
+    { freq: 8000, label: 'Brilliance', gain: 0, suggestion: 0 },
+    { freq: 12000, label: 'Brilliance', gain: 0, suggestion: 0 },
+    { freq: 16000, label: 'Air', gain: 0, suggestion: 0 }
+  ],
+  loudnessMeasure: { integrated: -23, short: -20, momentary: -18 },
+  frequencyBalance: { bass: 0, mids: 0, treble: 0 },
+  recommendations: [],
+  autoApplyEnabled: false,
+  analysisHistory: []
+};
+
 let midiAccess = null;
 let midiEnabled = false;
 
@@ -2300,6 +2324,234 @@ function drawToneCurve() {
     ctx.font = '8px monospace';
     const freqLabel = p.freq < 1000 ? p.freq + 'Hz' : (p.freq / 1000).toFixed(1) + 'k';
     ctx.fillText(freqLabel, x - 15, y - 8);
+  }
+}
+
+// Phase 17: AI-Assisted Mixing
+function analyzeCurrentMix() {
+  if (!audioCtx || !isPlaying) {
+    console.log('Cannot analyze: audio context or sequencer not ready');
+    return;
+  }
+
+  aiMixing.analysisRunning = true;
+  aiMixing.lastAnalysisTime = Date.now();
+
+  // Perform FFT analysis
+  const analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 2048;
+  globalMasterGain.connect(analyser);
+
+  const frequencyData = new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(frequencyData);
+
+  // Analyze frequency balance across 3 bands (bass, mids, treble)
+  const bassEnd = Math.floor(frequencyData.length * 0.1); // 20Hz-2kHz
+  const midEnd = Math.floor(frequencyData.length * 0.5);  // 2kHz-10kHz
+  const trebleEnd = frequencyData.length;                 // 10kHz-20kHz
+
+  const bassAvg = frequencyData.slice(0, bassEnd).reduce((a, b) => a + b, 0) / bassEnd;
+  const midsAvg = frequencyData.slice(bassEnd, midEnd).reduce((a, b) => a + b, 0) / (midEnd - bassEnd);
+  const trebleAvg = frequencyData.slice(midEnd, trebleEnd).reduce((a, b) => a + b, 0) / (trebleEnd - midEnd);
+
+  aiMixing.frequencyBalance.bass = bassAvg;
+  aiMixing.frequencyBalance.mids = midsAvg;
+  aiMixing.frequencyBalance.treble = trebleAvg;
+
+  // Calculate loudness (simplified LUFS calculation)
+  const rmsValue = Math.sqrt(frequencyData.reduce((a, b) => a + b * b, 0) / frequencyData.length) / 127;
+  const loudnessDB = 20 * Math.log10(Math.max(rmsValue, 0.00001));
+
+  aiMixing.loudnessMeasure.integrated = Math.round(loudnessDB * 10) / 10;
+  aiMixing.loudnessMeasure.short = aiMixing.loudnessMeasure.integrated - 1;
+  aiMixing.loudnessMeasure.momentary = aiMixing.loudnessMeasure.integrated - 0.5;
+
+  // Generate recommendations based on analysis
+  generateMixRecommendations();
+
+  // Store in history
+  aiMixing.analysisHistory.push({
+    timestamp: aiMixing.lastAnalysisTime,
+    frequencyBalance: { ...aiMixing.frequencyBalance },
+    loudness: { ...aiMixing.loudnessMeasure },
+    recommendations: aiMixing.recommendations.slice()
+  });
+
+  // Keep history limited to last 100 analyses
+  if (aiMixing.analysisHistory.length > 100) {
+    aiMixing.analysisHistory.shift();
+  }
+
+  aiMixing.analysisRunning = false;
+
+  // Disconnect temporary analyser
+  globalMasterGain.disconnect(analyser);
+
+  // Update UI display
+  updateAIMixingDisplay();
+
+  return {
+    frequencyBalance: aiMixing.frequencyBalance,
+    loudness: aiMixing.loudnessMeasure,
+    recommendations: aiMixing.recommendations
+  };
+}
+
+function generateMixRecommendations() {
+  aiMixing.recommendations = [];
+
+  const bass = aiMixing.frequencyBalance.bass;
+  const mids = aiMixing.frequencyBalance.mids;
+  const treble = aiMixing.frequencyBalance.treble;
+
+  // Bass recommendations
+  if (bass < 40) {
+    aiMixing.recommendations.push({
+      type: 'bass',
+      priority: 'high',
+      message: 'Bass is too quiet (+3 to +6 dB)',
+      suggestion: 3,
+      bandIndex: 0
+    });
+  } else if (bass > 100) {
+    aiMixing.recommendations.push({
+      type: 'bass',
+      priority: 'medium',
+      message: 'Bass is too loud (-2 to -4 dB)',
+      suggestion: -3,
+      bandIndex: 0
+    });
+  }
+
+  // Mids recommendations
+  if (mids < 50) {
+    aiMixing.recommendations.push({
+      type: 'mids',
+      priority: 'medium',
+      message: 'Mids are dull (+2 to +4 dB)',
+      suggestion: 3,
+      bandIndex: 2
+    });
+  } else if (mids > 120) {
+    aiMixing.recommendations.push({
+      type: 'mids',
+      priority: 'high',
+      message: 'Mids are harsh (-2 to -5 dB)',
+      suggestion: -3,
+      bandIndex: 2
+    });
+  }
+
+  // Treble recommendations
+  if (treble < 30) {
+    aiMixing.recommendations.push({
+      type: 'treble',
+      priority: 'high',
+      message: 'Treble lacks air (+4 to +6 dB)',
+      suggestion: 5,
+      bandIndex: 4
+    });
+  } else if (treble > 110) {
+    aiMixing.recommendations.push({
+      type: 'treble',
+      priority: 'medium',
+      message: 'Treble is harsh (-3 to -5 dB)',
+      suggestion: -4,
+      bandIndex: 4
+    });
+  }
+
+  // Loudness recommendations
+  const loudness = aiMixing.loudnessMeasure.integrated;
+  if (loudness < -30) {
+    aiMixing.recommendations.push({
+      type: 'loudness',
+      priority: 'high',
+      message: `Very quiet (${loudness} LUFS) - increase master gain`,
+      suggestion: 5
+    });
+  } else if (loudness > -10) {
+    aiMixing.recommendations.push({
+      type: 'loudness',
+      priority: 'medium',
+      message: `Loud (${loudness} LUFS) - risk of clipping`,
+      suggestion: -3
+    });
+  }
+}
+
+function applyRecommendation(recommendation) {
+  if (!recommendation) return;
+
+  if (recommendation.type === 'bass' && recommendation.bandIndex !== undefined) {
+    updateToneCurvePoint(recommendation.bandIndex, recommendation.suggestion);
+  } else if (recommendation.type === 'mids' && recommendation.bandIndex !== undefined) {
+    updateToneCurvePoint(recommendation.bandIndex, recommendation.suggestion);
+  } else if (recommendation.type === 'treble' && recommendation.bandIndex !== undefined) {
+    updateToneCurvePoint(recommendation.bandIndex, recommendation.suggestion);
+  } else if (recommendation.type === 'loudness') {
+    if (globalMasterGain) {
+      const newGain = Math.max(0.1, Math.min(2, globalMasterGain.gain.value + recommendation.suggestion * 0.1));
+      globalMasterGain.gain.setTargetAtTime(newGain, audioCtx.currentTime, 0.01);
+    }
+  }
+}
+
+function toggleAIMixing() {
+  aiMixing.analysisEnabled = !aiMixing.analysisEnabled;
+  const checkbox = document.getElementById('aiMixingToggle');
+  if (checkbox) checkbox.checked = aiMixing.analysisEnabled;
+
+  if (aiMixing.analysisEnabled && isPlaying) {
+    analyzeCurrentMix();
+  }
+}
+
+function toggleAutoApply() {
+  aiMixing.autoApplyEnabled = !aiMixing.autoApplyEnabled;
+  const checkbox = document.getElementById('autoApplyToggle');
+  if (checkbox) checkbox.checked = aiMixing.autoApplyEnabled;
+}
+
+function updateAIMixingDisplay() {
+  // Update frequency balance display
+  const bassLevel = document.getElementById('bassLevel');
+  const midsLevel = document.getElementById('midsLevel');
+  const trebleLevel = document.getElementById('trebleLevel');
+
+  if (bassLevel) bassLevel.textContent = Math.round(aiMixing.frequencyBalance.bass);
+  if (midsLevel) midsLevel.textContent = Math.round(aiMixing.frequencyBalance.mids);
+  if (trebleLevel) trebleLevel.textContent = Math.round(aiMixing.frequencyBalance.treble);
+
+  // Update loudness display
+  const loudnessInt = document.getElementById('loudnessInt');
+  const loudnessShort = document.getElementById('loudnessShort');
+
+  if (loudnessInt) loudnessInt.textContent = aiMixing.loudnessMeasure.integrated.toFixed(1);
+  if (loudnessShort) loudnessShort.textContent = aiMixing.loudnessMeasure.short.toFixed(1);
+
+  // Update recommendations list
+  const recList = document.getElementById('recommendationsList');
+  if (recList) {
+    if (aiMixing.recommendations.length === 0) {
+      recList.innerHTML = '<div style="color:var(--text-secondary);font-style:italic">Mix looks good!</div>';
+    } else {
+      recList.innerHTML = aiMixing.recommendations.map((rec, idx) => `
+        <div style="padding:6px;background:var(--bg-primary);border-radius:4px;border-left:2px solid ${rec.priority === 'high' ? '#ff3355' : '#ffcc00'}">
+          <div style="color:var(--text-primary);font-size:9px;margin-bottom:2px">${rec.message}</div>
+          <button onclick="applyRecommendation(${JSON.stringify(rec).replace(/"/g, '&quot;')})" style="font-size:8px;padding:3px 6px;background:rgba(0,240,255,0.1);border:1px solid rgba(0,240,255,0.3);color:var(--cyan);border-radius:3px;cursor:pointer;width:100%">Apply</button>
+        </div>
+      `).join('');
+    }
+  }
+
+  // Auto-apply if enabled
+  if (aiMixing.autoApplyEnabled && aiMixing.recommendations.length > 0) {
+    aiMixing.recommendations.forEach(rec => {
+      if (rec.priority === 'high') {
+        applyRecommendation(rec);
+      }
+    });
   }
 }
 
@@ -5130,6 +5382,68 @@ function toggleVideoExportVisualizer(analyzer) {
   </button>
 </div>
 
+<!-- Phase 17: AI Mixing Analysis Panel -->
+<div id="aiMixingPanel" style="position:fixed;bottom:20px;right:20px;width:380px;background:var(--bg-card);border:1px solid rgba(255,136,68,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:75vh;overflow-y:auto;display:none">
+  <div style="font-size:13px;font-weight:600;color:#ff8844;margin-bottom:14px">🎚️ AI Mix Analysis</div>
+
+  <!-- Analysis Toggle -->
+  <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;cursor:pointer">
+    <input type="checkbox" id="aiMixingToggle" onchange="toggleAIMixing()" style="width:16px;height:16px;cursor:pointer">
+    <span style="font-size:11px;color:var(--text-primary);font-weight:500">Enable Analysis</span>
+  </label>
+
+  <!-- Auto-Apply Toggle -->
+  <label style="display:flex;align-items:center;gap:8px;margin-bottom:16px;cursor:pointer;padding-bottom:12px;border-bottom:1px solid var(--border)">
+    <input type="checkbox" id="autoApplyToggle" onchange="toggleAutoApply()" style="width:16px;height:16px;cursor:pointer">
+    <span style="font-size:11px;color:var(--text-primary);font-weight:500">Auto-Apply Suggestions</span>
+  </label>
+
+  <!-- Frequency Balance Display -->
+  <div style="margin-bottom:14px;padding:10px;background:var(--bg-secondary);border-radius:6px;border-left:3px solid #ff8844">
+    <div style="font-size:10px;font-weight:600;color:#ff8844;margin-bottom:8px">Frequency Balance</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+      <div style="text-align:center">
+        <div style="font-size:9px;color:var(--text-secondary)">Bass</div>
+        <div id="bassLevel" style="font-size:12px;font-weight:600;color:#ff6b6b">--</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:9px;color:var(--text-secondary)">Mids</div>
+        <div id="midsLevel" style="font-size:12px;font-weight:600;color:#ffd700">--</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:9px;color:var(--text-secondary)">Treble</div>
+        <div id="trebleLevel" style="font-size:12px;font-weight:600;color:#00f0ff">--</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loudness Display -->
+  <div style="margin-bottom:14px;padding:10px;background:var(--bg-secondary);border-radius:6px;border-left:3px solid #ffd700">
+    <div style="font-size:10px;font-weight:600;color:#ffd700;margin-bottom:6px">Loudness (LUFS)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10px">
+      <div><span style="color:var(--text-secondary)">Integrated:</span> <span id="loudnessInt" style="color:#fff;font-weight:600">--</span></div>
+      <div><span style="color:var(--text-secondary)">Short:</span> <span id="loudnessShort" style="color:#fff;font-weight:600">--</span></div>
+    </div>
+  </div>
+
+  <!-- Recommendations List -->
+  <div style="margin-bottom:14px">
+    <div style="font-size:10px;font-weight:600;color:var(--text-primary);margin-bottom:8px">Recommendations</div>
+    <div id="recommendationsList" style="display:flex;flex-direction:column;gap:6px;font-size:10px;max-height:160px;overflow-y:auto">
+      <div style="color:var(--text-secondary);font-style:italic">Run analysis while playing</div>
+    </div>
+  </div>
+
+  <!-- Analysis Button -->
+  <button onclick="analyzeCurrentMix()" style="width:100%;padding:10px;background:rgba(255,136,68,0.15);border:1px solid #ff8844;color:#ff8844;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;margin-bottom:10px;transition:all 0.2s">
+    🔍 Analyze Mix Now
+  </button>
+
+  <button onclick="document.getElementById('aiMixingPanel').style.display='none'" style="width:100%;padding:8px;background:rgba(255,136,68,0.1);border:1px solid #ff8844;color:#ff8844;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">
+    ✕ Close
+  </button>
+</div>
+
 <!-- Phase 14: Performance Meter Panel -->
 <div id="performanceMeterPanel" style="position:fixed;bottom:20px;right:380px;width:360px;background:var(--bg-card);border:1px solid rgba(68,136,255,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:75vh;overflow-y:auto;display:none">
   <div style="font-size:13px;font-weight:600;color:var(--blue);margin-bottom:14px">⚡ Performance Meter</div>
@@ -5587,6 +5901,44 @@ document.addEventListener('DOMContentLoaded', () => {
     perfToggleBtn.style.boxShadow = '0 0 20px rgba(68,136,255,0.2)';
   };
   document.body.appendChild(perfToggleBtn);
+
+  // AI Mixing toggle button (Phase 17)
+  const aiMixingToggleBtn = document.createElement('button');
+  aiMixingToggleBtn.id = 'aiMixingToggleBtn';
+  aiMixingToggleBtn.textContent = '🎚️';
+  aiMixingToggleBtn.title = 'AI Mix Analysis (Phase 17)';
+  aiMixingToggleBtn.onclick = () => {
+    const panel = document.getElementById('aiMixingPanel');
+    if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  };
+  aiMixingToggleBtn.style.cssText = `
+    position: fixed;
+    bottom: 320px;
+    left: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(255,136,68,0.2), rgba(255,136,68,0.1));
+    border: 2px solid #ff8844;
+    color: #ff8844;
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    z-index: 899;
+    box-shadow: 0 0 20px rgba(255,136,68,0.2);
+  `;
+  aiMixingToggleBtn.onmouseover = () => {
+    aiMixingToggleBtn.style.transform = 'scale(1.1)';
+    aiMixingToggleBtn.style.boxShadow = '0 0 30px rgba(255,136,68,0.4)';
+  };
+  aiMixingToggleBtn.onmouseout = () => {
+    aiMixingToggleBtn.style.transform = 'scale(1)';
+    aiMixingToggleBtn.style.boxShadow = '0 0 20px rgba(255,136,68,0.2)';
+  };
+  document.body.appendChild(aiMixingToggleBtn);
 
   // Initialize Performance Monitoring
   initPerformanceMonitoring();
