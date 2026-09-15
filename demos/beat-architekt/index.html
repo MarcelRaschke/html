@@ -8572,10 +8572,112 @@ function toggleLoopRecordingPanel() {
   }
 }
 
+// === PHASE 22b: SLICE MANAGER CLASS ===
+
+class SliceManager {
+  constructor() {
+    this.slices = new Map(); // sampleId → [slices]
+  }
+
+  addSlice(sampleId, slice) {
+    if (!this.slices.has(sampleId)) {
+      this.slices.set(sampleId, []);
+    }
+    slice.id = slice.id || `slice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    this.slices.get(sampleId).push(slice);
+    return slice.id;
+  }
+
+  updateSlice(sampleId, sliceId, updates) {
+    const slices = this.slices.get(sampleId);
+    if (!slices) return false;
+
+    const slice = slices.find(s => s.id === sliceId);
+    if (!slice) return false;
+
+    Object.assign(slice, updates);
+    return true;
+  }
+
+  deleteSlice(sampleId, sliceId) {
+    const slices = this.slices.get(sampleId);
+    if (!slices) return false;
+
+    const idx = slices.findIndex(s => s.id === sliceId);
+    if (idx === -1) return false;
+
+    slices.splice(idx, 1);
+    return true;
+  }
+
+  getSlicesForSample(sampleId) {
+    return this.slices.get(sampleId) || [];
+  }
+
+  mergeSlices(sampleId, slice1Id, slice2Id) {
+    const slices = this.slices.get(sampleId);
+    if (!slices) return false;
+
+    const idx1 = slices.findIndex(s => s.id === slice1Id);
+    const idx2 = slices.findIndex(s => s.id === slice2Id);
+    if (idx1 === -1 || idx2 === -1) return false;
+
+    const slice1 = slices[idx1];
+    const slice2 = slices[idx2];
+
+    slice1.endMs = slice2.endMs;
+    slice1.label = slice1.label + '+' + slice2.label;
+    slices.splice(idx2, 1);
+    return true;
+  }
+
+  splitSlice(sampleId, sliceId, splitPointMs) {
+    const slices = this.slices.get(sampleId);
+    if (!slices) return false;
+
+    const sliceIdx = slices.findIndex(s => s.id === sliceId);
+    if (sliceIdx === -1) return false;
+
+    const originalSlice = slices[sliceIdx];
+    const newSlice = {
+      id: `slice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      startMs: splitPointMs,
+      endMs: originalSlice.endMs,
+      label: originalSlice.label + '_b',
+      confidence: originalSlice.confidence,
+      isAutoDetected: false
+    };
+
+    originalSlice.endMs = splitPointMs;
+    originalSlice.label = originalSlice.label + '_a';
+    slices.splice(sliceIdx + 1, 0, newSlice);
+    return true;
+  }
+
+  async saveSlicesToDB(sampleId) {
+    if (!sampleLibrary) return;
+    const sample = sampleLibrary.getSample(sampleId);
+    if (!sample) return;
+
+    sample.slices = this.getSlicesForSample(sampleId);
+    await sampleLibrary.saveSample(sample);
+  }
+
+  async loadSlicesFromDB(sampleId) {
+    if (!sampleLibrary) return [];
+    const sample = sampleLibrary.getSample(sampleId);
+    if (!sample || !sample.slices) return [];
+
+    this.slices.set(sampleId, sample.slices);
+    return sample.slices;
+  }
+}
+
 // === PHASE 22a: SLICE DETECTOR FUNCTIONS ===
 
 let transientDetector = null;
 let lastDetectedSlices = [];
+let sliceManager = new SliceManager();
 
 function initSliceDetector() {
   const sampleSelect = document.getElementById('sliceDetectorSampleSelect');
@@ -8696,6 +8798,215 @@ function auditSlice(sliceId) {
 
   source.start(audioCtx.currentTime, slice.time, sliceDuration);
   source.stop(audioCtx.currentTime + sliceDuration);
+}
+
+// === PHASE 22b: SLICE EDITOR FUNCTIONS ===
+
+let currentSliceEditSampleId = null;
+let currentEditingSlices = [];
+
+function openSliceEditor(sampleId) {
+  if (!sampleLibrary) return;
+
+  const sample = sampleLibrary.getSample(sampleId);
+  if (!sample || !sample.buffer) {
+    showToast('❌ Sample not found or has no buffer');
+    return;
+  }
+
+  currentSliceEditSampleId = sampleId;
+  currentEditingSlices = JSON.parse(JSON.stringify(sliceManager.getSlicesForSample(sampleId)));
+
+  // Show modal
+  const modal = document.getElementById('sliceEditorModal');
+  modal.style.display = 'flex';
+
+  // Render waveform
+  renderSliceWaveform(sampleId);
+  updateSlicesTable();
+}
+
+function closeSliceEditor() {
+  document.getElementById('sliceEditorModal').style.display = 'none';
+  currentSliceEditSampleId = null;
+  currentEditingSlices = [];
+}
+
+function renderSliceWaveform(sampleId) {
+  if (!sampleLibrary) return;
+
+  const sample = sampleLibrary.getSample(sampleId);
+  if (!sample || !sample.buffer) return;
+
+  const canvas = document.getElementById('sliceWaveformCanvas');
+  canvas.style.display = 'block';
+  document.getElementById('sliceWaveformLoading').style.display = 'none';
+
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+
+  // Clear
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(0, 0, width, height);
+
+  // Draw waveform
+  const buffer = sample.buffer;
+  const data = buffer.getChannelData(0);
+  const step = Math.ceil(data.length / width);
+  const amp = height / 2;
+
+  ctx.strokeStyle = '#00ccff';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+
+  for (let i = 0; i < width; i++) {
+    let min = 1.0;
+    let max = -1.0;
+    for (let j = 0; j < step; j++) {
+      const datum = data[i * step + j];
+      if (datum < min) min = datum;
+      if (datum > max) max = datum;
+    }
+    ctx.lineTo(i, amp - max * amp);
+  }
+  ctx.stroke();
+
+  // Draw slice markers
+  const duration = sample.duration;
+  currentEditingSlices.forEach((slice, idx) => {
+    const x1 = (slice.startMs / (duration * 1000)) * width;
+    const x2 = (slice.endMs / (duration * 1000)) * width;
+
+    // Fill slice region
+    ctx.fillStyle = `rgba(255, 150, 100, ${slice.confidence * 0.3 + 0.1})`;
+    ctx.fillRect(x1, 0, x2 - x1, height);
+
+    // Markers
+    ctx.strokeStyle = '#ff9966';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x1, 0);
+    ctx.lineTo(x1, height);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(x2, 0);
+    ctx.lineTo(x2, height);
+    ctx.stroke();
+
+    // Label
+    ctx.fillStyle = '#ff9966';
+    ctx.font = '10px monospace';
+    ctx.fillText(slice.label, x1 + 4, 12);
+  });
+
+  // Border
+  ctx.strokeStyle = '#ff9966';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(0, 0, width, height);
+}
+
+function updateSlicesTable() {
+  const tbody = document.getElementById('slicesTableBody');
+
+  if (currentEditingSlices.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="padding:20px;text-align:center;color:var(--text-dim)">No slices</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = currentEditingSlices.map((slice, idx) => {
+    const duration = ((slice.endMs - slice.startMs) / 1000).toFixed(3);
+    const confidence = slice.confidence ? (slice.confidence * 100).toFixed(0) : 'N/A';
+
+    return `
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+        <td style="padding:8px;color:var(--text)">${idx + 1}</td>
+        <td style="padding:8px"><input type="number" value="${slice.startMs.toFixed(0)}" style="width:60px;padding:4px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:3px;color:var(--text);font-size:9px" onchange="updateSliceStart(${idx}, this.value)"></td>
+        <td style="padding:8px"><input type="number" value="${slice.endMs.toFixed(0)}" style="width:60px;padding:4px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:3px;color:var(--text);font-size:9px" onchange="updateSliceEnd(${idx}, this.value)"></td>
+        <td style="padding:8px;color:var(--text-secondary)">${duration}s</td>
+        <td style="padding:8px"><input type="text" value="${slice.label}" style="width:80px;padding:4px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:3px;color:var(--text);font-size:9px" onchange="updateSliceLabel(${idx}, this.value)"></td>
+        <td style="padding:8px;text-align:center;color:var(--text-secondary)">${confidence}%</td>
+        <td style="padding:8px;text-align:center;gap:4px;display:flex;justify-content:center">
+          <button onclick="auditEditingSlice(${idx})" style="padding:4px 8px;background:rgba(100,200,255,0.2);border:1px solid rgba(100,200,255,0.4);border-radius:3px;color:var(--cyan);font-size:9px;cursor:pointer">▶</button>
+          <button onclick="deleteEditingSlice(${idx})" style="padding:4px 8px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:3px;color:#ff6666;font-size:9px;cursor:pointer">🗑</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function updateSliceStart(idx, value) {
+  currentEditingSlices[idx].startMs = parseFloat(value);
+  renderSliceWaveform(currentSliceEditSampleId);
+}
+
+function updateSliceEnd(idx, value) {
+  currentEditingSlices[idx].endMs = parseFloat(value);
+  renderSliceWaveform(currentSliceEditSampleId);
+}
+
+function updateSliceLabel(idx, value) {
+  currentEditingSlices[idx].label = value;
+  renderSliceWaveform(currentSliceEditSampleId);
+}
+
+function auditEditingSlice(idx) {
+  if (!currentSliceEditSampleId || !sampleLibrary) return;
+
+  const sample = sampleLibrary.getSample(currentSliceEditSampleId);
+  if (!sample || !sample.buffer) return;
+
+  const slice = currentEditingSlices[idx];
+  const startTime = slice.startMs / 1000;
+  const duration = (slice.endMs - slice.startMs) / 1000;
+
+  const source = audioCtx.createBufferSource();
+  source.buffer = sample.buffer;
+  const gain = audioCtx.createGain();
+  gain.connect(audioCtx.destination);
+  source.connect(gain);
+
+  source.start(audioCtx.currentTime, startTime, duration);
+  source.stop(audioCtx.currentTime + duration);
+}
+
+function deleteEditingSlice(idx) {
+  if (!confirm('Delete this slice?')) return;
+  currentEditingSlices.splice(idx, 1);
+  updateSlicesTable();
+  renderSliceWaveform(currentSliceEditSampleId);
+}
+
+function addManualSlice() {
+  const playhead = playheadTime || 0;
+  const newSlice = {
+    id: `slice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    startMs: playhead * 1000,
+    endMs: (playhead + 0.5) * 1000,
+    label: `Manual ${currentEditingSlices.length + 1}`,
+    confidence: 0,
+    isAutoDetected: false
+  };
+  currentEditingSlices.push(newSlice);
+  updateSlicesTable();
+  renderSliceWaveform(currentSliceEditSampleId);
+}
+
+async function commitSliceEdits() {
+  if (!currentSliceEditSampleId) return;
+
+  // Sort by start time
+  currentEditingSlices.sort((a, b) => a.startMs - b.startMs);
+
+  // Update sliceManager
+  sliceManager.slices.set(currentSliceEditSampleId, currentEditingSlices);
+
+  // Save to IndexedDB
+  await sliceManager.saveSlicesToDB(currentSliceEditSampleId);
+
+  closeSliceEditor();
+  showToast(`✅ Saved ${currentEditingSlices.length} slices`);
 }
 
 // === PHASE 21c: SAMPLE PLAYBACK FUNCTIONS ===
@@ -9051,12 +9362,17 @@ function updateSampleListWithWaveforms() {
     }
 
     const footer = document.createElement('div');
-    footer.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:9px;color:var(--text-dim)';
+    footer.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:9px;color:var(--text-dim);gap:6px';
     footer.innerHTML = `
       <span>${sample.duration.toFixed(2)}s @ ${sample.sampleRate/1000}kHz</span>
-      <button onclick="deleteSample('${sample.id}')" style="padding:4px 8px;background:rgba(255,51,85,0.15);border:1px solid var(--red);color:var(--red);border-radius:3px;cursor:pointer;font-size:9px">
-        🗑️
-      </button>
+      <div style="display:flex;gap:4px">
+        <button onclick="openSliceEditor('${sample.id}')" style="padding:4px 8px;background:rgba(255,150,100,0.15);border:1px solid rgba(255,150,100,0.4);color:#ff9966;border-radius:3px;cursor:pointer;font-size:9px">
+          🔪 Slice
+        </button>
+        <button onclick="deleteSample('${sample.id}')" style="padding:4px 8px;background:rgba(255,51,85,0.15);border:1px solid var(--red);color:var(--red);border-radius:3px;cursor:pointer;font-size:9px">
+          🗑️
+        </button>
+      </div>
     `;
     container.appendChild(footer);
 
@@ -9842,6 +10158,66 @@ function startRecordingLevelAnimation() {
   <button onclick="document.getElementById('sliceDetectorPanel').style.display='none'" style="width:100%;margin-top:12px;padding:8px;background:rgba(100,120,140,0.1);border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">
     ✕ Close
   </button>
+</div>
+
+<!-- Phase 22b: Slice Editor Modal -->
+<div id="sliceEditorModal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:none;z-index:1001;overflow-y:auto">
+  <div style="max-width:1000px;margin:40px auto;background:var(--bg-card);border:2px solid rgba(255,150,100,0.3);border-radius:12px;padding:24px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-size:16px;font-weight:600;color:#ff9966">🔪 Slice Editor</div>
+      <button onclick="closeSliceEditor()" style="background:rgba(100,120,140,0.1);border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;font-weight:600">✕ Close</button>
+    </div>
+
+    <!-- Waveform Canvas -->
+    <div style="margin-bottom:20px">
+      <div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">Waveform with Slice Markers (Drag to Edit)</div>
+      <canvas id="sliceWaveformCanvas" width="960" height="120" style="width:100%;height:120px;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:6px;display:none;cursor:crosshair"></canvas>
+      <div id="sliceWaveformLoading" style="width:100%;height:120px;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:12px">
+        Select a sample with slices to edit
+      </div>
+    </div>
+
+    <!-- Snap-to-grid options -->
+    <div style="margin-bottom:20px">
+      <label style="font-size:11px;color:var(--text-secondary);display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <input type="checkbox" id="sliceSnapToGrid" checked>
+        Snap to grid (16th note @ current BPM)
+      </label>
+    </div>
+
+    <!-- Slices Table -->
+    <div style="margin-bottom:20px">
+      <div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">Slices</div>
+      <div style="max-height:300px;overflow-y:auto;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:6px">
+        <table id="slicesTable" style="width:100%;font-size:10px;border-collapse:collapse">
+          <thead style="position:sticky;top:0;background:rgba(100,120,140,0.2)">
+            <tr>
+              <th style="padding:8px;text-align:left;color:var(--text-secondary);border-bottom:1px solid var(--border)">#</th>
+              <th style="padding:8px;text-align:left;color:var(--text-secondary);border-bottom:1px solid var(--border)">Start (ms)</th>
+              <th style="padding:8px;text-align:left;color:var(--text-secondary);border-bottom:1px solid var(--border)">End (ms)</th>
+              <th style="padding:8px;text-align:left;color:var(--text-secondary);border-bottom:1px solid var(--border)">Duration</th>
+              <th style="padding:8px;text-align:left;color:var(--text-secondary);border-bottom:1px solid var(--border)">Label</th>
+              <th style="padding:8px;text-align:center;color:var(--text-secondary);border-bottom:1px solid var(--border)">Confidence</th>
+              <th style="padding:8px;text-align:center;color:var(--text-secondary);border-bottom:1px solid var(--border)">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="slicesTableBody">
+            <tr><td colspan="7" style="padding:20px;text-align:center;color:var(--text-dim)">No slices</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Editor Controls -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+      <button onclick="addManualSlice()" style="padding:10px;background:rgba(100,200,255,0.2);border:1px solid rgba(100,200,255,0.5);border-radius:6px;color:var(--cyan);cursor:pointer;font-size:11px;font-weight:600">
+        ➕ Add Slice at Playhead
+      </button>
+      <button onclick="commitSliceEdits()" style="padding:10px;background:rgba(255,150,100,0.2);border:1px solid rgba(255,150,100,0.5);border-radius:6px;color:#ff9966;cursor:pointer;font-size:11px;font-weight:600">
+        💾 Save Changes
+      </button>
+    </div>
+  </div>
 </div>
 
 <!-- Toggle Sample Library Panel Button -->
