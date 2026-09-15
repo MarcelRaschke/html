@@ -773,6 +773,7 @@ body::before {
           <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImport(this.files[0])">
         </div>
         <div id="patternLibraryList" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);font-size:10px"></div>
+        <div id="patternQueueDisplay" style="margin-top:8px;border:1px solid rgba(0,240,255,0.2);border-radius:4px;background:rgba(0,240,255,0.02)"></div>
         <div style="margin-top:8px;text-align:right;font-size:9px;color:var(--text-dim)">Undo: Ctrl+Z | Redo: Ctrl+Shift+Z</div>
       </div>
 
@@ -2141,6 +2142,11 @@ function startSequencer() {
 
     // Phase 19a: Update modulation engine
     applyModulation(now);
+
+    // Phase 19c: Update pattern crossfade
+    if (sequencerState.crossfade.active) {
+      performCrossfade(now);
+    }
 
     while (nextStepTime < now + lookahead) {
       // Phase 15c: Prevent double-scheduling same step time
@@ -3720,6 +3726,129 @@ function exportRecording(recId) {
   a.download = `${rec.name.replace(/\s+/g, '_')}_${Date.now()}.json`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// === PHASE 19c: MULTI-PATTERN SEQUENCING & CROSSFADE ===
+
+function queuePattern(patternId, durationBars = 4) {
+  if (!currentPattern) return;
+
+  durationBars = Math.max(1, Math.min(8, durationBars));
+  const barMs = (60000 / bpm) * 4;
+  const queueDurationMs = barMs * durationBars;
+
+  sequencerState.crossfade = {
+    active: true,
+    startTime: audioCtx.currentTime + (queueDurationMs / 1000),
+    duration: durationBars,
+    sourcePattern: currentPattern.id,
+    targetPattern: patternId,
+    startGain: 1.0
+  };
+
+  patternQueue.push({
+    id: patternId,
+    queuedAt: audioCtx.currentTime,
+    durationBars: durationBars,
+    duration: queueDurationMs
+  });
+
+  updatePatternQueueUI();
+}
+
+function performCrossfade(now) {
+  if (!sequencerState.crossfade.active) return;
+
+  const crossfade = sequencerState.crossfade;
+  const timeUntilStart = crossfade.startTime - now;
+
+  if (timeUntilStart > 0) {
+    return;
+  }
+
+  const totalDurationMs = (60000 / bpm) * 4 * crossfade.duration;
+  const elapsedMs = Math.abs(timeUntilStart * 1000);
+  const progress = Math.min(1, elapsedMs / totalDurationMs);
+
+  if (progress >= 1) {
+    if (!currentPattern) return;
+
+    const targetId = crossfade.targetPattern;
+    const patternToLoad = patternLibrary.find(p => p.id === targetId);
+
+    if (patternToLoad) {
+      loadPatternById(targetId);
+
+      patternQueue = patternQueue.filter(p => p.id !== targetId);
+      sequencerState.crossfade.active = false;
+      updatePatternQueueUI();
+    }
+
+    if (voicePool && voicePool.master) {
+      voicePool.master.gain.setValueAtTime(1.0, audioCtx.currentTime);
+    }
+
+    return;
+  }
+
+  const sourceVol = Math.max(0, 1 - progress);
+  const targetVol = Math.min(1, progress);
+
+  if (voicePool && voicePool.master) {
+    voicePool.master.gain.setValueAtTime(sourceVol, audioCtx.currentTime);
+  }
+}
+
+function updatePatternQueueUI() {
+  const queueDisplay = document.getElementById('patternQueueDisplay');
+  if (!queueDisplay) return;
+
+  let html = '<div style="font-size:9px;color:var(--cyan);padding:4px;border-top:1px solid rgba(0,240,255,0.2)">';
+
+  if (sequencerState.crossfade.active) {
+    const totalBars = sequencerState.crossfade.duration;
+    html += `<div>📊 Crossfade in progress: ${totalBars} bars</div>`;
+  }
+
+  if (patternQueue.length > 0) {
+    html += '<div>Queued patterns:</div>';
+    patternQueue.forEach((q, idx) => {
+      const pattern = patternLibrary.find(p => p.id === q.id);
+      if (pattern) {
+        html += `<div style="margin-left:8px;font-size:8px">→ ${pattern.name} (${q.durationBars}b)</div>`;
+      }
+    });
+  } else {
+    html += '<div style="opacity:0.5">No patterns queued</div>';
+  }
+
+  html += '</div>';
+  queueDisplay.innerHTML = html;
+}
+
+function abortCrossfade() {
+  sequencerState.crossfade.active = false;
+  patternQueue = [];
+  updatePatternQueueUI();
+
+  if (voicePool && voicePool.master) {
+    voicePool.master.gain.setValueAtTime(1.0, audioCtx.currentTime);
+  }
+}
+
+function showQueueDurationMenu(patternId) {
+  const durations = [1, 2, 4, 8];
+  const choice = prompt('Queue pattern in how many bars?\n\nOptions: 1, 2, 4, 8\n\nDefault: 4', '4');
+
+  if (choice === null) return;
+
+  const durationBars = parseInt(choice);
+  if (durations.includes(durationBars)) {
+    queuePattern(patternId, durationBars);
+    alert(`Pattern queued for transition in ${durationBars} bars`);
+  } else {
+    alert('Invalid duration. Use 1, 2, 4, or 8 bars');
+  }
 }
 
 // === PHASE 14: PERFORMANCE METER & MONITORING ===
@@ -5330,6 +5459,7 @@ function renderPatternLibrary() {
       </div>
       <div style="display:flex;gap:4px">
         ${!batchSelectionMode ? `
+          <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px" onclick="showQueueDurationMenu('${p.id}')">⏱️ Queue</button>
           <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px" onclick="exportPatternAsJSON('${p.id}')">JSON</button>
           <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px" onclick="exportPatternAsMIDI('${p.id}')">MIDI</button>
           <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px;background:var(--orange)" onclick="exportPatternAsRekordbox('${p.id}')">🎛️ RBX</button>
