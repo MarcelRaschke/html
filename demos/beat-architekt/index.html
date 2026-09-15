@@ -1277,7 +1277,11 @@ let aiMixing = {
     dancefloor: { name: 'Dance', gains: [3,2,0,-1,-0.5,0,0.5,1,2,3] }
   },
   currentPresetName: 'flat',
-  eqNodes: []
+  eqNodes: [],
+  // Phase 17c: Mix Memory & Snapshots
+  mixSnapshots: [],
+  currentSnapshotIndex: -1,
+  autoSnapshotOnAnalysis: true
 };
 
 let midiAccess = null;
@@ -2382,6 +2386,9 @@ function analyzeCurrentMix() {
   // Generate recommendations based on analysis
   generateMixRecommendations();
 
+  // Auto-capture mix snapshot
+  autoCaptureMixSnapshot();
+
   // Store in history
   aiMixing.analysisHistory.push({
     timestamp: aiMixing.lastAnalysisTime,
@@ -2670,6 +2677,149 @@ function drawParametricEQ() {
     ctx.fillStyle = band.gain > 0 ? 'rgba(100, 255, 100, 0.8)' : band.gain < 0 ? 'rgba(255, 100, 100, 0.8)' : 'rgba(200, 200, 200, 0.6)';
     ctx.fillText(band.gain.toFixed(1) + 'dB', x - 12, y + 10);
   }
+}
+
+// Phase 17c: Mix Memory & Snapshots
+function captureMixSnapshot(label) {
+  const snapshot = {
+    timestamp: Date.now(),
+    label: label || `Mix ${aiMixing.mixSnapshots.length + 1}`,
+    frequencyBands: aiMixing.frequencyBands.map(b => ({ ...b })),
+    loudness: { ...aiMixing.loudnessMeasure },
+    frequencyBalance: { ...aiMixing.frequencyBalance },
+    recommendations: aiMixing.recommendations.map(r => ({ ...r }))
+  };
+
+  aiMixing.mixSnapshots.push(snapshot);
+
+  // Keep only last 20 snapshots
+  if (aiMixing.mixSnapshots.length > 20) {
+    aiMixing.mixSnapshots.shift();
+  }
+
+  updateSnapshotList();
+  return snapshot;
+}
+
+function restoreMixSnapshot(index) {
+  if (index < 0 || index >= aiMixing.mixSnapshots.length) return;
+
+  const snapshot = aiMixing.mixSnapshots[index];
+  aiMixing.currentSnapshotIndex = index;
+
+  // Restore frequency bands and gains
+  for (let i = 0; i < snapshot.frequencyBands.length && i < aiMixing.frequencyBands.length; i++) {
+    aiMixing.frequencyBands[i].gain = snapshot.frequencyBands[i].gain;
+    if (aiMixing.eqNodes[i]) {
+      aiMixing.eqNodes[i].gain.setTargetAtTime(snapshot.frequencyBands[i].gain, audioCtx.currentTime, 0.01);
+    }
+  }
+
+  updateAIMixingDisplay();
+  if (aiMixing.eqVisualizationEnabled) {
+    drawParametricEQ();
+  }
+}
+
+function compareMixSnapshots(index1, index2) {
+  if (index1 < 0 || index1 >= aiMixing.mixSnapshots.length ||
+      index2 < 0 || index2 >= aiMixing.mixSnapshots.length) {
+    return null;
+  }
+
+  const snap1 = aiMixing.mixSnapshots[index1];
+  const snap2 = aiMixing.mixSnapshots[index2];
+
+  const comparison = {
+    labels: [snap1.label, snap2.label],
+    frequencyDelta: [],
+    loudnessDelta: {
+      integrated: snap2.loudness.integrated - snap1.loudness.integrated,
+      short: snap2.loudness.short - snap1.loudness.short
+    },
+    frequencyBalanceDelta: {
+      bass: snap2.frequencyBalance.bass - snap1.frequencyBalance.bass,
+      mids: snap2.frequencyBalance.mids - snap1.frequencyBalance.mids,
+      treble: snap2.frequencyBalance.treble - snap1.frequencyBalance.treble
+    }
+  };
+
+  // Calculate delta for each band
+  for (let i = 0; i < snap1.frequencyBands.length && i < snap2.frequencyBands.length; i++) {
+    comparison.frequencyDelta.push(
+      snap2.frequencyBands[i].gain - snap1.frequencyBands[i].gain
+    );
+  }
+
+  return comparison;
+}
+
+function deleteSnapshotAt(index) {
+  if (index < 0 || index >= aiMixing.mixSnapshots.length) return;
+  aiMixing.mixSnapshots.splice(index, 1);
+  if (aiMixing.currentSnapshotIndex >= aiMixing.mixSnapshots.length) {
+    aiMixing.currentSnapshotIndex = aiMixing.mixSnapshots.length - 1;
+  }
+  updateSnapshotList();
+}
+
+function updateSnapshotList() {
+  const list = document.getElementById('snapshotList');
+  if (!list) return;
+
+  if (aiMixing.mixSnapshots.length === 0) {
+    list.innerHTML = '<div style="font-size:9px;color:var(--text-secondary);font-style:italic">Capture snapshots while analyzing</div>';
+    return;
+  }
+
+  list.innerHTML = aiMixing.mixSnapshots.map((snap, idx) => `
+    <div style="padding:6px;background:${aiMixing.currentSnapshotIndex === idx ? 'rgba(0,240,255,0.15)' : 'var(--bg-primary)'};border-radius:4px;border-left:2px solid ${aiMixing.currentSnapshotIndex === idx ? 'var(--cyan)' : 'var(--border)'};display:flex;justify-content:space-between;align-items:center">
+      <div style="flex:1">
+        <div style="font-size:9px;font-weight:600;color:var(--text-primary)">${snap.label}</div>
+        <div style="font-size:8px;color:var(--text-secondary)">${new Date(snap.timestamp).toLocaleTimeString()}</div>
+      </div>
+      <div style="display:flex;gap:4px">
+        <button onclick="restoreMixSnapshot(${idx})" style="font-size:8px;padding:3px 6px;background:rgba(0,240,255,0.1);border:1px solid rgba(0,240,255,0.3);color:var(--cyan);border-radius:2px;cursor:pointer">Load</button>
+        <button onclick="deleteSnapshotAt(${idx})" style="font-size:8px;padding:3px 6px;background:rgba(255,51,85,0.1);border:1px solid rgba(255,51,85,0.3);color:var(--red);border-radius:2px;cursor:pointer">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function exportMixSnapshot() {
+  if (aiMixing.currentSnapshotIndex < 0) {
+    alert('Load a snapshot first to export');
+    return;
+  }
+
+  const snap = aiMixing.mixSnapshots[aiMixing.currentSnapshotIndex];
+  const data = {
+    version: 1,
+    snapshot: snap
+  };
+
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `mix-snapshot-${snap.label.replace(/\s+/g, '-')}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function autoCaptureMixSnapshot() {
+  if (aiMixing.autoSnapshotOnAnalysis && aiMixing.recommendations.length > 0) {
+    const timestamp = new Date().toLocaleTimeString();
+    captureMixSnapshot(`Auto ${timestamp}`);
+  }
+}
+
+function toggleAutoSnapshot() {
+  const checkbox = document.getElementById('autoSnapshotToggle');
+  aiMixing.autoSnapshotOnAnalysis = checkbox.checked;
 }
 
 function updateAIMixingDisplay() {
@@ -5622,6 +5772,33 @@ function toggleVideoExportVisualizer(analyzer) {
       <div><label style="display:block;color:var(--text-dim);text-align:center;margin-bottom:2px">1kHz</label><input type="range" min="-12" max="12" value="0" onchange="setParametricEQGain(4, this.value)" style="width:100%;height:16px"></div>
       <div><label style="display:block;color:var(--text-dim);text-align:center;margin-bottom:2px">4kHz</label><input type="range" min="-12" max="12" value="0" onchange="setParametricEQGain(6, this.value)" style="width:100%;height:16px"></div>
       <div><label style="display:block;color:var(--text-dim);text-align:center;margin-bottom:2px">16kHz</label><input type="range" min="-12" max="12" value="0" onchange="setParametricEQGain(9, this.value)" style="width:100%;height:16px"></div>
+    </div>
+  </div>
+
+  <!-- Phase 17c: Mix Snapshots Management -->
+  <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,136,68,0.2)">
+    <div style="font-size:11px;font-weight:600;color:#ff8844;margin-bottom:10px">📸 Mix Snapshots</div>
+
+    <label style="display:flex;gap:8px;margin-bottom:10px;align-items:center;font-size:10px">
+      <input type="checkbox" id="autoSnapshotToggle" onchange="toggleAutoSnapshot()" style="cursor:pointer">
+      <span style="color:var(--text-secondary)">Auto-capture after analysis</span>
+    </label>
+
+    <!-- Snapshot List -->
+    <div id="snapshotListContainer" style="margin-bottom:12px;max-height:200px;overflow-y:auto;background:rgba(255,136,68,0.05);border-radius:6px;padding:8px">
+      <div id="snapshotList" style="font-size:10px">
+        <div style="color:var(--text-secondary);text-align:center;padding:10px">No snapshots yet</div>
+      </div>
+    </div>
+
+    <!-- Snapshot Actions -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <button onclick="captureMixSnapshot('Snapshot ' + (advancedAudio.aiMixing.mixSnapshots.length + 1))" style="padding:8px;background:rgba(255,136,68,0.15);border:1px solid #ff8844;color:#ff8844;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;transition:all 0.2s" title="Save current mix as snapshot">
+        💾 Capture
+      </button>
+      <button onclick="exportMixSnapshot()" style="padding:8px;background:rgba(0,240,255,0.15);border:1px solid #00f0ff;color:#00f0ff;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;transition:all 0.2s" title="Download current snapshot as JSON">
+        ⬇️ Export
+      </button>
     </div>
   </div>
 
