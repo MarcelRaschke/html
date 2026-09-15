@@ -774,6 +774,60 @@ body::before {
         <div id="patternLibraryList" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);font-size:10px"></div>
         <div style="margin-top:8px;text-align:right;font-size:9px;color:var(--text-dim)">Undo: Ctrl+Z | Redo: Ctrl+Shift+Z</div>
       </div>
+
+      <!-- Effects Panel -->
+      <div id="effectsPanel" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--cyan);font-weight:600;margin-bottom:12px">🎛️ Master Effects</div>
+
+        <!-- Compressor -->
+        <div style="margin-bottom:12px;padding:10px;background:rgba(0,240,255,0.05);border-radius:4px">
+          <label style="display:flex;gap:8px;align-items:center;margin-bottom:6px;cursor:pointer">
+            <input type="checkbox" id="compressorEnabled" onchange="bypassEffect('compressor')">
+            <span style="font-size:11px;font-weight:600">Compressor</span>
+          </label>
+          <div id="compressorControls" style="display:none;margin-left:20px">
+            <div style="font-size:10px;margin-bottom:4px">Threshold: <input type="range" min="-40" max="0" value="-24" step="1" oninput="updateCompressor(this.value, 4)" style="width:80px;vertical-align:middle"></div>
+            <div style="font-size:10px">Ratio: <input type="range" min="1" max="20" value="4" step="0.1" oninput="updateCompressor(-24, this.value)" style="width:80px;vertical-align:middle"></div>
+          </div>
+        </div>
+
+        <!-- 3-Band EQ -->
+        <div style="margin-bottom:12px;padding:10px;background:rgba(0,240,255,0.05);border-radius:4px">
+          <label style="display:flex;gap:8px;align-items:center;margin-bottom:6px;cursor:pointer">
+            <input type="checkbox" id="eqEnabled" onchange="bypassEffect('eq')">
+            <span style="font-size:11px;font-weight:600">3-Band EQ</span>
+          </label>
+          <div id="eqControls" style="display:none;margin-left:20px">
+            <div style="font-size:10px;margin-bottom:4px">Bass: <input type="range" id="bassSlider" min="-12" max="12" value="0" step="1" oninput="updateEQ(this.value, document.getElementById('midSlider').value, document.getElementById('trebleSlider').value)" style="width:80px;vertical-align:middle"></div>
+            <div style="font-size:10px;margin-bottom:4px">Mid: <input type="range" id="midSlider" min="-12" max="12" value="0" step="1" oninput="updateEQ(document.getElementById('bassSlider').value, this.value, document.getElementById('trebleSlider').value)" style="width:80px;vertical-align:middle"></div>
+            <div style="font-size:10px">Treble: <input type="range" id="trebleSlider" min="-12" max="12" value="0" step="1" oninput="updateEQ(document.getElementById('bassSlider').value, document.getElementById('midSlider').value, this.value)" style="width:80px;vertical-align:middle"></div>
+          </div>
+        </div>
+
+        <!-- Delay -->
+        <div style="margin-bottom:12px;padding:10px;background:rgba(0,240,255,0.05);border-radius:4px">
+          <label style="display:flex;gap:8px;align-items:center;margin-bottom:6px;cursor:pointer">
+            <input type="checkbox" id="delayEnabled" onchange="bypassEffect('delay')">
+            <span style="font-size:11px;font-weight:600">Delay</span>
+          </label>
+          <div id="delayControls" style="display:none;margin-left:20px">
+            <div style="font-size:10px;margin-bottom:4px">Time: <input type="range" id="delayTimeSlider" min="0.1" max="2" value="0.5" step="0.05" oninput="updateDelay(this.value, document.getElementById('delayFeedbackSlider').value, document.getElementById('delayMixSlider').value)" style="width:80px;vertical-align:middle"></div>
+            <div style="font-size:10px;margin-bottom:4px">Feedback: <input type="range" id="delayFeedbackSlider" min="0" max="0.9" value="0.4" step="0.05" oninput="updateDelay(document.getElementById('delayTimeSlider').value, this.value, document.getElementById('delayMixSlider').value)" style="width:80px;vertical-align:middle"></div>
+            <div style="font-size:10px">Mix: <input type="range" id="delayMixSlider" min="0" max="1" value="0.3" step="0.05" oninput="updateDelay(document.getElementById('delayTimeSlider').value, document.getElementById('delayFeedbackSlider').value, this.value)" style="width:80px;vertical-align:middle"></div>
+          </div>
+        </div>
+
+        <!-- Reverb -->
+        <div style="margin-bottom:12px;padding:10px;background:rgba(0,240,255,0.05);border-radius:4px">
+          <label style="display:flex;gap:8px;align-items:center;margin-bottom:6px;cursor:pointer">
+            <input type="checkbox" id="reverbEnabled" onchange="bypassEffect('reverb')">
+            <span style="font-size:11px;font-weight:600">Reverb</span>
+          </label>
+          <div id="reverbControls" style="display:none;margin-left:20px">
+            <div style="font-size:10px">Mix: <input type="range" id="reverbMixSlider" min="0" max="1" value="0.2" step="0.05" oninput="updateReverb(this.value)" style="width:80px;vertical-align:middle"></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Beat Visualizer -->
@@ -1150,7 +1204,11 @@ function setBPM(val) {
 }
 
 function togglePlay() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    initEffectsChain();
+    initBeatViz();
+  }
   isPlaying = !isPlaying;
   const btn = document.getElementById('playBtn');
   if (isPlaying) {
@@ -1226,6 +1284,83 @@ function clearCurrent() {
   document.querySelectorAll('.ba-cell.current').forEach(c => c.classList.remove('current'));
 }
 
+// === PHASE 8: EFFECTS CHAIN INITIALIZATION ===
+function initEffectsChain() {
+  if (!audioCtx || effectsNodes.compressor) return; // Already initialized
+
+  // Compressor
+  effectsNodes.compressor = audioCtx.createDynamicsCompressor();
+  effectsNodes.compressor.threshold.value = -24;
+  effectsNodes.compressor.knee.value = 30;
+  effectsNodes.compressor.ratio.value = 4;
+  effectsNodes.compressor.attack.value = 0.003;
+  effectsNodes.compressor.release.value = 0.25;
+
+  // 3-Band EQ
+  effectsNodes.eqBass = audioCtx.createBiquadFilter();
+  effectsNodes.eqBass.type = 'lowshelf';
+  effectsNodes.eqBass.frequency.value = 80;
+  effectsNodes.eqBass.gain.value = 0;
+
+  effectsNodes.eqMid = audioCtx.createBiquadFilter();
+  effectsNodes.eqMid.type = 'peaking';
+  effectsNodes.eqMid.frequency.value = 1000;
+  effectsNodes.eqMid.gain.value = 0;
+  effectsNodes.eqMid.Q.value = 0.5;
+
+  effectsNodes.eqTreble = audioCtx.createBiquadFilter();
+  effectsNodes.eqTreble.type = 'highshelf';
+  effectsNodes.eqTreble.frequency.value = 10000;
+  effectsNodes.eqTreble.gain.value = 0;
+
+  // Delay
+  effectsNodes.delay = audioCtx.createDelay(2);
+  effectsNodes.delay.delayTime.value = 0.5;
+  effectsNodes.delayFeedback = audioCtx.createGain();
+  effectsNodes.delayFeedback.gain.value = 0.4;
+  effectsNodes.delayWet = audioCtx.createGain();
+  effectsNodes.delayWet.gain.value = 0;
+
+  // Reverb (Convolver with impulse response)
+  effectsNodes.reverb = audioCtx.createConvolver();
+  effectsNodes.reverbWet = audioCtx.createGain();
+  effectsNodes.reverbWet.gain.value = 0;
+
+  const impulse = createReverbImpulse(2);
+  effectsNodes.reverb.buffer = impulse;
+
+  // Connect effects chain: Compressor → EQ → Delay → Reverb → Destination
+  effectsNodes.compressor.connect(effectsNodes.eqBass);
+  effectsNodes.eqBass.connect(effectsNodes.eqMid);
+  effectsNodes.eqMid.connect(effectsNodes.eqTreble);
+  effectsNodes.eqTreble.connect(effectsNodes.delay);
+
+  effectsNodes.delay.connect(effectsNodes.delayFeedback);
+  effectsNodes.delayFeedback.connect(effectsNodes.delay);
+  effectsNodes.delay.connect(effectsNodes.delayWet);
+  effectsNodes.delayWet.connect(effectsNodes.reverb);
+
+  effectsNodes.reverb.connect(effectsNodes.reverbWet);
+  effectsNodes.reverbWet.connect(audioCtx.destination);
+
+  // Dry signal path (bypass effects)
+  effectsNodes.eqTreble.connect(audioCtx.destination);
+}
+
+function createReverbImpulse(duration) {
+  const length = audioCtx.sampleRate * duration;
+  const impulse = audioCtx.createBuffer(2, length, audioCtx.sampleRate);
+  const left = impulse.getChannelData(0);
+  const right = impulse.getChannelData(1);
+
+  for (let i = 0; i < length; i++) {
+    left[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2);
+    right[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2);
+  }
+
+  return impulse;
+}
+
 // Noise buffer for synthesis
 let noiseBuffer = null;
 function createNoiseBuffer() {
@@ -1272,7 +1407,12 @@ function playSound(track, velocity = 1.0, pan = 0) {
     output = panner;
   }
 
-  output.connect(audioCtx.destination);
+  // Connect to effects chain if initialized, otherwise direct to destination
+  if (effectsNodes.compressor) {
+    output.connect(effectsNodes.compressor);
+  } else {
+    output.connect(audioCtx.destination);
+  }
 
   // Main oscillator
   const osc = audioCtx.createOscillator();
@@ -1621,6 +1761,80 @@ function updateAIStatus(state, message) {
   statusEl.textContent = message;
   statusEl.style.display = 'inline';
   statusEl.className = `ai-status ${state}`;
+}
+
+// === PHASE 8: EFFECTS CHAIN CONTROL ===
+function updateCompressor(threshold, ratio) {
+  if (!effectsNodes.compressor || !audioCtx) return;
+  const now = audioCtx.currentTime;
+
+  threshold = parseFloat(threshold);
+  ratio = parseFloat(ratio);
+
+  effectsNodes.compressor.threshold.setTargetAtTime(threshold, now, 0.01);
+  effectsNodes.compressor.ratio.setTargetAtTime(ratio, now, 0.01);
+}
+
+function updateEQ(bass, mid, treble) {
+  if (!effectsNodes.eqBass || !audioCtx) return;
+  const now = audioCtx.currentTime;
+
+  bass = parseFloat(bass);
+  mid = parseFloat(mid);
+  treble = parseFloat(treble);
+
+  effectsNodes.eqBass.gain.setTargetAtTime(bass, now, 0.01);
+  effectsNodes.eqMid.gain.setTargetAtTime(mid, now, 0.01);
+  effectsNodes.eqTreble.gain.setTargetAtTime(treble, now, 0.01);
+}
+
+function updateDelay(time, feedback, mix) {
+  if (!effectsNodes.delay || !audioCtx) return;
+  const now = audioCtx.currentTime;
+
+  time = parseFloat(time);
+  feedback = parseFloat(feedback);
+  mix = parseFloat(mix);
+
+  effectsNodes.delay.delayTime.setTargetAtTime(time, now, 0.01);
+  effectsNodes.delayFeedback.gain.setTargetAtTime(feedback, now, 0.01);
+  effectsNodes.delayWet.gain.setTargetAtTime(mix, now, 0.01);
+}
+
+function updateReverb(mix) {
+  if (!effectsNodes.reverb || !audioCtx) return;
+  const now = audioCtx.currentTime;
+
+  mix = parseFloat(mix);
+  effectsNodes.reverbWet.gain.setTargetAtTime(mix, now, 0.01);
+}
+
+function bypassEffect(effect) {
+  if (effect === 'compressor') {
+    effectsChain.compressor.enabled = !effectsChain.compressor.enabled;
+    const checkbox = document.getElementById('compressorEnabled');
+    const controls = document.getElementById('compressorControls');
+    checkbox.checked = effectsChain.compressor.enabled;
+    controls.style.display = effectsChain.compressor.enabled ? 'block' : 'none';
+  } else if (effect === 'eq') {
+    effectsChain.eq.enabled = !effectsChain.eq.enabled;
+    const checkbox = document.getElementById('eqEnabled');
+    const controls = document.getElementById('eqControls');
+    checkbox.checked = effectsChain.eq.enabled;
+    controls.style.display = effectsChain.eq.enabled ? 'block' : 'none';
+  } else if (effect === 'delay') {
+    effectsChain.delay.enabled = !effectsChain.delay.enabled;
+    const checkbox = document.getElementById('delayEnabled');
+    const controls = document.getElementById('delayControls');
+    checkbox.checked = effectsChain.delay.enabled;
+    controls.style.display = effectsChain.delay.enabled ? 'block' : 'none';
+  } else if (effect === 'reverb') {
+    effectsChain.reverb.enabled = !effectsChain.reverb.enabled;
+    const checkbox = document.getElementById('reverbEnabled');
+    const controls = document.getElementById('reverbControls');
+    checkbox.checked = effectsChain.reverb.enabled;
+    controls.style.display = effectsChain.reverb.enabled ? 'block' : 'none';
+  }
 }
 
 // === PHASE 6: PATTERN LIBRARY & PERSISTENCE ===
