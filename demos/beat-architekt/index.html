@@ -743,6 +743,50 @@ body::before {
         <button class="ai-pat-btn" onclick="loadPattern('random')">🎲 Random</button>
       </div>
 
+      <!-- Phase 20b: AI Pattern Generation & Music Theory -->
+      <div style="margin-top:12px;padding:8px;background:rgba(0,240,255,0.05);border-radius:4px;border:1px solid rgba(0,240,255,0.2)">
+        <div style="font-size:11px;color:var(--cyan);font-weight:600;margin-bottom:8px">🤖 Generative AI</div>
+
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <button class="ai-pat-btn" id="sketchToggle" onclick="toggleSketchMode()" style="flex:1;font-size:10px">✎ Sketch Mode</button>
+          <button class="ai-pat-btn" onclick="generateFromSketch()" style="flex:1;font-size:10px">🧬 Generate</button>
+        </div>
+
+        <div style="font-size:10px;margin-bottom:8px">
+          <div style="margin-bottom:4px">Scale: <select id="scaleSelector" style="width:120px;font-size:10px;padding:2px">
+            <option>Major</option>
+            <option>Minor</option>
+            <option>Dorian</option>
+            <option>Phrygian</option>
+            <option>Pentatonic</option>
+            <option>Chromatic</option>
+          </select></div>
+
+          <div style="margin-bottom:4px">Key: <select id="keySelector" style="width:100px;font-size:10px;padding:2px">
+            <option>C</option><option>C#</option><option>D</option><option>D#</option>
+            <option>E</option><option>F</option><option>F#</option><option>G</option>
+            <option>G#</option><option>A</option><option>A#</option><option>B</option>
+          </select></div>
+
+          <div style="margin-bottom:8px">
+            <label style="display:flex;align-items:center;gap:4px;font-size:10px">
+              <input type="checkbox" id="enforceScaleCheck" checked>
+              Enforce Scale
+            </label>
+            <label style="display:flex;align-items:center;gap:4px;font-size:10px">
+              <input type="checkbox" id="enforceHarmonyCheck">
+              Enforce Harmony
+            </label>
+          </div>
+
+          <button class="ai-pat-btn" onclick="quantizeCurrentPattern()" style="width:100%;font-size:10px;padding:4px;margin-bottom:8px">🎵 Quantize</button>
+        </div>
+
+        <div id="generationStatus" style="font-size:9px;color:var(--text-dim);padding:4px;border-radius:2px">
+          Ready for generation
+        </div>
+      </div>
+
       <!-- AI Generate Panel -->
       <div id="aiGeneratePanel" style="margin-top:16px;padding:12px;background:rgba(0,240,255,0.05);border:1px solid rgba(0,240,255,0.2);border-radius:8px">
         <div style="font-size:11px;font-weight:600;color:var(--cyan);margin-bottom:8px">🤖 Generate from Prompt</div>
@@ -1614,6 +1658,164 @@ class EnvelopeGenerator {
         return 0;
     }
   }
+}
+
+// === PHASE 20b: PATTERN GENERATION ENGINE ===
+
+class MusicalScale {
+  constructor(notes, name) {
+    this.notes = notes;
+    this.name = name;
+  }
+
+  isInScale(midiNote) {
+    const noteClass = midiNote % 12;
+    return this.notes.includes(noteClass);
+  }
+
+  nearestInScale(midiNote) {
+    const noteClass = midiNote % 12;
+    const octave = Math.floor(midiNote / 12);
+
+    if (this.isInScale(midiNote)) return midiNote;
+
+    let nearest = this.notes[0] + octave * 12;
+    let minDist = Math.abs(midiNote - nearest);
+
+    for (const note of this.notes) {
+      const candidate = note + octave * 12;
+      const dist = Math.abs(midiNote - candidate);
+      if (dist < minDist) {
+        minDist = dist;
+        nearest = candidate;
+      }
+
+      if (midiNote < candidate && note > noteClass) break;
+    }
+
+    return nearest;
+  }
+
+  static Major = new MusicalScale([0, 2, 4, 5, 7, 9, 11], 'Major');
+  static Minor = new MusicalScale([0, 2, 3, 5, 7, 8, 10], 'Minor');
+  static Dorian = new MusicalScale([0, 2, 3, 5, 7, 9, 10], 'Dorian');
+  static Phrygian = new MusicalScale([0, 1, 3, 5, 7, 8, 10], 'Phrygian');
+  static Pentatonic = new MusicalScale([0, 2, 4, 7, 9], 'Pentatonic');
+  static Chromatic = new MusicalScale([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 'Chromatic');
+}
+
+class ChordProgression {
+  constructor(chords) {
+    this.chords = chords;
+    this.currentIndex = 0;
+  }
+
+  getChordAtBeat(beatNumber) {
+    let totalBeats = 0;
+    for (const chord of this.chords) {
+      totalBeats += chord.duration || 4;
+      if (beatNumber < totalBeats) return chord;
+    }
+    return this.chords[this.chords.length - 1];
+  }
+
+  getNextChord() {
+    const current = this.chords[this.currentIndex];
+    this.currentIndex = (this.currentIndex + 1) % this.chords.length;
+    return current;
+  }
+
+  static IMajor = new ChordProgression([
+    {root: 0, type: 'major', duration: 4},
+    {root: 5, type: 'major', duration: 4},
+    {root: 7, type: 'major', duration: 4},
+    {root: 0, type: 'major', duration: 4}
+  ]);
+
+  static iiVI = new ChordProgression([
+    {root: 2, type: 'minor', duration: 4},
+    {root: 7, type: 'major', duration: 4},
+    {root: 0, type: 'major', duration: 4},
+  ]);
+}
+
+function generatePatternFromSketch(sketchGrid, scale, rules = {}) {
+  const generated = sketchGrid.map(row => [...row]);
+  const sketchDensity = sketchGrid.flat().filter(s => s.active).length / sketchGrid.flat().length;
+
+  for (let i = 0; i < generated.length; i++) {
+    for (let j = 0; j < generated[i].length; j++) {
+      if (!generated[i][j].active && Math.random() < sketchDensity) {
+        const octave = Math.floor(Math.random() * 3) + 3;
+        let note = scale.notes[Math.floor(Math.random() * scale.notes.length)];
+
+        if (rules.enforceHarmony && rules.chord) {
+          const chordTones = rules.chord.type === 'major' ? [0, 4, 7] : [0, 3, 7];
+          note = (rules.chord.root + chordTones[Math.floor(Math.random() * chordTones.length)]) % 12;
+        }
+
+        generated[i][j].active = true;
+        generated[i][j].note = note + octave * 12;
+        generated[i][j].velocity = 0.5 + Math.random() * 0.5;
+      }
+    }
+  }
+
+  return generated;
+}
+
+function quantizeToScale(grid, scale) {
+  for (let i = 0; i < grid.length; i++) {
+    for (let j = 0; j < grid[i].length; j++) {
+      if (grid[i][j].active && grid[i][j].note !== undefined) {
+        grid[i][j].note = scale.nearestInScale(grid[i][j].note);
+      }
+    }
+  }
+  return grid;
+}
+
+function applyChordHarmony(grid, chordProgression, stepsPerChord = 4) {
+  let stepCounter = 0;
+
+  for (let i = 0; i < grid.length; i++) {
+    for (let j = 0; j < grid[i].length; j++) {
+      if (grid[i][j].active && grid[i][j].note !== undefined) {
+        const chord = chordProgression.getChordAtBeat(stepCounter);
+        const chordTones = chord.type === 'major' ? [0, 4, 7] : [0, 3, 7];
+
+        if (Math.random() < 0.7) {
+          const tone = chordTones[Math.floor(Math.random() * chordTones.length)];
+          const noteClass = (chord.root + tone) % 12;
+          const octave = Math.floor(grid[i][j].note / 12);
+          grid[i][j].note = noteClass + octave * 12;
+        }
+      }
+
+      stepCounter++;
+      if (stepCounter >= stepsPerChord) {
+        stepCounter = 0;
+        chordProgression.currentIndex = (chordProgression.currentIndex + 1) % chordProgression.chords.length;
+      }
+    }
+  }
+
+  return grid;
+}
+
+function generateProbabilisticPattern(baseGrid, probabilityMap) {
+  const generated = baseGrid.map(row => [...row]);
+
+  for (let i = 0; i < generated.length; i++) {
+    for (let j = 0; j < generated[i].length; j++) {
+      const prob = probabilityMap[j] || 1.0;
+      if (Math.random() > prob) {
+        generated[i][j].active = false;
+      }
+    }
+  }
+
+  return generated;
 }
 
 // === PHASE 20a: SPECTRAL ANALYZER ===
@@ -4131,6 +4333,107 @@ function updatePerformanceMetricsDisplay() {
   if (latencyEl && audioCtx) {
     const latency = (audioCtx.baseLatency || 0) * 1000 + (audioCtx.outputLatency || 0) * 1000;
     latencyEl.textContent = latency.toFixed(1) + 'ms';
+  }
+}
+
+// === PHASE 20b: PATTERN GENERATION FUNCTIONS ===
+
+let sketchMode = false;
+let sketchGrid = null;
+
+function toggleSketchMode() {
+  if (!currentPattern) {
+    alert('Load or create a pattern first');
+    return;
+  }
+
+  sketchMode = !sketchMode;
+  const toggle = document.getElementById('sketchToggle');
+
+  if (sketchMode) {
+    sketchGrid = JSON.parse(JSON.stringify(currentPattern.grid));
+    sketchGrid.forEach(row => row.forEach(step => step.sketch = false));
+    toggle.style.background = 'rgba(0,240,255,0.3)';
+    toggle.textContent = '✎ Sketch Active';
+    updateGenerationStatus('Sketch mode active - click cells to mark');
+  } else {
+    toggle.style.background = '';
+    toggle.textContent = '✎ Sketch Mode';
+    sketchGrid = null;
+    updateGenerationStatus('Sketch mode disabled');
+  }
+}
+
+function generateFromSketch() {
+  if (!currentPattern) {
+    alert('Load or create a pattern first');
+    return;
+  }
+
+  const scaleSelect = document.getElementById('scaleSelector')?.value || 'Major';
+  const scaleMap = {
+    'Major': MusicalScale.Major,
+    'Minor': MusicalScale.Minor,
+    'Dorian': MusicalScale.Dorian,
+    'Phrygian': MusicalScale.Phrygian,
+    'Pentatonic': MusicalScale.Pentatonic,
+    'Chromatic': MusicalScale.Chromatic
+  };
+
+  const scale = scaleMap[scaleSelect] || MusicalScale.Major;
+  const enforceScale = document.getElementById('enforceScaleCheck')?.checked !== false;
+  const enforceHarmony = document.getElementById('enforceHarmonyCheck')?.checked === true;
+
+  let workingGrid = JSON.parse(JSON.stringify(currentPattern.grid));
+
+  workingGrid = generatePatternFromSketch(workingGrid, scale, {
+    enforceHarmony: enforceHarmony,
+    chord: enforceHarmony ? ChordProgression.IMajor.chords[0] : null
+  });
+
+  if (enforceScale) {
+    workingGrid = quantizeToScale(workingGrid, scale);
+  }
+
+  if (enforceHarmony) {
+    workingGrid = applyChordHarmony(workingGrid, ChordProgression.IMajor, 4);
+  }
+
+  currentPattern.grid = workingGrid;
+  renderGrid();
+  pushUndoState('Generate pattern from sketch');
+  updateGenerationStatus('Pattern generated and applied');
+}
+
+function quantizeCurrentPattern() {
+  if (!currentPattern) {
+    alert('Load or create a pattern first');
+    return;
+  }
+
+  const scaleSelect = document.getElementById('scaleSelector')?.value || 'Major';
+  const scaleMap = {
+    'Major': MusicalScale.Major,
+    'Minor': MusicalScale.Minor,
+    'Dorian': MusicalScale.Dorian,
+    'Phrygian': MusicalScale.Phrygian,
+    'Pentatonic': MusicalScale.Pentatonic,
+    'Chromatic': MusicalScale.Chromatic
+  };
+
+  const scale = scaleMap[scaleSelect] || MusicalScale.Major;
+
+  currentPattern.grid = quantizeToScale(JSON.parse(JSON.stringify(currentPattern.grid)), scale);
+  renderGrid();
+  pushUndoState('Quantize pattern to scale');
+  updateGenerationStatus(`Pattern quantized to ${scaleSelect}`);
+}
+
+function updateGenerationStatus(message) {
+  const statusEl = document.getElementById('generationStatus');
+  if (statusEl) {
+    statusEl.textContent = message;
+    statusEl.style.color = 'var(--cyan)';
   }
 }
 
