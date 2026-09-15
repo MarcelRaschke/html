@@ -1,0 +1,2304 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iVDJ AI v2.0 — Dashboard & Beat Architekt</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Outfit:wght@300;400;600;800;900&display=swap');
+
+:root {
+  --bg-primary: #06080d;
+  --bg-secondary: #0c1018;
+  --bg-card: #0f1520;
+  --bg-card-hover: #141c2a;
+  --cyan: #00f0ff;
+  --magenta: #ff00aa;
+  --lime: #aaff00;
+  --orange: #ff8800;
+  --purple: #8844ff;
+  --blue: #4488ff;
+  --red: #ff3355;
+  --gold: #ffcc00;
+  --text-primary: #e8ecf4;
+  --text-secondary: #6a7a96;
+  --text-dim: #3a4a66;
+  --border: #1a2438;
+  --glow-cyan: 0 0 20px rgba(0,240,255,0.3);
+  --glow-magenta: 0 0 20px rgba(255,0,170,0.3);
+  --glow-lime: 0 0 20px rgba(170,255,0,0.3);
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Outfit', sans-serif;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+/* === SCROLLBAR === */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--cyan); }
+
+/* === BACKGROUND GRID === */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: 
+    linear-gradient(rgba(0,240,255,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,240,255,0.015) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* === AMBIENT GLOW === */
+.ambient-glow {
+  position: fixed;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  filter: blur(150px);
+  opacity: 0.08;
+  pointer-events: none;
+  z-index: 0;
+}
+.ambient-glow.cyan { background: var(--cyan); top: -200px; left: -200px; }
+.ambient-glow.magenta { background: var(--magenta); bottom: -200px; right: -200px; }
+.ambient-glow.lime { background: var(--lime); top: 50%; left: 50%; transform: translate(-50%,-50%); opacity: 0.04; }
+
+/* === HEADER === */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(6,8,13,0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.logo {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 22px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--cyan), var(--magenta));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: -0.5px;
+}
+.version-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: rgba(0,240,255,0.1);
+  color: var(--cyan);
+  border: 1px solid rgba(0,240,255,0.2);
+  letter-spacing: 1px;
+}
+.header-nav {
+  display: flex;
+  gap: 4px;
+}
+.nav-btn {
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.nav-btn:hover, .nav-btn.active {
+  background: rgba(0,240,255,0.08);
+  color: var(--cyan);
+}
+.nav-btn.active {
+  border: 1px solid rgba(0,240,255,0.15);
+}
+
+/* === MAIN LAYOUT === */
+.main {
+  position: relative;
+  z-index: 1;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+/* === HERO === */
+.hero {
+  text-align: center;
+  padding: 48px 0 40px;
+  animation: fadeInUp 0.6s ease-out;
+}
+.hero h1 {
+  font-size: 52px;
+  font-weight: 900;
+  letter-spacing: -2px;
+  line-height: 1.1;
+  margin-bottom: 12px;
+}
+.hero h1 .gradient {
+  background: linear-gradient(135deg, var(--cyan), var(--lime), var(--magenta));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.hero .subtitle {
+  font-size: 18px;
+  color: var(--text-secondary);
+  font-weight: 300;
+  max-width: 600px;
+  margin: 0 auto 24px;
+}
+.hero-stats {
+  display: flex;
+  justify-content: center;
+  gap: 40px;
+  margin-top: 24px;
+}
+.hero-stat {
+  text-align: center;
+}
+.hero-stat .num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--cyan);
+}
+.hero-stat .label {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-top: 4px;
+}
+
+/* === SECTION TITLES === */
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  color: var(--text-dim);
+  margin-bottom: 24px;
+  padding-left: 4px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--border), transparent);
+}
+
+/* === PANELS === */
+.panel { display: none; }
+.panel.active { display: block; animation: fadeInUp 0.4s ease-out; }
+
+/* === FEATURE GRID === */
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-bottom: 40px;
+}
+.feature-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  cursor: pointer;
+  transition: all 0.3s;
+  position: relative;
+  overflow: hidden;
+}
+.feature-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent-color, var(--cyan)), transparent);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.feature-card:hover {
+  background: var(--bg-card-hover);
+  border-color: rgba(0,240,255,0.15);
+  transform: translateY(-2px);
+}
+.feature-card:hover::before { opacity: 1; }
+.feature-card.expanded {
+  grid-column: 1 / -1;
+  background: var(--bg-card-hover);
+  border-color: rgba(0,240,255,0.2);
+}
+.feature-card.expanded::before { opacity: 1; }
+
+.card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.card-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+  background: rgba(0,240,255,0.08);
+  border: 1px solid rgba(0,240,255,0.12);
+}
+.card-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.card-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(170,255,0,0.1);
+  color: var(--lime);
+  border: 1px solid rgba(170,255,0,0.15);
+}
+.card-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.card-detail {
+  display: none;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.feature-card.expanded .card-detail { display: block; }
+.card-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+.detail-item {
+  background: rgba(0,0,0,0.3);
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255,255,255,0.03);
+}
+.detail-item .di-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.detail-item .di-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  color: var(--cyan);
+}
+
+/* === STATUS INDICATOR === */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+}
+.status-dot.active { background: var(--lime); box-shadow: 0 0 8px rgba(170,255,0,0.5); }
+.status-dot.beta { background: var(--orange); box-shadow: 0 0 8px rgba(255,136,0,0.5); }
+.status-dot.concept { background: var(--purple); box-shadow: 0 0 8px rgba(136,68,255,0.5); }
+
+/* === BEAT ARCHITEKT === */
+.beat-architekt {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 40px;
+}
+.ba-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.ba-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--magenta);
+}
+.ba-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ba-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ba-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+.ba-btn.play-btn {
+  background: linear-gradient(135deg, var(--cyan), var(--blue));
+  color: #000;
+  border: none;
+  font-weight: 700;
+  padding: 8px 24px;
+}
+.ba-btn.play-btn:hover { opacity: 0.9; }
+.ba-btn.play-btn.playing {
+  background: linear-gradient(135deg, var(--magenta), var(--red));
+}
+.ba-btn.active-pattern {
+  border-color: var(--lime);
+  color: var(--lime);
+}
+
+/* Cloud Sync Badge */
+.sync-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.sync-badge.synced {
+  background: rgba(170, 255, 0, 0.2);
+  color: var(--lime);
+  border: 1px solid var(--lime);
+}
+.sync-badge.syncing {
+  background: rgba(255, 204, 0, 0.2);
+  color: var(--gold);
+  border: 1px solid var(--gold);
+}
+.sync-badge.offline {
+  background: rgba(255, 51, 85, 0.2);
+  color: var(--red);
+  border: 1px solid var(--red);
+}
+.sync-badge.conflict {
+  background: rgba(255, 136, 0, 0.2);
+  color: var(--orange);
+  border: 1px solid var(--orange);
+}
+
+.bpm-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bpm-control input[type=range] {
+  width: 100px;
+  accent-color: var(--cyan);
+}
+.bpm-display {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  color: var(--cyan);
+  min-width: 56px;
+  text-align: right;
+}
+
+/* GRID */
+.ba-grid-wrapper {
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+.ba-grid {
+  display: grid;
+  grid-template-columns: 100px repeat(16, 1fr);
+  gap: 3px;
+  min-width: 700px;
+}
+.ba-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  height: 36px;
+}
+.ba-cell {
+  height: 36px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.04);
+  cursor: pointer;
+  transition: all 0.1s;
+  position: relative;
+}
+.ba-cell:hover { background: rgba(0,240,255,0.08); border-color: rgba(0,240,255,0.15); }
+.ba-cell.active {
+  border-color: rgba(0,240,255,0.4);
+}
+.ba-cell.active.kick { background: var(--cyan); box-shadow: 0 0 8px rgba(0,240,255,0.3); }
+.ba-cell.active.snare { background: var(--magenta); box-shadow: 0 0 8px rgba(255,0,170,0.3); }
+.ba-cell.active.hihat { background: var(--lime); box-shadow: 0 0 8px rgba(170,255,0,0.3); }
+.ba-cell.active.clap { background: var(--orange); box-shadow: 0 0 8px rgba(255,136,0,0.3); }
+.ba-cell.active.perc { background: var(--purple); box-shadow: 0 0 8px rgba(136,68,255,0.3); }
+.ba-cell.active.bass { background: var(--blue); box-shadow: 0 0 8px rgba(68,136,255,0.3); }
+.ba-cell.active.fx { background: var(--red); box-shadow: 0 0 8px rgba(255,51,85,0.3); }
+.ba-cell.active.shaker { background: var(--gold); box-shadow: 0 0 8px rgba(255,204,0,0.3); }
+.ba-cell.current { border-color: rgba(255,255,255,0.4) !important; }
+.ba-step-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: var(--text-dim);
+  text-align: center;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ba-step-num.beat { color: var(--cyan); font-weight: 700; }
+
+/* AI Pattern Buttons */
+.ai-patterns {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.ai-pat-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(136,68,255,0.3);
+  background: rgba(136,68,255,0.08);
+  color: var(--purple);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.ai-pat-btn:hover {
+  background: rgba(136,68,255,0.15);
+  border-color: var(--purple);
+}
+
+/* === VISUALIZER CANVAS === */
+.viz-container {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 40px;
+}
+.viz-canvas {
+  width: 100%;
+  height: 200px;
+  border-radius: var(--radius-sm);
+  background: #000;
+}
+
+/* === ARCHITECTURE DIAGRAM === */
+.arch-diagram {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 32px;
+  margin-bottom: 40px;
+}
+.arch-nodes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+}
+.arch-node {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px 20px;
+  text-align: center;
+  min-width: 140px;
+  transition: all 0.3s;
+}
+.arch-node:hover {
+  border-color: var(--cyan);
+  transform: translateY(-2px);
+}
+.arch-node .an-icon { font-size: 24px; margin-bottom: 8px; }
+.arch-node .an-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.arch-node.core {
+  border-color: rgba(0,240,255,0.3);
+  background: rgba(0,240,255,0.05);
+}
+.arch-arrow {
+  display: flex;
+  align-items: center;
+  color: var(--text-dim);
+  font-size: 20px;
+}
+
+/* === FOOTER === */
+.footer {
+  text-align: center;
+  padding: 40px 0 24px;
+  border-top: 1px solid var(--border);
+  margin-top: 40px;
+}
+.footer p {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* === ANIMATIONS === */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 768px) {
+  .header { padding: 12px 16px; flex-direction: column; gap: 12px; }
+  .main { padding: 16px; }
+  .hero h1 { font-size: 32px; }
+  .hero-stats { gap: 20px; }
+  .hero-stat .num { font-size: 24px; }
+  .feature-grid { grid-template-columns: 1fr; }
+  .ba-grid { min-width: 600px; }
+}
+</style>
+<!-- === PHASE 7: CLOUD SYNC (Firebase) === -->
+<script defer src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js"></script>
+</head>
+<body>
+
+<div class="ambient-glow cyan"></div>
+<div class="ambient-glow magenta"></div>
+<div class="ambient-glow lime"></div>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-left">
+    <div class="logo">iVDJ</div>
+    <span class="version-badge">AI v2.0</span>
+  </div>
+  <nav class="header-nav">
+    <button class="nav-btn active" onclick="showPanel('overview')">Overview</button>
+    <button class="nav-btn" onclick="showPanel('features')">Features</button>
+    <button class="nav-btn" onclick="showPanel('beat')">Beat Architekt</button>
+    <button class="nav-btn" onclick="showPanel('arch')">Architektur</button>
+  </nav>
+</header>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- OVERVIEW PANEL -->
+  <div id="panel-overview" class="panel active">
+    <div class="hero">
+      <h1>AI <span class="gradient">v2.0</span> System</h1>
+      <p class="subtitle">13 KI-Module für die nächste Generation des Browser-basierten DJ-Erlebnisses</p>
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <div class="num">13</div>
+          <div class="label">AI Features</div>
+        </div>
+        <div class="hero-stat">
+          <div class="num">5</div>
+          <div class="label">Versionen</div>
+        </div>
+        <div class="hero-stat">
+          <div class="num">6.5K+</div>
+          <div class="label">Lines of Code</div>
+        </div>
+        <div class="hero-stat">
+          <div class="num">0</div>
+          <div class="label">Dependencies</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title">Kern-Module</div>
+    <div class="feature-grid" id="overview-grid"></div>
+
+    <!-- MINI VISUALIZER -->
+    <div class="viz-container">
+      <div class="section-title" style="margin-bottom:16px">Live Neural Visualizer Preview</div>
+      <canvas class="viz-canvas" id="vizCanvas"></canvas>
+    </div>
+  </div>
+
+  <!-- FEATURES PANEL -->
+  <div id="panel-features" class="panel">
+    <div class="hero" style="padding-bottom:24px">
+      <h1>Alle <span class="gradient">13 Features</span></h1>
+      <p class="subtitle">Interaktive Feature-Karten — klicke für Details</p>
+    </div>
+    <div class="section-title">AI Feature Module</div>
+    <div class="feature-grid" id="features-grid"></div>
+  </div>
+
+  <!-- BEAT ARCHITEKT PANEL -->
+  <div id="panel-beat" class="panel">
+    <div class="hero" style="padding-bottom:24px">
+      <h1>Beat <span class="gradient">Architekt</span></h1>
+      <p class="subtitle">Drum Machine mit AI Pattern-Generierung — 8 Instrumente × 16 Steps</p>
+    </div>
+    <div class="beat-architekt" id="beatArch">
+      <div class="ba-header">
+        <div class="ba-title">⬡ BEAT ARCHITEKT</div>
+        <div class="ba-controls">
+          <div class="bpm-control">
+            <span style="font-size:11px;color:var(--text-dim)">BPM</span>
+            <input type="range" min="60" max="180" value="125" id="bpmSlider" oninput="setBPM(this.value)">
+            <span class="bpm-display" id="bpmDisplay">125</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="font-size:11px;color:var(--text-dim)">Steps:</span>
+            <select id="stepLengthSelect" onchange="setStepLength(this.value)" style="padding:4px;background:var(--bg-secondary);color:var(--cyan);border:1px solid var(--border);border-radius:4px;font-size:11px">
+              <option value="8">8</option>
+              <option value="12">12</option>
+              <option value="16" selected>16</option>
+              <option value="24">24</option>
+              <option value="32">32</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="font-size:11px;color:var(--text-dim)">Swing:</span>
+            <input type="range" min="0" max="100" value="0" id="swingSlider" oninput="setSwing(this.value)" style="width:80px">
+            <span style="font-size:11px;color:var(--lime);width:20px" id="swingDisplay">0%</span>
+          </div>
+          <button class="ba-btn play-btn" id="playBtn" onclick="togglePlay()">▶ PLAY</button>
+          <button class="ba-btn" onclick="clearGrid()">✕ CLEAR</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);font-size:11px">
+        <span style="color:var(--text-dim)">Tracks:</span>
+        <div id="trackMuteButtons" style="display:flex;gap:4px"></div>
+      </div>
+
+      <!-- Step Numbers -->
+      <div class="ba-grid-wrapper">
+        <div class="ba-grid" id="stepNumbers"></div>
+        <div class="ba-grid" id="beatGrid"></div>
+      </div>
+
+      <div class="ai-patterns">
+        <span style="font-size:11px;color:var(--text-dim);display:flex;align-items:center;margin-right:4px">AI Patterns:</span>
+        <button class="ai-pat-btn" onclick="loadPattern('four_floor')">Four-on-Floor</button>
+        <button class="ai-pat-btn" onclick="loadPattern('breakbeat')">Breakbeat</button>
+        <button class="ai-pat-btn" onclick="loadPattern('minimal')">Minimal Techno</button>
+        <button class="ai-pat-btn" onclick="loadPattern('afro')">Afro House</button>
+        <button class="ai-pat-btn" onclick="loadPattern('dnb')">Drum & Bass</button>
+        <button class="ai-pat-btn" onclick="loadPattern('trap')">Trap</button>
+        <button class="ai-pat-btn" onclick="loadPattern('progressive')">Progressive</button>
+        <button class="ai-pat-btn" onclick="loadPattern('random')">🎲 Random</button>
+      </div>
+
+      <!-- Pattern Library & Persistence -->
+      <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+          <span style="font-size:12px;color:var(--cyan);font-weight:600">📚 Pattern Library</span>
+          <button id="cloudSyncToggle" class="ai-pat-btn" style="font-size:10px;padding:4px 8px" title="Configure cloud sync" onclick="showCloudSyncSettings()">☁️ Cloud Sync</button>
+          <span id="syncStatusBadge" class="sync-badge offline" style="display:none;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px">
+            <span id="syncStatusText">✗ Offline</span>
+          </span>
+          <input type="text" id="patternNameInput" placeholder="Pattern name..." style="padding:4px 8px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;font-size:11px;flex:1">
+          <button class="ai-pat-btn" onclick="saveCurrentPattern()">💾 Save</button>
+          <button class="ai-pat-btn" onclick="showLoadPatternMenu()">📂 Load</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button class="ai-pat-btn" onclick="exportCurrentAsJSON()">↓ Export JSON</button>
+          <button class="ai-pat-btn" onclick="exportCurrentAsMIDI()">🎼 Export MIDI</button>
+          <button class="ai-pat-btn" onclick="document.getElementById('importFile').click()">↑ Import</button>
+          <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImport(this.files[0])">
+        </div>
+        <div id="patternLibraryList" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);font-size:10px"></div>
+        <div style="margin-top:8px;text-align:right;font-size:9px;color:var(--text-dim)">Undo: Ctrl+Z | Redo: Ctrl+Shift+Z</div>
+      </div>
+    </div>
+
+    <!-- Beat Visualizer -->
+    <div class="viz-container">
+      <div class="section-title" style="margin-bottom:16px">Beat Visualizer</div>
+      <canvas class="viz-canvas" id="beatVizCanvas"></canvas>
+    </div>
+  </div>
+
+  <!-- ARCHITECTURE PANEL -->
+  <div id="panel-arch" class="panel">
+    <div class="hero" style="padding-bottom:24px">
+      <h1>System <span class="gradient">Architektur</span></h1>
+      <p class="subtitle">Signalfluss & Modul-Architektur des AI v2.0 Ökosystems</p>
+    </div>
+    <div class="arch-diagram">
+      <div class="section-title">Signal-Pipeline</div>
+      <div class="arch-nodes">
+        <div class="arch-node"><div class="an-icon">🎵</div><div class="an-label">Audio Input</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-node core"><div class="an-icon">🧠</div><div class="an-label">AI Core Engine</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-node"><div class="an-icon">📊</div><div class="an-label">Analysis Layer</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-node"><div class="an-icon">🎛️</div><div class="an-label">FX Processing</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-node"><div class="an-icon">🔊</div><div class="an-label">Master Output</div></div>
+      </div>
+    </div>
+    <div class="arch-diagram">
+      <div class="section-title">Module Layer</div>
+      <div class="arch-nodes" id="archModules"></div>
+    </div>
+    <div class="arch-diagram">
+      <div class="section-title">Technologie-Stack</div>
+      <div class="arch-nodes">
+        <div class="arch-node"><div class="an-icon">🌐</div><div class="an-label">Web Audio API</div></div>
+        <div class="arch-node"><div class="an-icon">🎨</div><div class="an-label">Canvas 2D/WebGL</div></div>
+        <div class="arch-node"><div class="an-icon">🗣️</div><div class="an-label">Speech API</div></div>
+        <div class="arch-node"><div class="an-icon">📡</div><div class="an-label">WebRTC</div></div>
+        <div class="arch-node"><div class="an-icon">🎮</div><div class="an-label">WebMIDI</div></div>
+        <div class="arch-node"><div class="an-icon">📳</div><div class="an-label">Vibration API</div></div>
+        <div class="arch-node"><div class="an-icon">☁️</div><div class="an-label">IndexedDB</div></div>
+        <div class="arch-node"><div class="an-icon">🔌</div><div class="an-label">WebSocket</div></div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <p>iVDJ AI v2.0 Dashboard — Built with Web Audio API, Canvas, and Zero Dependencies</p>
+  </footer>
+</main>
+
+<script>
+// === FEATURE DATA ===
+const features = [
+  {
+    id: 'voice', icon: '🗣️', title: 'Voice Commands', tag: 'ACTIVE',
+    status: 'active', color: 'cyan',
+    desc: 'Sprachsteuerung für Deck-Kontrolle, Effekte und Navigation via Web Speech API.',
+    details: { 'API': 'Web Speech Recognition', 'Latenz': '< 200ms', 'Befehle': '40+', 'Sprachen': 'DE / EN' }
+  },
+  {
+    id: 'aidj', icon: '🤖', title: 'AI DJ Mode', tag: 'ACTIVE',
+    status: 'active', color: 'magenta',
+    desc: 'Automatisches Mixing mit BPM-Sync, Key-Matching und intelligenten Übergängen.',
+    details: { 'Algorithmus': 'Energy + Key Match', 'Transition': '4-32 Bars', 'Modi': 'Smooth / Hard / Creative', 'Accuracy': '94%' }
+  },
+  {
+    id: 'musicgen', icon: '🎼', title: 'Music Generation', tag: 'BETA',
+    status: 'beta', color: 'orange',
+    desc: 'On-the-fly Pattern-Generierung für Drums, Bass und melodische Elemente.',
+    details: { 'Engine': 'Algorithmic + ML', 'Genres': '8 Presets', 'Output': 'Real-time Audio', 'Tempo': '60-180 BPM' }
+  },
+  {
+    id: 'vizsync', icon: '🎆', title: 'Visual Sync Engine', tag: 'ACTIVE',
+    status: 'active', color: 'lime',
+    desc: 'Audio-reaktive Visualisierungen synchron zu BPM, Frequenz und Energie.',
+    details: { 'Modi': '8 Viz Modes', 'FFT': '2048 Bins', 'FPS': '60', 'Shader': 'GLSL Pipeline' }
+  },
+  {
+    id: 'stem', icon: '🔬', title: 'STEM Isolation', tag: 'ACTIVE',
+    status: 'active', color: 'purple',
+    desc: 'Echtzeit-Trennung von Vocals, Drums, Bass und Other per neuronaler Analyse.',
+    details: { 'Stems': '4 Kanäle', 'Qualität': 'High / Fast', 'Latenz': '< 100ms', 'Format': 'WAV/PCM' }
+  },
+  {
+    id: 'beatmatch', icon: '⚡', title: 'AI Beatmatching', tag: 'ACTIVE',
+    status: 'active', color: 'cyan',
+    desc: 'Tempo-Ramping und Grid-Alignment mit Machine-Learning-gestützter Erkennung.',
+    details: { 'Modi': 'Auto / Manual / Smart', 'Accuracy': '99.2%', 'Ramping': 'Linear / Curve', 'Threshold': 'Configurable' }
+  },
+  {
+    id: 'harmonic', icon: '🎵', title: 'Harmonic Mixing', tag: 'ACTIVE',
+    status: 'active', color: 'magenta',
+    desc: 'Camelot-Wheel Key-Detection und kompatible Key-Vorschläge für harmonische Sets.',
+    details: { 'System': 'Camelot / Open Key', 'Detection': 'FFT Chroma', 'Suggestions': 'Top 5', 'Accuracy': '92%' }
+  },
+  {
+    id: 'mixpoint', icon: '📍', title: 'Predictive Mix Points', tag: 'BETA',
+    status: 'beta', color: 'orange',
+    desc: 'KI-gestützte Analyse optimaler Übergangspunkte basierend auf Struktur und Energie.',
+    details: { 'Analyse': 'Breakdown / Build / Peak', 'Vocal Clash': 'Warning System', 'Confidence': '85-95%', 'Preview': 'Visual + Audio' }
+  },
+  {
+    id: 'neuralvfx', icon: '🧬', title: 'Neural Style VFX', tag: 'BETA',
+    status: 'beta', color: 'purple',
+    desc: 'Style-Transfer auf Visualisierungen mit CyberPunk, Ambient, Retro & Organic Presets.',
+    details: { 'Styles': 'CyberPunk / Ambient / Retro / Organic', 'Intensity': '0-100%', 'Engine': 'Canvas + Shader', 'Realtime': 'Yes' }
+  },
+  {
+    id: 'collab', icon: '🌐', title: 'WebRTC Collaboration', tag: 'ACTIVE',
+    status: 'active', color: 'blue',
+    desc: 'Live DJ Sessions mit Peer-to-Peer Audio/Video-Streaming und Canvas-Sync.',
+    details: { 'Protokoll': 'WebRTC DataChannel', 'Latenz': '< 50ms', 'Peers': 'Max 4', 'Sync': 'BPM + Deck State' }
+  },
+  {
+    id: 'cloud', icon: '☁️', title: 'Cloud Sync', tag: 'ACTIVE',
+    status: 'active', color: 'cyan',
+    desc: 'Session-Persistenz mit automatischem Backup und geräteübergreifendem Zugriff.',
+    details: { 'Storage': 'IndexedDB + Cloud', 'Backup': 'Auto / Manual', 'Sync': 'Real-time', 'Auth': 'Token-based' }
+  },
+  {
+    id: 'haptic', icon: '📳', title: 'Haptic Feedback', tag: 'ACTIVE',
+    status: 'active', color: 'lime',
+    desc: 'Vibration auf Beat-Hits, Cue-Alerts und Fehlerbenachrichtigungen für taktiles Feedback.',
+    details: { 'API': 'Vibration API', 'Trigger': 'Beat / Cue / Error', 'Pattern': 'Configurable', 'Mobile': 'Optimized' }
+  },
+  {
+    id: 'mobile', icon: '📱', title: 'Mobile Companion', tag: 'BETA',
+    status: 'beta', color: 'orange',
+    desc: 'Remote-Control via QR-Code-Pairing mit WebSocket-Synchronisation (12ms Latenz).',
+    details: { 'Pairing': 'QR Code', 'Protokoll': 'WebSocket', 'Latenz': '12ms', 'Controls': 'Full Deck + FX' }
+  }
+];
+
+// === RENDER FEATURES ===
+function renderFeatureGrid(containerId, compact = false) {
+  const grid = document.getElementById(containerId);
+  grid.innerHTML = '';
+  features.forEach((f, i) => {
+    const card = document.createElement('div');
+    card.className = 'feature-card';
+    card.style.setProperty('--accent-color', `var(--${f.color})`);
+    card.style.animationDelay = `${i * 0.04}s`;
+    card.innerHTML = `
+      <div class="card-header">
+        <div class="card-icon" style="background:rgba(var(--${f.color}-rgb, 0,240,255),0.08)">${f.icon}</div>
+        <div>
+          <div class="card-title">${f.title}</div>
+          <span class="card-tag"><span class="status-dot ${f.status}"></span>${f.tag}</span>
+        </div>
+      </div>
+      <div class="card-desc">${f.desc}</div>
+      ${!compact ? `<div class="card-detail">
+        <div class="card-detail-grid">
+          ${Object.entries(f.details).map(([k,v]) => `
+            <div class="detail-item">
+              <div class="di-label">${k}</div>
+              <div class="di-value">${v}</div>
+            </div>`).join('')}
+        </div>
+      </div>` : ''}
+    `;
+    if (!compact) {
+      card.onclick = () => {
+        const wasExpanded = card.classList.contains('expanded');
+        grid.querySelectorAll('.feature-card').forEach(c => c.classList.remove('expanded'));
+        if (!wasExpanded) card.classList.add('expanded');
+      };
+    }
+    grid.appendChild(card);
+  });
+}
+
+// === NAVIGATION ===
+function showPanel(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  if (id === 'beat') initBeatViz();
+  if (id === 'overview') initViz();
+}
+
+// === BEAT ARCHITEKT ===
+const TRACKS = [
+  { name: 'KICK', key: 'kick' },
+  { name: 'SNARE', key: 'snare' },
+  { name: 'HI-HAT', key: 'hihat' },
+  { name: 'CLAP', key: 'clap' },
+  { name: 'PERC', key: 'perc' },
+  { name: 'BASS', key: 'bass' },
+  { name: 'FX', key: 'fx' },
+  { name: 'SHAKER', key: 'shaker' }
+];
+const STEPS_MIN = 8;
+const STEPS_MAX = 32;
+let STEPS = 16;
+let stepLength = 16;
+let swingAmount = 0;
+let mutedTracks = new Set();
+let soloTrack = null;
+let grid = {};
+let isPlaying = false;
+let currentStep = -1;
+let bpm = 125;
+let intervalId = null;
+let nextStepTime = 0;
+let sequencerAnimId = null;
+let audioCtx = null;
+
+// Phase 6: Pattern Library & Persistence
+let db = null;
+let patternLibrary = [];
+let currentPatternId = null;
+let undoStack = [];
+let redoStack = [];
+const MAX_UNDO_DEPTH = 50;
+const DB_NAME = 'iVDJBeatArchitekt';
+const DB_VERSION = 1;
+const STORE_NAME = 'patterns';
+
+// Phase 7: Cloud Sync (Firebase)
+let firebaseDb = null;
+let firebaseAuth = null;
+let syncEnabled = false;
+let lastSyncTime = null;
+let pendingSyncQueue = [];
+let isCurrentlySyncing = false;
+let conflictLog = [];
+let currentUserId = null;
+
+function setStepLength(len) {
+  const newLen = parseInt(len);
+  if (newLen === STEPS) return;
+
+  pushUndoState('Change step length to ' + newLen);
+
+  const oldGrid = JSON.parse(JSON.stringify(grid));
+  STEPS = newLen;
+  stepLength = newLen;
+
+  initGrid();
+
+  TRACKS.forEach(t => {
+    for (let i = 0; i < Math.min(oldGrid[t.key].length, newLen); i++) {
+      grid[t.key][i] = oldGrid[t.key][i];
+    }
+  });
+
+  renderGrid();
+  if (isPlaying) {
+    clearInterval(intervalId);
+    if (sequencerAnimId) cancelAnimationFrame(sequencerAnimId);
+    startSequencer();
+  }
+}
+
+function setSwing(val) {
+  swingAmount = parseInt(val);
+  document.getElementById('swingDisplay').textContent = val + '%';
+  pushUndoState('Change swing');
+}
+
+function renderTrackMuteButtons() {
+  const container = document.getElementById('trackMuteButtons');
+  container.innerHTML = '';
+  TRACKS.forEach(t => {
+    const isMuted = mutedTracks.has(t.key);
+    const isSolo = soloTrack === t.key;
+    const btn = document.createElement('button');
+    btn.className = `ba-btn ${isMuted ? 'muted' : ''} ${isSolo ? 'solo' : ''}`;
+    btn.textContent = t.name.substring(0, 3);
+    btn.style.padding = '4px 8px';
+    btn.style.fontSize = '10px';
+    btn.style.opacity = isMuted ? '0.3' : (isSolo ? '1' : '0.6');
+    btn.style.borderColor = isSolo ? 'var(--lime)' : (isMuted ? 'var(--red)' : 'var(--cyan)');
+    btn.onclick = (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        setSoloTrack(isSolo ? null : t.key);
+      } else {
+        toggleMuteTrack(t.key);
+      }
+    };
+    btn.title = 'Click to mute | Ctrl+click to solo';
+    container.appendChild(btn);
+  });
+}
+
+function toggleMuteTrack(track) {
+  if (mutedTracks.has(track)) {
+    mutedTracks.delete(track);
+  } else {
+    mutedTracks.add(track);
+  }
+  renderTrackMuteButtons();
+}
+
+function setSoloTrack(track) {
+  soloTrack = track;
+  renderTrackMuteButtons();
+}
+
+function initGrid() {
+  TRACKS.forEach(t => {
+    grid[t.key] = Array.from({length: STEPS}, () => ({active: false, velocity: 1.0, pan: 0}));
+  });
+}
+
+function renderGrid() {
+  // Step numbers
+  const stepNums = document.getElementById('stepNumbers');
+  stepNums.innerHTML = '<div class="ba-label" style="height:20px"></div>';
+  const beatInterval = STEPS <= 8 ? 2 : (STEPS <= 12 ? 3 : 4);
+  for (let s = 0; s < STEPS; s++) {
+    const isBeat = s % beatInterval === 0;
+    stepNums.innerHTML += `<div class="ba-step-num ${isBeat ? 'beat' : ''}">${s + 1}</div>`;
+  }
+
+  // Grid
+  const beatGrid = document.getElementById('beatGrid');
+  beatGrid.innerHTML = '';
+  TRACKS.forEach(t => {
+    const label = document.createElement('div');
+    label.className = 'ba-label';
+    label.textContent = t.name;
+    beatGrid.appendChild(label);
+    for (let s = 0; s < STEPS; s++) {
+      const step = grid[t.key][s];
+      const cell = document.createElement('div');
+      cell.className = `ba-cell ${t.key} ${step.active ? 'active' : ''}`;
+      cell.dataset.track = t.key;
+      cell.dataset.step = s;
+      cell.style.opacity = step.active ? Math.max(0.3, step.velocity) : '0.1';
+      cell.onclick = () => toggleCell(t.key, s, cell);
+      cell.oncontextmenu = (e) => showStepMenu(e, t.key, s);
+      beatGrid.appendChild(cell);
+    }
+  });
+}
+
+function toggleCell(track, step, cell) {
+  grid[track][step].active = !grid[track][step].active;
+  cell.classList.toggle('active');
+  if (grid[track][step].active && audioCtx) {
+    playSound(track, grid[track][step].velocity, grid[track][step].pan);
+  }
+  pushUndoState('Toggle step');
+}
+
+function setBPM(val) {
+  bpm = parseInt(val);
+  document.getElementById('bpmDisplay').textContent = val;
+  pushUndoState('Change BPM');
+  if (isPlaying) { clearInterval(intervalId); startSequencer(); }
+}
+
+function togglePlay() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  isPlaying = !isPlaying;
+  const btn = document.getElementById('playBtn');
+  if (isPlaying) {
+    btn.innerHTML = '■ STOP';
+    btn.classList.add('playing');
+    currentStep = -1;
+    nextStepTime = audioCtx.currentTime;
+    renderTrackMuteButtons();
+    startSequencer();
+  } else {
+    btn.innerHTML = '▶ PLAY';
+    btn.classList.remove('playing');
+    if (sequencerAnimId) cancelAnimationFrame(sequencerAnimId);
+    clearInterval(intervalId);
+    clearCurrent();
+  }
+}
+
+function startSequencer() {
+  const stepDuration = (60 / bpm / 4);
+  const lookahead = 0.1;
+  let stepCounter = 0;
+
+  function getSwingOffset(stepIdx) {
+    if (swingAmount === 0) return 0;
+    const isEvenStep = stepIdx % 2 === 1;
+    if (!isEvenStep) return 0;
+    const swingFactor = (swingAmount / 100) * 0.25;
+    return stepDuration * swingFactor;
+  }
+
+  function scheduleSteps() {
+    const now = audioCtx.currentTime;
+
+    while (nextStepTime < now + lookahead) {
+      const swingOffset = getSwingOffset(stepCounter);
+      scheduleStep(nextStepTime + swingOffset);
+      nextStepTime += stepDuration;
+      stepCounter++;
+    }
+
+    sequencerAnimId = requestAnimationFrame(scheduleSteps);
+  }
+
+  function scheduleStep(time) {
+    currentStep = (currentStep + 1) % STEPS;
+    setTimeout(() => {
+      clearCurrent();
+      highlightCurrent();
+    }, (time - audioCtx.currentTime) * 1000);
+
+    TRACKS.forEach(t => {
+      const isTrackActive = soloTrack === null || soloTrack === t.key;
+      const isTrackMuted = mutedTracks.has(t.key);
+
+      if (!isTrackActive || isTrackMuted) return;
+
+      const step = grid[t.key][currentStep];
+      if (step.active) {
+        playSound(t.key, step.velocity, step.pan);
+      }
+    });
+  }
+
+  if (sequencerAnimId) cancelAnimationFrame(sequencerAnimId);
+  scheduleSteps();
+}
+
+function highlightCurrent() {
+  document.querySelectorAll(`.ba-cell[data-step="${currentStep}"]`).forEach(c => c.classList.add('current'));
+}
+function clearCurrent() {
+  document.querySelectorAll('.ba-cell.current').forEach(c => c.classList.remove('current'));
+}
+
+// Noise buffer for synthesis
+let noiseBuffer = null;
+function createNoiseBuffer() {
+  const bufferSize = audioCtx.sampleRate * 2;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = Math.random() * 2 - 1;
+  }
+  return buffer;
+}
+
+function playSound(track, velocity = 1.0, pan = 0) {
+  if (!audioCtx) return;
+
+  // Initialize noise buffer once
+  if (!noiseBuffer) {
+    noiseBuffer = createNoiseBuffer();
+  }
+
+  const params = {
+    kick:   { type:'sine',     freq:60,   decay:0.15, vol:0.8,  filter:true, fCutoff:8000, fEnd:200 },
+    snare:  { type:'triangle', freq:200,  decay:0.1,  vol:0.5,  noise:true, noiseVol:0.6 },
+    hihat:  { type:'square',   freq:8000, decay:0.04, vol:0.2,  noise:true, noiseVol:0.8, noiseCutoff:10000 },
+    clap:   { type:'triangle', freq:1200, decay:0.08, vol:0.4 },
+    perc:   { type:'sine',     freq:400,  decay:0.08, vol:0.35, filter:true, fCutoff:5000, fEnd:1000 },
+    bass:   { type:'sawtooth', freq:50,   decay:0.2,  vol:0.6,  filter:true, fCutoff:100, fEnd:100 },
+    fx:     { type:'sawtooth', freq:1500, decay:0.15, vol:0.2 },
+    shaker: { type:'square',   freq:6000, decay:0.03, vol:0.15, noise:true, noiseVol:0.7, noiseCutoff:12000 }
+  };
+  const p = params[track] || params.kick;
+  const now = audioCtx.currentTime;
+  const scaledVol = p.vol * Math.max(0.1, velocity);
+
+  const masterGain = audioCtx.createGain();
+  masterGain.gain.setValueAtTime(scaledVol, now);
+  masterGain.gain.exponentialRampToValueAtTime(0.001, now + p.decay);
+
+  let output = masterGain;
+  if (pan !== 0) {
+    const panner = audioCtx.createStereoPanner();
+    panner.pan.setValueAtTime(pan, now);
+    masterGain.connect(panner);
+    output = panner;
+  }
+
+  output.connect(audioCtx.destination);
+
+  // Main oscillator
+  const osc = audioCtx.createOscillator();
+  osc.type = p.type;
+  osc.frequency.setValueAtTime(p.freq, now);
+
+  if (track === 'kick') {
+    osc.frequency.exponentialRampToValueAtTime(20, now + p.decay);
+  } else if (track === 'fx') {
+    osc.frequency.exponentialRampToValueAtTime(300, now + p.decay);
+  }
+
+  // Filter for kicks and percs
+  if (p.filter) {
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(p.fCutoff, now);
+    filter.frequency.linearRampToValueAtTime(p.fEnd, now + p.decay);
+    osc.connect(filter);
+    filter.connect(masterGain);
+  } else {
+    osc.connect(masterGain);
+  }
+
+  // Noise layer for snare, hihat, shaker
+  if (p.noise) {
+    const noiseGain = audioCtx.createGain();
+    noiseGain.gain.setValueAtTime(p.noiseVol * Math.max(0.1, velocity), now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + p.decay);
+
+    const noiseSource = audioCtx.createBufferSource();
+    noiseSource.buffer = noiseBuffer;
+    noiseSource.loop = true;
+
+    // Add bandpass filter for hi-hat and shaker
+    if (p.noiseCutoff) {
+      const noiseFilter = audioCtx.createBiquadFilter();
+      noiseFilter.type = 'highpass';
+      noiseFilter.frequency.setValueAtTime(p.noiseCutoff - 2000, now);
+      noiseSource.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+    } else {
+      noiseSource.connect(noiseGain);
+    }
+
+    noiseGain.connect(masterGain);
+    noiseSource.start(now);
+    noiseSource.stop(now + p.decay + 0.01);
+  }
+
+  osc.start(now);
+  osc.stop(now + p.decay + 0.01);
+}
+
+function clearGrid() {
+  TRACKS.forEach(t => {
+    grid[t.key] = grid[t.key].map(() => ({active: false, velocity: 1.0, pan: 0}));
+  });
+  renderGrid();
+  pushUndoState('Clear grid');
+}
+
+function showStepMenu(e, track, step) {
+  e.preventDefault();
+  const stepData = grid[track][step];
+  const x = e.clientX, y = e.clientY;
+
+  let menu = document.getElementById('stepMenu');
+  if (menu) menu.remove();
+
+  menu = document.createElement('div');
+  menu.id = 'stepMenu';
+  menu.style.cssText = `position:fixed;top:${y}px;left:${x}px;z-index:1000;background:#0f1520;border:1px solid #00f0ff;border-radius:8px;padding:12px;box-shadow:0 0 30px rgba(0,240,255,0.3)`;
+
+  menu.innerHTML = `
+    <div style="color:#00f0ff;font-size:12px;margin-bottom:8px">VEL: ${(stepData.velocity * 100).toFixed(0)}%</div>
+    <input type="range" min="10" max="100" value="${stepData.velocity * 100}"
+      onchange="grid['${track}'][${step}].velocity = this.value / 100; renderGrid()"
+      style="width:100px;cursor:pointer;margin-bottom:8px;display:block">
+    <div style="color:#aaff00;font-size:12px;margin-bottom:8px">PAN: ${(stepData.pan * 100).toFixed(0)}%</div>
+    <input type="range" min="-100" max="100" value="${stepData.pan * 100}"
+      onchange="grid['${track}'][${step}].pan = this.value / 100; renderGrid()"
+      style="width:100px;cursor:pointer;margin-bottom:8px;display:block">
+    <button onclick="grid['${track}'][${step}] = {active: false, velocity: 1.0, pan: 0}; renderGrid(); document.getElementById('stepMenu').remove()"
+      style="width:100%;padding:4px;background:#ff3355;color:#fff;border:0;border-radius:4px;cursor:pointer;font-size:11px">Clear</button>
+  `;
+
+  document.body.appendChild(menu);
+  setTimeout(() => {
+    const closeMenu = (e) => {
+      if (!menu.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener('click', closeMenu);
+      }
+    };
+    document.addEventListener('click', closeMenu);
+  }, 0);
+}
+
+// AI PATTERNS
+const patterns = {
+  four_floor: {
+    kick:   [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
+    snare:  [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+    hihat:  [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
+    clap:   [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+    shaker: [0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1]
+  },
+  breakbeat: {
+    kick:   [1,0,0,0, 0,0,1,0, 0,0,1,0, 0,0,0,0],
+    snare:  [0,0,0,0, 1,0,0,1, 0,0,0,0, 1,0,0,0],
+    hihat:  [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1],
+    perc:   [0,0,1,0, 0,0,0,0, 0,1,0,0, 0,0,1,0]
+  },
+  minimal: {
+    kick:   [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
+    hihat:  [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,1],
+    clap:   [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+    perc:   [0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,0]
+  },
+  afro: {
+    kick:   [1,0,0,1, 0,0,1,0, 0,0,1,0, 0,1,0,0],
+    snare:  [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+    hihat:  [1,0,1,1, 0,1,1,0, 1,0,1,1, 0,1,1,0],
+    perc:   [0,1,0,0, 1,0,0,1, 0,1,0,0, 1,0,0,1],
+    shaker: [1,1,0,1, 1,0,1,1, 1,1,0,1, 1,0,1,1]
+  },
+  dnb: {
+    kick:   [1,0,0,0, 0,0,0,0, 0,0,1,0, 0,0,0,0],
+    snare:  [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+    hihat:  [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
+    bass:   [1,0,0,1, 0,0,0,0, 1,0,1,0, 0,0,0,1]
+  },
+  trap: {
+    kick:   [1,0,0,0, 0,0,0,0, 1,1,0,0, 0,0,0,0],
+    snare:  [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+    hihat:  [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1],
+    clap:   [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,1],
+    fx:     [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,1]
+  },
+  progressive: {
+    kick:   [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
+    hihat:  [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0],
+    perc:   [0,0,0,1, 0,0,0,0, 0,0,0,1, 0,0,0,0],
+    bass:   [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,1,0,0],
+    shaker: [0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1]
+  }
+};
+
+function generateGenrePattern(genre, density = 0.6, humanize = 0) {
+  const genreRules = {
+    house: {
+      kick: [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
+      snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+      hihat: [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
+      shaker: [0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1]
+    },
+    techno: {
+      kick: [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
+      hihat: [0,0,1,1, 0,0,1,1, 0,0,1,1, 0,0,1,1],
+      snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+      perc: [0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,0,0]
+    },
+    breakbeat: {
+      kick: [1,0,0,0, 0,0,1,0, 0,0,1,0, 0,0,0,0],
+      snare: [0,0,0,0, 1,0,0,1, 0,0,0,0, 1,0,0,0],
+      hihat: [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1],
+      perc: [0,0,1,0, 0,0,0,0, 0,1,0,0, 0,0,1,0]
+    },
+    dnb: {
+      kick: [1,0,0,0, 0,0,0,0, 0,0,1,0, 0,0,0,0],
+      snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+      hihat: [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
+      bass: [1,0,0,1, 0,0,0,0, 1,0,1,0, 0,0,0,1]
+    },
+    trap: {
+      kick: [1,0,0,0, 0,0,0,0, 1,1,0,0, 0,0,0,0],
+      snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+      hihat: [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1],
+      clap: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,1]
+    },
+    afro: {
+      kick: [1,0,0,1, 0,0,1,0, 0,0,1,0, 0,1,0,0],
+      snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+      hihat: [1,0,1,1, 0,1,1,0, 1,0,1,1, 0,1,1,0],
+      perc: [0,1,0,0, 1,0,0,1, 0,1,0,0, 1,0,0,1]
+    },
+    progressive: {
+      kick: [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
+      hihat: [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0],
+      perc: [0,0,0,1, 0,0,0,0, 0,0,0,1, 0,0,0,0],
+      bass: [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,1,0,0]
+    }
+  };
+
+  const basePattern = genreRules[genre] || genreRules.house;
+  const result = {};
+
+  Object.keys(basePattern).forEach(track => {
+    result[track] = basePattern[track].map((val, idx) => {
+      if (idx === 0) return 1;
+      const diceRoll = Math.random();
+      let shouldTrigger = val === 1 || (diceRoll < density * 0.3);
+      if (humanize > 0) {
+        shouldTrigger = diceRoll < (val ? 0.95 : density * 0.2);
+      }
+      return shouldTrigger ? 1 : 0;
+    });
+  });
+
+  return result;
+}
+
+function loadPattern(name, density = 0.6, humanize = 0) {
+  clearGrid();
+  let pat;
+  if (name === 'random') {
+    pat = {};
+    TRACKS.forEach(t => {
+      pat[t.key] = Array.from({length:STEPS}, () => Math.random() > (1 - density) ? 1 : 0);
+    });
+  } else if (Object.keys(generateGenrePattern(name)).length > 0) {
+    pat = generateGenrePattern(name, density, humanize);
+  } else {
+    pat = patterns[name];
+  }
+  if (!pat) return;
+
+  Object.keys(pat).forEach(k => {
+    if (grid[k]) {
+      const patternLen = pat[k].length;
+      for (let i = 0; i < STEPS; i++) {
+        const srcIdx = Math.floor((i / STEPS) * patternLen);
+        grid[k][i].active = !!pat[k][srcIdx];
+        if (pat[k][srcIdx]) {
+          grid[k][i].velocity = 1.0;
+          grid[k][i].pan = 0;
+        }
+      }
+    }
+  });
+  renderGrid();
+  pushUndoState('Load pattern: ' + name);
+}
+
+// === PHASE 6: PATTERN LIBRARY & PERSISTENCE ===
+function initDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => { db = req.result; resolve(); };
+    req.onupgradeneeded = (e) => {
+      const database = e.target.result;
+      if (!database.objectStoreNames.contains(STORE_NAME)) {
+        database.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+    };
+  });
+}
+
+function savePattern(name, genre = 'custom') {
+  if (!db) return Promise.reject('DB not initialized');
+
+  const pattern = {
+    id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+    name: name || 'Pattern_' + new Date().toLocaleTimeString(),
+    genre: genre,
+    bpm: bpm,
+    steps: STEPS,
+    swing: swingAmount,
+    grid: JSON.parse(JSON.stringify(grid)),
+    created: new Date().toISOString(),
+    lastModified: new Date().toISOString()
+  };
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([STORE_NAME], 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.add(pattern);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      currentPatternId = pattern.id;
+      loadPatternLibrary();
+
+      // Cloud Sync: upload to Firebase if enabled
+      if (syncEnabled && firebaseDb) {
+        syncPatternToCloud(pattern);
+      } else if (firebaseDb) {
+        addToPendingQueue(pattern);
+      }
+
+      resolve(pattern.id);
+    };
+  });
+}
+
+function loadPatternById(id) {
+  if (!db) return Promise.reject('DB not initialized');
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([STORE_NAME], 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.get(id);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const pattern = req.result;
+      if (!pattern) return reject('Pattern not found');
+
+      clearGrid();
+      STEPS = pattern.steps || 16;
+      stepLength = STEPS;
+      bpm = pattern.bpm || 125;
+      swingAmount = pattern.swing || 0;
+      grid = JSON.parse(JSON.stringify(pattern.grid));
+      currentPatternId = id;
+
+      document.getElementById('bpmSlider').value = bpm;
+      document.getElementById('bpmDisplay').textContent = bpm;
+      document.getElementById('stepLengthSelect').value = STEPS;
+      document.getElementById('swingSlider').value = swingAmount;
+      document.getElementById('swingDisplay').textContent = swingAmount + '%';
+
+      renderGrid();
+      pushUndoState('Load pattern: ' + pattern.name);
+      resolve(pattern);
+    };
+  });
+}
+
+function deletePattern(id) {
+  if (!db) return Promise.reject('DB not initialized');
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([STORE_NAME], 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.delete(id);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      if (currentPatternId === id) currentPatternId = null;
+      loadPatternLibrary();
+
+      // Cloud Sync: delete from Firebase if connected
+      if (firebaseDb && currentUserId) {
+        firebaseDb.collection('patterns').doc(id).delete().catch(err => {
+          console.error('Cloud delete error:', err);
+        });
+      }
+
+      resolve();
+    };
+  });
+}
+
+function loadPatternLibrary() {
+  if (!db) return;
+
+  return new Promise((resolve) => {
+    const tx = db.transaction([STORE_NAME], 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.getAll();
+    req.onsuccess = () => {
+      patternLibrary = req.result.sort((a, b) => new Date(b.created) - new Date(a.created));
+      resolve(patternLibrary);
+    };
+  });
+}
+
+// === PHASE 7: CLOUD SYNC ENGINE ===
+
+function initCloudSync(apiKey, projectId, authDomain) {
+  try {
+    const firebaseConfig = {
+      apiKey: apiKey,
+      projectId: projectId,
+      authDomain: authDomain || 'localhost',
+      storageBucket: projectId + '.appspot.com',
+      messagingSenderId: '0',
+      appId: '1:0:web:0'
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    firebaseAuth = firebase.auth();
+    firebaseDb = firebase.firestore();
+
+    firebaseAuth.signInAnonymously().then(cred => {
+      currentUserId = cred.user.uid;
+      updateSyncStatusBadge('synced');
+      loadPatternsFromCloud().catch(err => {
+        console.log('Initial cloud fetch failed:', err);
+      });
+    }).catch(err => {
+      console.error('Firebase auth error:', err);
+      firebaseDb = null;
+      updateSyncStatusBadge('offline');
+      return { success: false, error: err.message };
+    });
+
+    return { success: true };
+  } catch (err) {
+    console.error('Firebase initialization error:', err);
+    updateSyncStatusBadge('offline');
+    return { success: false, error: err.message };
+  }
+}
+
+function syncPatternToCloud(pattern) {
+  if (!firebaseDb || !currentUserId || isCurrentlySyncing) return;
+
+  isCurrentlySyncing = true;
+  updateSyncStatusBadge('syncing');
+
+  const cloudPattern = {
+    ...pattern,
+    userId: currentUserId,
+    lastModified: new Date().toISOString()
+  };
+
+  firebaseDb.collection('patterns').doc(pattern.id).set(cloudPattern, { merge: true })
+    .then(() => {
+      isCurrentlySyncing = false;
+      updateSyncStatusBadge('synced');
+      lastSyncTime = new Date();
+
+      const queueIndex = pendingSyncQueue.findIndex(p => p.id === pattern.id);
+      if (queueIndex !== -1) {
+        pendingSyncQueue.splice(queueIndex, 1);
+        savePendingSyncQueue();
+      }
+    })
+    .catch(err => {
+      isCurrentlySyncing = false;
+      console.error('Sync error:', err);
+
+      if (err.code === 'permission-denied') {
+        updateSyncStatusBadge('offline');
+        syncEnabled = false;
+      } else {
+        addToPendingQueue(pattern);
+        updateSyncStatusBadge('offline');
+      }
+    });
+}
+
+function loadPatternsFromCloud() {
+  if (!firebaseDb || !currentUserId) return Promise.reject('Not authenticated');
+
+  return firebaseDb.collection('patterns')
+    .where('userId', '==', currentUserId)
+    .get()
+    .then(snapshot => {
+      const cloudPatterns = [];
+      snapshot.forEach(doc => {
+        cloudPatterns.push(doc.data());
+      });
+
+      cloudPatterns.forEach(cloudPattern => {
+        const localPattern = patternLibrary.find(p => p.id === cloudPattern.id);
+        if (localPattern) {
+          const resolved = resolveConflict(localPattern, cloudPattern);
+          const idx = patternLibrary.findIndex(p => p.id === cloudPattern.id);
+          patternLibrary[idx] = resolved;
+        } else {
+          patternLibrary.push(cloudPattern);
+        }
+      });
+
+      patternLibrary.sort((a, b) => new Date(b.created) - new Date(a.created));
+      lastSyncTime = new Date();
+      updateSyncStatusBadge('synced');
+      renderPatternLibrary();
+      return cloudPatterns;
+    })
+    .catch(err => {
+      console.error('Cloud fetch error:', err);
+      throw err;
+    });
+}
+
+function resolveConflict(localPattern, remotePattern) {
+  const localTime = new Date(localPattern.lastModified || 0);
+  const remoteTime = new Date(remotePattern.lastModified || 0);
+
+  const resolved = remoteTime > localTime ? remotePattern : localPattern;
+
+  conflictLog.push({
+    patternId: localPattern.id,
+    localModified: localPattern.lastModified,
+    remoteModified: remotePattern.lastModified,
+    resolved: resolved.lastModified,
+    timestamp: new Date().toISOString()
+  });
+
+  return resolved;
+}
+
+function enableCloudSync(enabled) {
+  syncEnabled = enabled;
+  localStorage.setItem('cloudSyncEnabled', enabled ? 'true' : 'false');
+
+  if (enabled && firebaseDb) {
+    updateSyncStatusBadge('syncing');
+    syncPendingQueue();
+  } else {
+    updateSyncStatusBadge(enabled ? 'offline' : 'offline');
+  }
+
+  const toggle = document.getElementById('cloudSyncToggle');
+  if (toggle) toggle.textContent = enabled ? '☁️ Cloud Sync (ON)' : '☁️ Cloud Sync';
+}
+
+function syncPendingQueue() {
+  if (pendingSyncQueue.length === 0) {
+    updateSyncStatusBadge('synced');
+    return;
+  }
+
+  const itemsToSync = [...pendingSyncQueue];
+  updateSyncStatusBadge('syncing');
+
+  itemsToSync.forEach(pattern => {
+    syncPatternToCloud(pattern);
+  });
+}
+
+function addToPendingQueue(pattern) {
+  if (pendingSyncQueue.find(p => p.id === pattern.id)) return;
+
+  pendingSyncQueue.push(pattern);
+  if (pendingSyncQueue.length > 100) {
+    pendingSyncQueue.shift();
+  }
+  savePendingSyncQueue();
+}
+
+function savePendingSyncQueue() {
+  if (!db) return;
+
+  const tx = db.transaction([STORE_NAME], 'readwrite');
+  const store = tx.objectStore(STORE_NAME);
+
+  pendingSyncQueue.forEach(pattern => {
+    store.put(pattern);
+  });
+}
+
+function updateSyncStatusBadge(status) {
+  const badge = document.getElementById('syncStatusBadge');
+  if (!badge) return;
+
+  badge.style.display = 'inline-block';
+  badge.className = 'sync-badge ' + status;
+
+  const labels = {
+    synced: '✓ Synced',
+    syncing: '⏳ Syncing…',
+    offline: '✗ Offline',
+    conflict: '⚠️ Conflict'
+  };
+
+  const text = document.getElementById('syncStatusText');
+  if (text) text.textContent = labels[status] || 'Unknown';
+}
+
+function showCloudSyncSettings() {
+  const modal = document.getElementById('cloudSyncModal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeCloudSyncModal() {
+  const modal = document.getElementById('cloudSyncModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function testCloudConnection() {
+  const apiKey = document.getElementById('firebaseApiKey').value;
+  const projectId = document.getElementById('firebaseProjectId').value;
+  const authDomain = document.getElementById('firebaseAuthDomain').value;
+
+  if (!apiKey || !projectId) {
+    alert('Please enter API Key and Project ID');
+    return;
+  }
+
+  const result = initCloudSync(apiKey, projectId, authDomain);
+  if (result.success) {
+    localStorage.setItem('firebaseApiKey', apiKey);
+    localStorage.setItem('firebaseProjectId', projectId);
+    localStorage.setItem('firebaseAuthDomain', authDomain);
+    alert('Connection successful!');
+    closeCloudSyncModal();
+    enableCloudSync(true);
+  } else {
+    alert('Connection failed: ' + result.error);
+  }
+}
+
+function clearCloudCredentials() {
+  localStorage.removeItem('firebaseApiKey');
+  localStorage.removeItem('firebaseProjectId');
+  localStorage.removeItem('firebaseAuthDomain');
+  localStorage.removeItem('cloudSyncEnabled');
+  firebaseDb = null;
+  firebaseAuth = null;
+  syncEnabled = false;
+  currentUserId = null;
+  updateSyncStatusBadge('offline');
+  closeCloudSyncModal();
+  alert('Cloud Sync credentials cleared');
+}
+
+function exportPatternAsJSON(id) {
+  const pattern = patternLibrary.find(p => p.id === id);
+  if (!pattern) return null;
+
+  const json = JSON.stringify(pattern, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (pattern.name || 'pattern') + '_' + pattern.id.split('_')[0] + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportPatternAsMIDI(id) {
+  const pattern = patternLibrary.find(p => p.id === id);
+  if (!pattern) return null;
+
+  const note = 60;
+  const ticksPerBeat = 480;
+  const beatsPerStep = 1;
+  const ticksPerStep = ticksPerBeat * beatsPerStep;
+  let midiData = [];
+
+  TRACKS.forEach(track => {
+    let trackData = [];
+    for (let s = 0; s < pattern.grid[track.key].length; s++) {
+      const step = pattern.grid[track.key][s];
+      if (step.active) {
+        const time = s * ticksPerStep;
+        const velocity = Math.round(step.velocity * 127);
+        trackData.push({ time, note, velocity, duration: ticksPerStep - 10 });
+      }
+    }
+    midiData.push(trackData);
+  });
+
+  const midiBytes = generateMIDIFile(midiData, pattern.bpm, ticksPerBeat);
+  const blob = new Blob([new Uint8Array(midiBytes)], { type: 'audio/midi' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (pattern.name || 'pattern') + '.mid';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function generateMIDIFile(trackData, bpm, ticksPerBeat) {
+  const bytes = [];
+
+  const push = (arr) => bytes.push(...arr);
+  const varLen = (num) => {
+    const buf = [];
+    buf.unshift(num & 0x7F);
+    num >>>= 7;
+    while (num > 0) {
+      buf.unshift((num & 0x7F) | 0x80);
+      num >>>= 7;
+    }
+    return buf;
+  };
+
+  push([0x4D, 0x54, 0x68, 0x64]);
+  push([0x00, 0x00, 0x00, 0x06]);
+  push([0x00, 0x00]);
+  push([0x00, trackData.length]);
+  push([0x01, 0xE0]);
+
+  trackData.forEach(track => {
+    const trackBytes = [];
+    let currentTime = 0;
+
+    track.forEach(note => {
+      const deltaTime = note.time - currentTime;
+      trackBytes.push(...varLen(deltaTime));
+      trackBytes.push(0x90, note.note, note.velocity);
+
+      const noteOffTime = note.time + note.duration;
+      const noteDelta = note.duration;
+      trackBytes.push(...varLen(noteDelta));
+      trackBytes.push(0x80, note.note, 0x40);
+
+      currentTime = noteOffTime;
+    });
+
+    trackBytes.push(0x00, 0xFF, 0x2F, 0x00);
+
+    push([0x4D, 0x54, 0x72, 0x6B]);
+    const len = trackBytes.length;
+    push([(len >> 24) & 0xFF, (len >> 16) & 0xFF, (len >> 8) & 0xFF, len & 0xFF]);
+    push(trackBytes);
+  });
+
+  return bytes;
+}
+
+function importPatternJSON(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const pattern = JSON.parse(e.target.result);
+        pattern.id = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        pattern.lastModified = new Date().toISOString();
+
+        const tx = db.transaction([STORE_NAME], 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.add(pattern);
+        req.onsuccess = () => {
+          loadPatternLibrary();
+          resolve(pattern.id);
+        };
+        req.onerror = () => reject(req.error);
+      } catch (err) {
+        reject('Invalid JSON file');
+      }
+    };
+    reader.onerror = () => reject('File read error');
+    reader.readAsText(file);
+  });
+}
+
+function pushUndoState(label = 'Edit') {
+  const state = {
+    label: label,
+    grid: JSON.parse(JSON.stringify(grid)),
+    bpm: bpm,
+    steps: STEPS,
+    swing: swingAmount,
+    timestamp: Date.now()
+  };
+
+  undoStack.push(state);
+  redoStack = [];
+
+  if (undoStack.length > MAX_UNDO_DEPTH) {
+    undoStack.shift();
+  }
+}
+
+function undo() {
+  if (undoStack.length === 0) return;
+
+  const currentState = {
+    label: 'Redo',
+    grid: JSON.parse(JSON.stringify(grid)),
+    bpm: bpm,
+    steps: STEPS,
+    swing: swingAmount,
+    timestamp: Date.now()
+  };
+  redoStack.push(currentState);
+
+  const prevState = undoStack.pop();
+  grid = JSON.parse(JSON.stringify(prevState.grid));
+  bpm = prevState.bpm;
+  STEPS = prevState.steps;
+  stepLength = STEPS;
+  swingAmount = prevState.swing;
+
+  document.getElementById('bpmSlider').value = bpm;
+  document.getElementById('bpmDisplay').textContent = bpm;
+  document.getElementById('stepLengthSelect').value = STEPS;
+  document.getElementById('swingSlider').value = swingAmount;
+  document.getElementById('swingDisplay').textContent = swingAmount + '%';
+
+  renderGrid();
+}
+
+function redo() {
+  if (redoStack.length === 0) return;
+
+  const currentState = {
+    label: 'Undo',
+    grid: JSON.parse(JSON.stringify(grid)),
+    bpm: bpm,
+    steps: STEPS,
+    swing: swingAmount,
+    timestamp: Date.now()
+  };
+  undoStack.push(currentState);
+
+  const nextState = redoStack.pop();
+  grid = JSON.parse(JSON.stringify(nextState.grid));
+  bpm = nextState.bpm;
+  STEPS = nextState.steps;
+  stepLength = STEPS;
+  swingAmount = nextState.swing;
+
+  document.getElementById('bpmSlider').value = bpm;
+  document.getElementById('bpmDisplay').textContent = bpm;
+  document.getElementById('stepLengthSelect').value = STEPS;
+  document.getElementById('swingSlider').value = swingAmount;
+  document.getElementById('swingDisplay').textContent = swingAmount + '%';
+
+  renderGrid();
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+    e.preventDefault();
+    undo();
+  } else if ((e.ctrlKey || e.metaKey) && (e.key === 'Z' || (e.shiftKey && e.key === 'z'))) {
+    e.preventDefault();
+    redo();
+  }
+});
+
+function saveCurrentPattern() {
+  const name = document.getElementById('patternNameInput').value || 'Pattern_' + new Date().toLocaleTimeString();
+  savePattern(name).then(() => {
+    document.getElementById('patternNameInput').value = '';
+    renderPatternLibrary();
+  }).catch(err => alert('Save failed: ' + err));
+}
+
+function showLoadPatternMenu() {
+  renderPatternLibrary();
+  const list = document.getElementById('patternLibraryList');
+  list.scrollIntoView({behavior: 'smooth'});
+}
+
+function renderPatternLibrary() {
+  const list = document.getElementById('patternLibraryList');
+  if (patternLibrary.length === 0) {
+    list.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-dim)">No saved patterns yet</div>';
+    return;
+  }
+
+  list.innerHTML = patternLibrary.map(p => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid var(--border);hover:background:var(--bg-card-hover)">
+      <div style="flex:1;cursor:pointer" onclick="loadPatternById('${p.id}')">
+        <div style="color:var(--cyan);font-weight:600">${p.name}</div>
+        <div style="color:var(--text-dim);font-size:9px">${p.genre} • ${p.bpm}BPM • ${new Date(p.created).toLocaleDateString()}</div>
+      </div>
+      <div style="display:flex;gap:4px">
+        <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px" onclick="exportPatternAsJSON('${p.id}')">JSON</button>
+        <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px" onclick="exportPatternAsMIDI('${p.id}')">MIDI</button>
+        <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px;background:var(--red)" onclick="deletePattern('${p.id}').then(() => renderPatternLibrary())">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function exportCurrentAsJSON() {
+  if (!currentPatternId) {
+    alert('Save current pattern first');
+    return;
+  }
+  exportPatternAsJSON(currentPatternId);
+}
+
+function exportCurrentAsMIDI() {
+  if (!currentPatternId) {
+    alert('Save current pattern first');
+    return;
+  }
+  exportPatternAsMIDI(currentPatternId);
+}
+
+function handleImport(file) {
+  if (!file) return;
+  importPatternJSON(file).then(() => {
+    renderPatternLibrary();
+    document.getElementById('importFile').value = '';
+  }).catch(err => alert('Import failed: ' + err));
+}
+
+// === VISUALIZER ===
+let vizAnimId = null;
+function initViz() {
+  const canvas = document.getElementById('vizCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth * 2;
+  canvas.height = canvas.offsetHeight * 2;
+  ctx.scale(2, 2);
+  const w = canvas.offsetWidth, h = canvas.offsetHeight;
+  let time = 0;
+
+  function draw() {
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.fillRect(0, 0, w, h);
+    time += 0.02;
+
+    // Waveform bars
+    const bars = 64;
+    const barW = w / bars;
+    for (let i = 0; i < bars; i++) {
+      const val = Math.sin(time * 2 + i * 0.3) * 0.3 + Math.sin(time * 3.7 + i * 0.15) * 0.2 + 0.5;
+      const barH = val * h * 0.7;
+      const hue = (i / bars * 180 + time * 30) % 360;
+      ctx.fillStyle = `hsla(${hue}, 100%, 60%, 0.7)`;
+      ctx.fillRect(i * barW + 1, h - barH, barW - 2, barH);
+    }
+
+    // Center pulse
+    const pulseR = 30 + Math.sin(time * 4) * 15;
+    const grad = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, pulseR);
+    grad.addColorStop(0, 'rgba(0,240,255,0.4)');
+    grad.addColorStop(1, 'rgba(0,240,255,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(w/2, h/2, pulseR, 0, Math.PI * 2);
+    ctx.fill();
+
+    vizAnimId = requestAnimationFrame(draw);
+  }
+  if (vizAnimId) cancelAnimationFrame(vizAnimId);
+  draw();
+}
+
+let beatVizAnimId = null;
+function initBeatViz() {
+  const canvas = document.getElementById('beatVizCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth * 2;
+  canvas.height = canvas.offsetHeight * 2;
+  ctx.scale(2, 2);
+  const w = canvas.offsetWidth, h = canvas.offsetHeight;
+
+  function draw() {
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(0, 0, w, h);
+
+    if (isPlaying && currentStep >= 0) {
+      // Step indicator bars
+      const stepW = w / STEPS;
+      ctx.fillStyle = 'rgba(0,240,255,0.1)';
+      ctx.fillRect(currentStep * stepW, 0, stepW, h);
+
+      // Active tracks visualization
+      TRACKS.forEach((t, ti) => {
+        if (grid[t.key][currentStep].active) {
+          const colors = { kick:'#00f0ff', snare:'#ff00aa', hihat:'#aaff00', clap:'#ff8800', perc:'#8844ff', bass:'#4488ff', fx:'#ff3355', shaker:'#ffcc00' };
+          const y = (ti / TRACKS.length) * h + h / TRACKS.length / 2;
+          const x = (currentStep / STEPS) * w + stepW / 2;
+          const r = 8 + Math.random() * 12;
+
+          ctx.beginPath();
+          ctx.arc(x, y, r, 0, Math.PI * 2);
+          ctx.fillStyle = colors[t.key] || '#fff';
+          ctx.globalAlpha = 0.6;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      });
+
+      // Scanline
+      const sx = (currentStep / STEPS) * w + stepW / 2;
+      ctx.strokeStyle = 'rgba(0,240,255,0.3)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(sx, 0);
+      ctx.lineTo(sx, h);
+      ctx.stroke();
+    }
+    beatVizAnimId = requestAnimationFrame(draw);
+  }
+  if (beatVizAnimId) cancelAnimationFrame(beatVizAnimId);
+  draw();
+}
+
+// === ARCHITECTURE MODULES ===
+function renderArchModules() {
+  const container = document.getElementById('archModules');
+  features.forEach(f => {
+    container.innerHTML += `
+      <div class="arch-node">
+        <div class="an-icon">${f.icon}</div>
+        <div class="an-label">${f.title}</div>
+      </div>`;
+  });
+}
+
+// === INIT ===
+initGrid();
+renderGrid();
+renderFeatureGrid('overview-grid', true);
+renderFeatureGrid('features-grid', false);
+renderArchModules();
+pushUndoState('Initial state');
+setTimeout(initViz, 100);
+
+// Initialize IndexedDB for pattern persistence
+initDB().then(() => {
+  loadPatternLibrary().then(() => {
+    renderPatternLibrary();
+  });
+
+  // Cloud Sync: load saved credentials if available
+  const savedApiKey = localStorage.getItem('firebaseApiKey');
+  const savedProjectId = localStorage.getItem('firebaseProjectId');
+  const savedAuthDomain = localStorage.getItem('firebaseAuthDomain');
+  const wasSyncEnabled = localStorage.getItem('cloudSyncEnabled') === 'true';
+
+  if (savedApiKey && savedProjectId) {
+    initCloudSync(savedApiKey, savedProjectId, savedAuthDomain).then(result => {
+      if (result.success && wasSyncEnabled) {
+        setTimeout(() => enableCloudSync(true), 500);
+      }
+    }).catch(err => {
+      console.log('Cloud Sync initialization failed:', err);
+    });
+  }
+}).catch(err => console.log('Pattern library unavailable:', err));
+</script>
+
+<!-- Cloud Sync Settings Modal -->
+<div id="cloudSyncModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(5px)">
+  <div style="background:var(--bg-card);border:1px solid var(--border);padding:24px;border-radius:12px;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.5)">
+    <h2 style="color:var(--cyan);margin-bottom:16px;font-size:18px">☁️ Cloud Sync Settings</h2>
+    <p style="color:var(--text-secondary);font-size:12px;margin-bottom:16px">Enable multi-device pattern synchronization via Firebase Firestore. No signup required!</p>
+
+    <div style="margin-bottom:12px">
+      <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:4px">API Key (from Firebase Console)</label>
+      <input id="firebaseApiKey" type="password" placeholder="Your Firebase API Key" style="width:100%;padding:8px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;font-size:11px;font-family:monospace">
+    </div>
+
+    <div style="margin-bottom:12px">
+      <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:4px">Project ID</label>
+      <input id="firebaseProjectId" type="text" placeholder="Your Firebase Project ID" style="width:100%;padding:8px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;font-size:11px">
+    </div>
+
+    <div style="margin-bottom:16px">
+      <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:4px">Auth Domain (optional)</label>
+      <input id="firebaseAuthDomain" type="text" placeholder="e.g., yourproject.firebaseapp.com" style="width:100%;padding:8px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;font-size:11px">
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="ai-pat-btn" onclick="testCloudConnection()" style="flex:1;padding:8px">🔗 Test Connection</button>
+      <button class="ai-pat-btn" onclick="closeCloudSyncModal()" style="flex:1;padding:8px">✕ Cancel</button>
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <button class="ai-pat-btn" onclick="clearCloudCredentials()" style="flex:1;padding:8px;background:rgba(255,51,85,0.1);border-color:var(--red);color:var(--red)">🗑️ Clear Credentials</button>
+    </div>
+
+    <p style="color:var(--text-dim);font-size:10px;margin-top:16px;line-height:1.4">Need help? Create a free Firebase project at firebase.google.com and enable Firestore Database + Anonymous Auth.</p>
+  </div>
+</div>
+
+</body>
+</html>
