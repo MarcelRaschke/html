@@ -1147,6 +1147,22 @@ let effectsParams = {
 let anthropicApiKey = null;
 let aiPatternGeneration = false;
 
+// Phase 13: MIDI Controller Support
+let midiAccess = null;
+let midiInputs = [];
+let midiEnabled = false;
+let midiStatus = { connected: false, lastMessage: null };
+let midiMapping = {
+  pads: {}, // MIDI note → {track, step}
+  knobs: {
+    bpm: 14,      // CC# for BPM (14 = Mod Wheel on many controllers)
+    swing: 15,    // CC# for Swing
+    volume: 7,    // CC# for Master Volume
+    compressor: 16, // CC# for Compressor
+    reverb: 17    // CC# for Reverb Mix
+  }
+};
+
 function setStepLength(len) {
   const newLen = parseInt(len);
   if (newLen === STEPS) return;
@@ -1593,6 +1609,125 @@ function updateAIStatus(state, message) {
   statusEl.style.display = 'block';
   statusEl.className = `ai-status-${state}`;
   statusEl.style.color = state === 'error' ? 'var(--red)' : state === 'success' ? 'var(--lime)' : 'var(--text-secondary)';
+}
+
+// Phase 13: MIDI Controller Integration
+async function initMIDI() {
+  if (!navigator.requestMIDIAccess) {
+    updateMIDIStatus('MIDI API not supported in this browser');
+    return null;
+  }
+
+  try {
+    const access = await navigator.requestMIDIAccess();
+    midiAccess = access;
+    midiInputs = Array.from(access.inputs.values());
+
+    if (midiInputs.length === 0) {
+      updateMIDIStatus('No MIDI devices found');
+      return;
+    }
+
+    midiInputs.forEach(input => {
+      input.onmidimessage = handleMIDIMessage;
+    });
+
+    midiEnabled = true;
+    midiStatus.connected = true;
+    updateMIDIStatus(`✓ Connected: ${midiInputs.length} device(s)`);
+    return access;
+  } catch (err) {
+    updateMIDIStatus(`MIDI access denied: ${err.message}`);
+    midiEnabled = false;
+    return null;
+  }
+}
+
+function handleMIDIMessage(event) {
+  const [status, data1, data2] = event.data;
+  const command = status & 0xF0;
+  const channel = status & 0x0F;
+
+  // Note On (0x90)
+  if (command === 0x90) {
+    const velocity = data2 / 127;
+    handleMIDIPad(data1, velocity);
+  }
+  // Control Change (0xB0)
+  else if (command === 0xB0) {
+    const cc = data1;
+    const value = data2 / 127;
+    handleMIDIKnob(cc, value);
+  }
+
+  midiStatus.lastMessage = new Date().toLocaleTimeString();
+}
+
+function handleMIDIPad(note, velocity) {
+  // Standard 16-pad layout: C1 (36) to G#2 (51)
+  if (note < 36 || note > 51) return;
+
+  const padIndex = note - 36;
+  const trackIndex = Math.floor(padIndex / 4); // 4 pads per track
+  const stepIndex = padIndex % 4; // Map to step 0-3 (can be extended)
+
+  if (trackIndex >= TRACKS.length) return;
+  const trackKey = TRACKS[trackIndex].key;
+
+  // Toggle step or trigger sound
+  const step = grid[trackKey][stepIndex];
+  if (step) {
+    step.active = !step.active;
+    if (step.active) {
+      step.velocity = velocity;
+      playSound(trackKey, velocity, 0);
+    }
+    renderGrid();
+  }
+}
+
+function handleMIDIKnob(cc, value) {
+  // Map CC# to parameters
+  switch (cc) {
+    case midiMapping.knobs.bpm:
+      const newBPM = Math.round(40 + value * 200); // 40-240 BPM
+      setBPM(newBPM);
+      break;
+    case midiMapping.knobs.swing:
+      const newSwing = Math.round(value * 100);
+      setSwing(newSwing);
+      break;
+    case midiMapping.knobs.volume:
+      if (globalMasterGain) {
+        globalMasterGain.gain.setValueAtTime(value, audioCtx.currentTime);
+      }
+      break;
+    case midiMapping.knobs.compressor:
+      updateCompressor(-40 + value * 40, 4); // Threshold -40 to 0
+      break;
+    case midiMapping.knobs.reverb:
+      updateReverb(value); // Mix 0-1
+      break;
+  }
+}
+
+function toggleMIDI() {
+  if (midiEnabled) {
+    midiEnabled = false;
+    midiStatus.connected = false;
+    updateMIDIStatus('MIDI disabled');
+  } else {
+    initMIDI();
+  }
+}
+
+function updateMIDIStatus(message) {
+  const statusEl = document.getElementById('midiStatus');
+  if (statusEl) {
+    statusEl.textContent = message;
+    statusEl.style.color = message.includes('✓') ? 'var(--lime)' : message.includes('denied') ? 'var(--red)' : 'var(--text-secondary)';
+  }
+  console.log(`MIDI: ${message}`);
 }
 
 // Noise buffer for synthesis
@@ -2068,107 +2203,6 @@ function bypassEffect(effect) {
     const controls = document.getElementById('reverbControls');
     checkbox.checked = effectsChain.reverb.enabled;
     controls.style.display = effectsChain.reverb.enabled ? 'block' : 'none';
-  }
-}
-
-// === PHASE 8: MIDI CONTROLLER SUPPORT ===
-async function initMIDI() {
-  if (!navigator.requestMIDIAccess) {
-    updateMIDIStatus('❌ Web MIDI API not supported in this browser');
-    return null;
-  }
-
-  try {
-    const access = await navigator.requestMIDIAccess();
-    const inputs = access.inputs.values();
-
-    let count = 0;
-    for (let input of inputs) {
-      input.onmidimessage = handleMIDIMessage;
-      count++;
-    }
-
-    midiEnabled = true;
-    document.getElementById('midiEnabled').checked = true;
-    updateMIDIStatus(count > 0 ? `✓ Connected: ${count} device(s)` : '⚠️ No MIDI devices found');
-    return access;
-  } catch (err) {
-    console.error('MIDI access error:', err);
-    updateMIDIStatus('❌ MIDI access denied');
-    return null;
-  }
-}
-
-function handleMIDIMessage(event) {
-  const [status, data1, data2] = event.data;
-  const command = status & 0xF0;
-
-  if (command === 0x90) {
-    const velocity = data2 / 127;
-    handlePadPress(data1, velocity);
-  } else if (command === 0xB0) {
-    const value = data2 / 127;
-    handleCC(data1, value);
-  }
-}
-
-function handlePadPress(note, velocity) {
-  // Map MIDI note to grid step: C1 (36) to G#2 (51) = 16 pads
-  if (note < 36 || note > 51) return;
-
-  const stepIndex = note - 36;
-  if (stepIndex >= STEPS) return;
-
-  // Determine which track to edit (cycle through TRACKS based on selected or use kick)
-  const trackIndex = 0; // Default to kick; can be enhanced with track selection UI
-  const track = TRACKS[trackIndex];
-
-  // Toggle step and set velocity
-  grid[track.key][stepIndex].active = !grid[track.key][stepIndex].active;
-  if (grid[track.key][stepIndex].active) {
-    grid[track.key][stepIndex].velocity = Math.max(0.1, velocity);
-  }
-
-  renderGrid();
-}
-
-function handleCC(cc, value) {
-  // Map MIDI CC# to parameters
-  switch (cc) {
-    case 1: // Modulation = BPM
-      setBPM(Math.round(60 + value * 120));
-      break;
-    case 2: // Breath = Swing
-      setSwing(Math.round(value * 100));
-      break;
-    case 7: // Channel Volume = Master volume
-      if (effectsNodes.compressor) {
-        updateCompressor(-24 + value * 24, 4);
-      }
-      break;
-    case 11: // Expression = Delay Mix
-      if (effectsNodes.delay) {
-        updateDelay(0.5, 0.4, value);
-      }
-      break;
-    default:
-      break;
-  }
-}
-
-function updateMIDIStatus(message) {
-  const statusEl = document.getElementById('midiStatus');
-  if (statusEl) {
-    statusEl.textContent = message;
-  }
-}
-
-function toggleMIDI() {
-  if (midiEnabled) {
-    midiEnabled = false;
-    updateMIDIStatus('MIDI disabled');
-  } else {
-    initMIDI();
   }
 }
 
@@ -3924,6 +3958,47 @@ function toggleVideoExportVisualizer(analyzer) {
   </button>
 </div>
 
+<!-- Phase 13: MIDI Controller Panel -->
+<div id="midiPanel" style="position:fixed;bottom:20px;left:820px;width:340px;background:var(--bg-card);border:1px solid rgba(136,119,255,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:70vh;overflow-y:auto;display:none">
+  <div style="font-size:13px;font-weight:600;color:var(--purple);margin-bottom:12px">🎮 MIDI Controller</div>
+
+  <!-- MIDI Status -->
+  <div style="margin-bottom:12px;padding:10px;background:var(--bg-secondary);border-radius:6px;border-left:3px solid var(--purple)">
+    <div id="midiStatus" style="font-size:10px;color:var(--text-secondary)">Initializing MIDI...</div>
+  </div>
+
+  <!-- Control Toggle -->
+  <button onclick="toggleMIDI()" style="width:100%;padding:10px;background:rgba(136,119,255,0.1);border:1px solid var(--purple);color:var(--purple);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;transition:all 0.2s;margin-bottom:12px">
+    🎛️ Enable MIDI Input
+  </button>
+
+  <!-- Pad Mapping Info -->
+  <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+    <div style="font-size:11px;font-weight:600;color:var(--text-primary);margin-bottom:8px">📍 Pad Layout</div>
+    <div style="font-size:10px;color:var(--text-secondary);line-height:1.6">
+      <div>• C1-D#2 (36-51): 16-pad grid</div>
+      <div>• 4 pads per track, left-to-right</div>
+      <div>• Velocity controls note volume</div>
+    </div>
+  </div>
+
+  <!-- Knob Mapping Info -->
+  <div style="margin-bottom:12px">
+    <div style="font-size:11px;font-weight:600;color:var(--text-primary);margin-bottom:8px">🎚️ Default Knob Map</div>
+    <div style="font-size:10px;color:var(--text-secondary);line-height:1.6">
+      <div>• CC#14 (Mod Wheel): BPM</div>
+      <div>• CC#15: Swing</div>
+      <div>• CC#7 (Volume): Master</div>
+      <div>• CC#16 (GP1): Compressor</div>
+      <div>• CC#17 (GP2): Reverb Mix</div>
+    </div>
+  </div>
+
+  <button onclick="document.getElementById('midiPanel').style.display='none'" style="width:100%;padding:8px;background:rgba(136,119,255,0.1);border:1px solid var(--purple);color:var(--purple);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">
+    ✕ Close
+  </button>
+</div>
+
 <!-- Phase 9: AI Remix Generator Panel -->
 <div id="remixPanel" style="position:fixed;bottom:20px;right:20px;width:350px;background:var(--bg-card);border:1px solid rgba(0,240,255,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:70vh;overflow-y:auto;display:none">
   <div style="font-size:13px;font-weight:600;color:var(--cyan);margin-bottom:12px">🎚️ AI Remix Generator</div>
@@ -4183,6 +4258,49 @@ document.addEventListener('DOMContentLoaded', () => {
     effectsToggleBtn.style.boxShadow = '0 0 20px rgba(170,255,0,0.2)';
   };
   document.body.appendChild(effectsToggleBtn);
+
+  // MIDI Controller toggle button (Phase 13)
+  const midiToggleBtn = document.createElement('button');
+  midiToggleBtn.id = 'midiToggleBtn';
+  midiToggleBtn.textContent = '🎮';
+  midiToggleBtn.title = 'MIDI Controller (Phase 13)';
+  midiToggleBtn.onclick = () => {
+    const panel = document.getElementById('midiPanel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  };
+  midiToggleBtn.style.cssText = `
+    position: fixed;
+    bottom: 200px;
+    left: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(136,119,255,0.2), rgba(136,119,255,0.1));
+    border: 2px solid var(--purple);
+    color: var(--purple);
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    z-index: 899;
+    box-shadow: 0 0 20px rgba(136,119,255,0.2);
+  `;
+  midiToggleBtn.onmouseover = () => {
+    midiToggleBtn.style.transform = 'scale(1.1)';
+    midiToggleBtn.style.boxShadow = '0 0 30px rgba(136,119,255,0.4)';
+  };
+  midiToggleBtn.onmouseout = () => {
+    midiToggleBtn.style.transform = 'scale(1)';
+    midiToggleBtn.style.boxShadow = '0 0 20px rgba(136,119,255,0.2)';
+  };
+  document.body.appendChild(midiToggleBtn);
+
+  // Initialize MIDI support
+  if (navigator.requestMIDIAccess) {
+    initMIDI().catch(err => console.log('MIDI not available:', err));
+  }
 
   // Initialize remix presets
   initRemixPresets();
