@@ -1265,7 +1265,19 @@ let aiMixing = {
   frequencyBalance: { bass: 0, mids: 0, treble: 0 },
   recommendations: [],
   autoApplyEnabled: false,
-  analysisHistory: []
+  analysisHistory: [],
+  // Phase 17b: Parametric EQ
+  eqVisualizationEnabled: false,
+  parametricEQPresets: {
+    flat: { name: 'Flat', gains: [0,0,0,0,0,0,0,0,0,0] },
+    bassBoost: { name: 'Bass Boost', gains: [3,2,1,0,0,0,0,0,0,0] },
+    trebleBoost: { name: 'Treble Boost', gains: [0,0,0,0,0,0,1,2,3,4] },
+    warmth: { name: 'Warm', gains: [2,1.5,1,0.5,-0.5,-1,-1,0,0,0] },
+    bright: { name: 'Bright', gains: [-1,-0.5,0,0.5,1,1.5,1.5,1,0.5,0] },
+    dancefloor: { name: 'Dance', gains: [3,2,0,-1,-0.5,0,0.5,1,2,3] }
+  },
+  currentPresetName: 'flat',
+  eqNodes: []
 };
 
 let midiAccess = null;
@@ -1805,6 +1817,7 @@ function togglePlay() {
     if (!noiseBuffer) noiseBuffer = createNoiseBuffer();
     initVoicePool();
     initBeatViz();
+    initParametricEQ();
   }
   isPlaying = !isPlaying;
   const btn = document.getElementById('playBtn');
@@ -2511,6 +2524,152 @@ function toggleAutoApply() {
   aiMixing.autoApplyEnabled = !aiMixing.autoApplyEnabled;
   const checkbox = document.getElementById('autoApplyToggle');
   if (checkbox) checkbox.checked = aiMixing.autoApplyEnabled;
+}
+
+// Phase 17b: Parametric EQ Visualization & Control
+function initParametricEQ() {
+  if (!audioCtx || aiMixing.eqNodes.length > 0) return;
+
+  // Create 10 peaking filters for parametric EQ
+  for (let i = 0; i < aiMixing.frequencyBands.length; i++) {
+    const band = aiMixing.frequencyBands[i];
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'peaking';
+    filter.frequency.value = band.freq;
+    filter.Q.value = 1.0; // Moderate Q for musical EQ
+    filter.gain.value = band.gain;
+
+    aiMixing.eqNodes.push(filter);
+  }
+
+  // Connect filters in series if not already connected
+  if (globalMasterGain) {
+    // Insert EQ nodes after the initial effects but before the main chain
+    // For now, they're standalone - connection will be managed by toggling
+    console.log(`Parametric EQ initialized with ${aiMixing.eqNodes.length} bands`);
+  }
+}
+
+function setParametricEQGain(bandIndex, gain) {
+  if (bandIndex < 0 || bandIndex >= aiMixing.frequencyBands.length) return;
+
+  aiMixing.frequencyBands[bandIndex].gain = parseFloat(gain);
+
+  // Update the filter node if it exists
+  if (aiMixing.eqNodes[bandIndex]) {
+    aiMixing.eqNodes[bandIndex].gain.setTargetAtTime(parseFloat(gain), audioCtx.currentTime, 0.01);
+  }
+
+  // Redraw EQ visualization if enabled
+  if (aiMixing.eqVisualizationEnabled) {
+    drawParametricEQ();
+  }
+}
+
+function loadEQPreset(presetName) {
+  const preset = aiMixing.parametricEQPresets[presetName];
+  if (!preset) return;
+
+  aiMixing.currentPresetName = presetName;
+
+  // Apply gains from preset
+  for (let i = 0; i < preset.gains.length && i < aiMixing.frequencyBands.length; i++) {
+    setParametricEQGain(i, preset.gains[i]);
+  }
+
+  // Update dropdown if exists
+  const dropdown = document.getElementById('eqPresetDropdown');
+  if (dropdown) dropdown.value = presetName;
+}
+
+function toggleEQVisualization() {
+  aiMixing.eqVisualizationEnabled = !aiMixing.eqVisualizationEnabled;
+  const checkbox = document.getElementById('eqVisualizationToggle');
+  if (checkbox) checkbox.checked = aiMixing.eqVisualizationEnabled;
+
+  const canvas = document.getElementById('parametricEQCanvas');
+  if (canvas) canvas.style.display = aiMixing.eqVisualizationEnabled ? 'block' : 'none';
+
+  if (aiMixing.eqVisualizationEnabled) {
+    drawParametricEQ();
+  }
+}
+
+function drawParametricEQ() {
+  const canvas = document.getElementById('parametricEQCanvas');
+  if (!canvas || !aiMixing.eqVisualizationEnabled) return;
+
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+
+  // Background
+  ctx.fillStyle = 'rgba(10, 20, 40, 0.9)';
+  ctx.fillRect(0, 0, width, height);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(0, 240, 255, 0.1)';
+  ctx.lineWidth = 1;
+  const gridSpacing = width / 10;
+  for (let i = 0; i <= 10; i++) {
+    ctx.beginPath();
+    ctx.moveTo(i * gridSpacing, 0);
+    ctx.lineTo(i * gridSpacing, height);
+    ctx.stroke();
+  }
+
+  // Center line (0dB)
+  ctx.strokeStyle = 'rgba(0, 240, 255, 0.3)';
+  ctx.beginPath();
+  ctx.moveTo(0, height / 2);
+  ctx.lineTo(width, height / 2);
+  ctx.stroke();
+
+  // Draw EQ curve
+  ctx.strokeStyle = 'rgba(0, 240, 255, 0.8)';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+
+  const bands = aiMixing.frequencyBands;
+  const minFreq = Math.log10(20);
+  const maxFreq = Math.log10(20000);
+
+  for (let i = 0; i < bands.length; i++) {
+    const band = bands[i];
+    const x = ((Math.log10(band.freq) - minFreq) / (maxFreq - minFreq)) * width;
+    const y = height / 2 - (band.gain / 12) * (height / 2);
+
+    if (i === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  }
+  ctx.stroke();
+
+  // Draw band points and labels
+  for (let i = 0; i < bands.length; i++) {
+    const band = bands[i];
+    const x = ((Math.log10(band.freq) - minFreq) / (maxFreq - minFreq)) * width;
+    const y = height / 2 - (band.gain / 12) * (height / 2);
+
+    // Point circle
+    const hue = band.gain > 0 ? 120 : band.gain < 0 ? 0 : 60;
+    ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Label
+    ctx.fillStyle = 'rgba(0, 240, 255, 0.8)';
+    ctx.font = '8px monospace';
+    const freqLabel = band.freq < 1000 ? band.freq + 'Hz' : (band.freq / 1000).toFixed(1) + 'k';
+    ctx.fillText(freqLabel, x - 15, y - 12);
+
+    // Gain value
+    ctx.fillStyle = band.gain > 0 ? 'rgba(100, 255, 100, 0.8)' : band.gain < 0 ? 'rgba(255, 100, 100, 0.8)' : 'rgba(200, 200, 200, 0.6)';
+    ctx.fillText(band.gain.toFixed(1) + 'dB', x - 12, y + 10);
+  }
 }
 
 function updateAIMixingDisplay() {
@@ -5427,10 +5586,42 @@ function toggleVideoExportVisualizer(analyzer) {
   </div>
 
   <!-- Recommendations List -->
-  <div style="margin-bottom:14px">
+  <div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)">
     <div style="font-size:10px;font-weight:600;color:var(--text-primary);margin-bottom:8px">Recommendations</div>
-    <div id="recommendationsList" style="display:flex;flex-direction:column;gap:6px;font-size:10px;max-height:160px;overflow-y:auto">
+    <div id="recommendationsList" style="display:flex;flex-direction:column;gap:6px;font-size:10px;max-height:120px;overflow-y:auto">
       <div style="color:var(--text-secondary);font-style:italic">Run analysis while playing</div>
+    </div>
+  </div>
+
+  <!-- Parametric EQ Section -->
+  <div style="margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="eqVisualizationToggle" onchange="toggleEQVisualization()" style="width:14px;height:14px">
+        <span style="font-size:10px;font-weight:600;color:var(--text-primary)">Parametric EQ</span>
+      </label>
+    </div>
+
+    <!-- EQ Canvas -->
+    <canvas id="parametricEQCanvas" width="340" height="80" style="width:100%;background:rgba(10,20,40,0.6);border-radius:4px;border:1px solid rgba(255,136,68,0.2);margin-bottom:8px;display:none"></canvas>
+
+    <!-- EQ Preset Selector -->
+    <select id="eqPresetDropdown" onchange="loadEQPreset(this.value)" style="width:100%;padding:6px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;font-size:10px;margin-bottom:8px">
+      <option value="flat">Flat</option>
+      <option value="bassBoost">Bass Boost</option>
+      <option value="trebleBoost">Treble Boost</option>
+      <option value="warmth">Warm</option>
+      <option value="bright">Bright</option>
+      <option value="dancefloor">Dance Floor</option>
+    </select>
+
+    <!-- Band Sliders (compact) -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;font-size:9px">
+      <div><label style="display:block;color:var(--text-dim);text-align:center;margin-bottom:2px">60Hz</label><input type="range" min="-12" max="12" value="0" onchange="setParametricEQGain(0, this.value)" style="width:100%;height:16px"></div>
+      <div><label style="display:block;color:var(--text-dim);text-align:center;margin-bottom:2px">250Hz</label><input type="range" min="-12" max="12" value="0" onchange="setParametricEQGain(2, this.value)" style="width:100%;height:16px"></div>
+      <div><label style="display:block;color:var(--text-dim);text-align:center;margin-bottom:2px">1kHz</label><input type="range" min="-12" max="12" value="0" onchange="setParametricEQGain(4, this.value)" style="width:100%;height:16px"></div>
+      <div><label style="display:block;color:var(--text-dim);text-align:center;margin-bottom:2px">4kHz</label><input type="range" min="-12" max="12" value="0" onchange="setParametricEQGain(6, this.value)" style="width:100%;height:16px"></div>
+      <div><label style="display:block;color:var(--text-dim);text-align:center;margin-bottom:2px">16kHz</label><input type="range" min="-12" max="12" value="0" onchange="setParametricEQGain(9, this.value)" style="width:100%;height:16px"></div>
     </div>
   </div>
 
