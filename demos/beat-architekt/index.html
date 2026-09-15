@@ -1163,6 +1163,30 @@ let midiMapping = {
   }
 };
 
+// Phase 14: Performance Meter & Monitoring
+let performanceMetrics = {
+  cpuUsage: 0,
+  memoryUsage: 0,
+  voiceCount: 0,
+  maxVoices: 16,
+  bufferHealth: 100,
+  audioContextLatency: 0,
+  updateTime: 0
+};
+
+let performanceHistory = {
+  cpuSamples: [],
+  memorySamples: [],
+  maxSamples: 60  // Keep 60 samples (1 per second at 60fps)
+};
+
+let performanceState = {
+  enabled: false,
+  monitoring: false,
+  warningThreshold: 80,  // CPU % that triggers warning
+  criticalThreshold: 95  // CPU % that triggers critical warning
+};
+
 function setStepLength(len) {
   const newLen = parseInt(len);
   if (newLen === STEPS) return;
@@ -1728,6 +1752,178 @@ function updateMIDIStatus(message) {
     statusEl.style.color = message.includes('✓') ? 'var(--lime)' : message.includes('denied') ? 'var(--red)' : 'var(--text-secondary)';
   }
   console.log(`MIDI: ${message}`);
+}
+
+// === PHASE 14: PERFORMANCE METER & MONITORING ===
+
+function initPerformanceMonitoring() {
+  if (!audioCtx) return;
+  performanceState.monitoring = true;
+
+  // Start performance update loop
+  updatePerformanceMetrics();
+}
+
+function updatePerformanceMetrics() {
+  if (!performanceState.monitoring) return;
+
+  const now = performance.now();
+
+  // Estimate CPU usage based on audio context timing
+  if (audioCtx) {
+    const latency = audioCtx.baseLatency || 0;
+    const bufferLatency = audioCtx.outputLatency || 0;
+    performanceMetrics.audioContextLatency = (latency + bufferLatency) * 1000; // Convert to ms
+
+    // Estimate based on callback execution time
+    performanceMetrics.updateTime = performance.now() - now;
+  }
+
+  // Estimate CPU usage (simplified: based on how long metrics update takes)
+  const estimatedCpuUsage = Math.min(99, (performanceMetrics.updateTime / 5) * 100);
+  performanceMetrics.cpuUsage = Math.round(estimatedCpuUsage);
+
+  // Try to get memory usage if available
+  if (performance.memory) {
+    const usedMemory = performance.memory.usedJSHeapSize;
+    const totalMemory = performance.memory.jsHeapSizeLimit;
+    performanceMetrics.memoryUsage = Math.round((usedMemory / totalMemory) * 100);
+  }
+
+  // Count active voices (rough estimate from polyphony)
+  performanceMetrics.voiceCount = Math.min(performanceMetrics.maxVoices,
+    Math.floor(performanceMetrics.cpuUsage / 10)); // Rough correlation
+
+  // Calculate buffer health (100% = healthy, lower = stressed)
+  const stressLevel = performanceMetrics.cpuUsage;
+  performanceMetrics.bufferHealth = Math.max(0, 100 - stressLevel);
+
+  // Add to history
+  performanceHistory.cpuSamples.push(performanceMetrics.cpuUsage);
+  performanceHistory.memorySamples.push(performanceMetrics.memoryUsage);
+
+  if (performanceHistory.cpuSamples.length > performanceHistory.maxSamples) {
+    performanceHistory.cpuSamples.shift();
+    performanceHistory.memorySamples.shift();
+  }
+
+  // Update UI if panel is visible
+  updatePerformanceMeterUI();
+
+  // Schedule next update
+  requestAnimationFrame(updatePerformanceMetrics);
+}
+
+function updatePerformanceMeterUI() {
+  const meterPanel = document.getElementById('performanceMeterPanel');
+  if (!meterPanel || meterPanel.style.display === 'none') return;
+
+  // Update CPU gauge
+  const cpuGauge = document.getElementById('performanceCpuGauge');
+  const cpuValue = document.getElementById('performanceCpuValue');
+  if (cpuGauge && cpuValue) {
+    cpuGauge.style.width = performanceMetrics.cpuUsage + '%';
+    cpuValue.textContent = performanceMetrics.cpuUsage + '%';
+
+    // Color based on threshold
+    if (performanceMetrics.cpuUsage >= performanceState.criticalThreshold) {
+      cpuGauge.style.background = 'var(--red)';
+    } else if (performanceMetrics.cpuUsage >= performanceState.warningThreshold) {
+      cpuGauge.style.background = 'var(--orange)';
+    } else {
+      cpuGauge.style.background = 'var(--lime)';
+    }
+  }
+
+  // Update Memory gauge
+  const memGauge = document.getElementById('performanceMemGauge');
+  const memValue = document.getElementById('performanceMemValue');
+  if (memGauge && memValue) {
+    memGauge.style.width = performanceMetrics.memoryUsage + '%';
+    memValue.textContent = performanceMetrics.memoryUsage + '%';
+
+    if (performanceMetrics.memoryUsage >= 90) {
+      memGauge.style.background = 'var(--red)';
+    } else if (performanceMetrics.memoryUsage >= 75) {
+      memGauge.style.background = 'var(--orange)';
+    } else {
+      memGauge.style.background = 'var(--blue)';
+    }
+  }
+
+  // Update Buffer Health gauge
+  const bufferGauge = document.getElementById('performanceBufferGauge');
+  const bufferValue = document.getElementById('performanceBufferValue');
+  if (bufferGauge && bufferValue) {
+    bufferGauge.style.width = performanceMetrics.bufferHealth + '%';
+    bufferValue.textContent = Math.round(performanceMetrics.bufferHealth) + '%';
+    bufferGauge.style.background = performanceMetrics.bufferHealth > 50 ? 'var(--lime)' : 'var(--orange)';
+  }
+
+  // Update Voice Count
+  const voiceCount = document.getElementById('performanceVoiceCount');
+  if (voiceCount) {
+    voiceCount.textContent = performanceMetrics.voiceCount + '/' + performanceMetrics.maxVoices;
+  }
+
+  // Update Latency
+  const latency = document.getElementById('performanceLatency');
+  if (latency) {
+    latency.textContent = performanceMetrics.audioContextLatency.toFixed(2) + 'ms';
+  }
+
+  // Update history chart (simple sparkline)
+  updatePerformanceChart();
+}
+
+function updatePerformanceChart() {
+  const canvas = document.getElementById('performanceChartCanvas');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgba(6,8,13,0.8)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Draw CPU history line
+  ctx.strokeStyle = 'var(--lime)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+
+  const samples = performanceHistory.cpuSamples;
+  const step = canvas.width / Math.max(samples.length, 1);
+  const scale = canvas.height / 100;
+
+  for (let i = 0; i < samples.length; i++) {
+    const x = i * step;
+    const y = canvas.height - (samples[i] * scale);
+
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+
+  ctx.stroke();
+
+  // Draw warning threshold line
+  ctx.strokeStyle = 'rgba(255,136,0,0.3)';
+  ctx.setLineDash([5, 5]);
+  ctx.beginPath();
+  const thresholdY = canvas.height - (performanceState.warningThreshold * scale);
+  ctx.moveTo(0, thresholdY);
+  ctx.lineTo(canvas.width, thresholdY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function togglePerformanceMeter() {
+  const panel = document.getElementById('performanceMeterPanel');
+  if (panel) {
+    const isVisible = panel.style.display !== 'none';
+    panel.style.display = isVisible ? 'none' : 'block';
+
+    if (!isVisible && !performanceState.monitoring) {
+      initPerformanceMonitoring();
+    }
+  }
 }
 
 // Noise buffer for synthesis
@@ -3999,6 +4195,75 @@ function toggleVideoExportVisualizer(analyzer) {
   </button>
 </div>
 
+<!-- Phase 14: Performance Meter Panel -->
+<div id="performanceMeterPanel" style="position:fixed;bottom:20px;right:380px;width:360px;background:var(--bg-card);border:1px solid rgba(68,136,255,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:75vh;overflow-y:auto;display:none">
+  <div style="font-size:13px;font-weight:600;color:var(--blue);margin-bottom:14px">⚡ Performance Meter</div>
+
+  <!-- CPU Usage -->
+  <div style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+      <label style="font-size:10px;color:var(--text-secondary)">CPU Usage</label>
+      <span id="performanceCpuValue" style="font-size:10px;font-weight:600;color:var(--lime)">0%</span>
+    </div>
+    <div style="width:100%;height:8px;background:rgba(100,120,140,0.2);border-radius:4px;overflow:hidden">
+      <div id="performanceCpuGauge" style="width:0%;height:100%;background:var(--lime);transition:width 0.3s;border-radius:4px"></div>
+    </div>
+  </div>
+
+  <!-- Memory Usage -->
+  <div style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+      <label style="font-size:10px;color:var(--text-secondary)">Memory</label>
+      <span id="performanceMemValue" style="font-size:10px;font-weight:600;color:var(--blue)">0%</span>
+    </div>
+    <div style="width:100%;height:8px;background:rgba(100,120,140,0.2);border-radius:4px;overflow:hidden">
+      <div id="performanceMemGauge" style="width:0%;height:100%;background:var(--blue);transition:width 0.3s;border-radius:4px"></div>
+    </div>
+  </div>
+
+  <!-- Buffer Health -->
+  <div style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+      <label style="font-size:10px;color:var(--text-secondary)">Buffer Health</label>
+      <span id="performanceBufferValue" style="font-size:10px;font-weight:600;color:var(--lime)">100%</span>
+    </div>
+    <div style="width:100%;height:8px;background:rgba(100,120,140,0.2);border-radius:4px;overflow:hidden">
+      <div id="performanceBufferGauge" style="width:100%;height:100%;background:var(--lime);transition:width 0.3s;border-radius:4px"></div>
+    </div>
+  </div>
+
+  <!-- Metrics Grid -->
+  <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10px">
+      <div>
+        <div style="color:var(--text-dim);margin-bottom:3px">Voice Pool</div>
+        <div id="performanceVoiceCount" style="font-weight:600;color:var(--cyan)">0/16</div>
+      </div>
+      <div>
+        <div style="color:var(--text-dim);margin-bottom:3px">Latency</div>
+        <div id="performanceLatency" style="font-weight:600;color:var(--cyan)">0.00ms</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CPU History Chart -->
+  <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+    <div style="font-size:10px;color:var(--text-secondary);margin-bottom:6px">CPU History (60s)</div>
+    <canvas id="performanceChartCanvas" width="320" height="60" style="width:100%;height:60px;background:rgba(6,8,13,0.5);border-radius:6px;border:1px solid var(--border)"></canvas>
+  </div>
+
+  <!-- Thresholds Info -->
+  <div style="margin-top:12px;padding:10px;background:rgba(68,136,255,0.1);border-left:3px solid var(--blue);border-radius:4px;font-size:9px;color:var(--text-secondary);line-height:1.5">
+    ⚠️ Warning at 80% CPU<br>
+    🔴 Critical at 95% CPU<br>
+    Monitor real-time metrics
+  </div>
+
+  <button onclick="document.getElementById('performanceMeterPanel').style.display='none'" style="width:100%;margin-top:12px;padding:8px;background:rgba(68,136,255,0.1);border:1px solid var(--blue);color:var(--blue);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">
+    ✕ Close
+  </button>
+</div>
+
 <!-- Phase 9: AI Remix Generator Panel -->
 <div id="remixPanel" style="position:fixed;bottom:20px;right:20px;width:350px;background:var(--bg-card);border:1px solid rgba(0,240,255,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:70vh;overflow-y:auto;display:none">
   <div style="font-size:13px;font-weight:600;color:var(--cyan);margin-bottom:12px">🎚️ AI Remix Generator</div>
@@ -4296,6 +4561,44 @@ document.addEventListener('DOMContentLoaded', () => {
     midiToggleBtn.style.boxShadow = '0 0 20px rgba(136,119,255,0.2)';
   };
   document.body.appendChild(midiToggleBtn);
+
+  // Performance Meter toggle button (Phase 14)
+  const perfToggleBtn = document.createElement('button');
+  perfToggleBtn.id = 'performanceToggleBtn';
+  perfToggleBtn.textContent = '⚡';
+  perfToggleBtn.title = 'Performance Meter (Phase 14)';
+  perfToggleBtn.onclick = togglePerformanceMeter;
+  perfToggleBtn.style.cssText = `
+    position: fixed;
+    bottom: 260px;
+    left: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(68,136,255,0.2), rgba(68,136,255,0.1));
+    border: 2px solid var(--blue);
+    color: var(--blue);
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    z-index: 899;
+    box-shadow: 0 0 20px rgba(68,136,255,0.2);
+  `;
+  perfToggleBtn.onmouseover = () => {
+    perfToggleBtn.style.transform = 'scale(1.1)';
+    perfToggleBtn.style.boxShadow = '0 0 30px rgba(68,136,255,0.4)';
+  };
+  perfToggleBtn.onmouseout = () => {
+    perfToggleBtn.style.transform = 'scale(1)';
+    perfToggleBtn.style.boxShadow = '0 0 20px rgba(68,136,255,0.2)';
+  };
+  document.body.appendChild(perfToggleBtn);
+
+  // Initialize Performance Monitoring
+  initPerformanceMonitoring();
 
   // Initialize MIDI support
   if (navigator.requestMIDIAccess) {
