@@ -1366,6 +1366,70 @@ function isEventAlreadyScheduled(stepTime) {
   return schedulingState.scheduledEvents.has(key);
 }
 
+// Phase 15d: Rendering Optimization
+// Dirty flag system and incremental DOM updates
+let renderState = {
+  dirtyGrid: new Set(), // Track changed cells: "track:step"
+  dirtySteps: new Set(), // Track changed step numbers
+  gridCells: new Map(), // Cache cell DOM references: "track:step" → DOM element
+  lastRenderTime: 0,
+  batchUpdateMs: 16, // Batch updates every ~1 frame
+  isScheduledForUpdate: false
+};
+
+function markGridDirty(track, step) {
+  // Mark a cell as changed (dirty)
+  renderState.dirtyGrid.add(`${track}:${step}`);
+  scheduleRenderUpdate();
+}
+
+function markStepDirty(step) {
+  // Mark step number as changed
+  renderState.dirtySteps.add(step);
+  scheduleRenderUpdate();
+}
+
+function scheduleRenderUpdate() {
+  // Batch render updates to avoid thrashing on each change
+  if (renderState.isScheduledForUpdate) return;
+
+  renderState.isScheduledForUpdate = true;
+  requestAnimationFrame(() => {
+    applyDirtyCells();
+    renderState.isScheduledForUpdate = false;
+  });
+}
+
+function applyDirtyCells() {
+  // Only update cells marked as dirty (incremental rendering)
+  if (renderState.dirtyGrid.size === 0) return;
+
+  for (const key of renderState.dirtyGrid) {
+    const [track, step] = key.split(':');
+    const stepNum = parseInt(step);
+    const stepData = grid[track]?.[stepNum];
+
+    if (!stepData) continue;
+
+    // Get or create cell DOM element
+    const cellKey = `${track}:${stepNum}`;
+    let cell = renderState.gridCells.get(cellKey);
+
+    if (cell) {
+      // Update existing cell
+      cell.classList.toggle('active', stepData.active);
+      cell.style.opacity = stepData.active ? Math.max(0.3, stepData.velocity) : '0.1';
+    }
+  }
+
+  renderState.dirtyGrid.clear();
+}
+
+function cacheGridCell(track, step, element) {
+  // Cache DOM references for efficient updates
+  renderState.gridCells.set(`${track}:${step}`, element);
+}
+
 function setStepLength(len) {
   const newLen = parseInt(len);
   if (newLen === STEPS) return;
@@ -1446,41 +1510,67 @@ function initGrid() {
   });
 }
 
-function renderGrid() {
-  // Step numbers
-  const stepNums = document.getElementById('stepNumbers');
-  stepNums.innerHTML = '<div class="ba-label" style="height:20px"></div>';
-  const beatInterval = STEPS <= 8 ? 2 : (STEPS <= 12 ? 3 : 4);
-  for (let s = 0; s < STEPS; s++) {
-    const isBeat = s % beatInterval === 0;
-    stepNums.innerHTML += `<div class="ba-step-num ${isBeat ? 'beat' : ''}">${s + 1}</div>`;
+function renderGrid(forceFullRender = false) {
+  // Phase 15d: Incremental rendering with dirty flag system
+  const beatGrid = document.getElementById('beatGrid');
+
+  if (forceFullRender || renderState.gridCells.size === 0) {
+    // Full render only on initial setup or forced update
+    beatGrid.innerHTML = '';
+    renderState.gridCells.clear();
+    renderState.dirtyGrid.clear();
+
+    // Batch create all cells using DocumentFragment (single reflow)
+    const fragment = document.createDocumentFragment();
+
+    TRACKS.forEach(t => {
+      const label = document.createElement('div');
+      label.className = 'ba-label';
+      label.textContent = t.name;
+      fragment.appendChild(label);
+
+      for (let s = 0; s < STEPS; s++) {
+        const step = grid[t.key][s];
+        const cell = document.createElement('div');
+        cell.className = `ba-cell ${t.key} ${step.active ? 'active' : ''}`;
+        cell.dataset.track = t.key;
+        cell.dataset.step = s;
+        cell.style.opacity = step.active ? Math.max(0.3, step.velocity) : '0.1';
+        cell.onclick = () => toggleCell(t.key, s, cell);
+        cell.oncontextmenu = (e) => showStepMenu(e, t.key, s);
+        fragment.appendChild(cell);
+
+        // Cache cell reference for future incremental updates
+        cacheGridCell(t.key, s, cell);
+      }
+    });
+
+    beatGrid.appendChild(fragment);
+  } else {
+    // Phase 15d: Incremental update - only modified cells
+    applyDirtyCells();
   }
 
-  // Grid
-  const beatGrid = document.getElementById('beatGrid');
-  beatGrid.innerHTML = '';
-  TRACKS.forEach(t => {
-    const label = document.createElement('div');
-    label.className = 'ba-label';
-    label.textContent = t.name;
-    beatGrid.appendChild(label);
+  // Step numbers
+  const stepNums = document.getElementById('stepNumbers');
+  if (forceFullRender || renderState.dirtySteps.size === 0) {
+    // Rebuild step numbers only if needed
+    stepNums.innerHTML = '<div class="ba-label" style="height:20px"></div>';
+    const beatInterval = STEPS <= 8 ? 2 : (STEPS <= 12 ? 3 : 4);
     for (let s = 0; s < STEPS; s++) {
-      const step = grid[t.key][s];
-      const cell = document.createElement('div');
-      cell.className = `ba-cell ${t.key} ${step.active ? 'active' : ''}`;
-      cell.dataset.track = t.key;
-      cell.dataset.step = s;
-      cell.style.opacity = step.active ? Math.max(0.3, step.velocity) : '0.1';
-      cell.onclick = () => toggleCell(t.key, s, cell);
-      cell.oncontextmenu = (e) => showStepMenu(e, t.key, s);
-      beatGrid.appendChild(cell);
+      const isBeat = s % beatInterval === 0;
+      stepNums.innerHTML += `<div class="ba-step-num ${isBeat ? 'beat' : ''}">${s + 1}</div>`;
     }
-  });
+  }
+  renderState.dirtySteps.clear();
 }
 
 function toggleCell(track, step, cell) {
   grid[track][step].active = !grid[track][step].active;
-  cell.classList.toggle('active');
+
+  // Phase 15d: Use dirty flag system for batched updates
+  markGridDirty(track, step);
+
   if (grid[track][step].active && audioCtx) {
     playSound(track, grid[track][step].velocity, grid[track][step].pan);
   }
@@ -2017,6 +2107,10 @@ function updatePerformanceMetrics() {
   performanceMetrics.lookaheadMs = (calculateAdaptiveLookahead() * 1000).toFixed(1);
   performanceMetrics.scheduledEventsCount = schedulingState.scheduledEvents.size;
 
+  // Phase 15d: Track rendering optimization metrics
+  performanceMetrics.dirtyGridCount = renderState.dirtyGrid.size;
+  performanceMetrics.cacheHitCount = renderState.gridCells.size; // Cells cached for incremental updates
+
   // Add to history
   performanceHistory.cpuSamples.push(performanceMetrics.cpuUsage);
   performanceHistory.memorySamples.push(performanceMetrics.memoryUsage);
@@ -2120,6 +2214,24 @@ function updatePerformanceMeterUI() {
   const lookahead = document.getElementById('performanceLookahead');
   if (lookahead) {
     lookahead.textContent = performanceMetrics.lookaheadMs + 'ms';
+  }
+
+  // Phase 15d: Update Rendering Optimization Metrics
+  const dirtyCells = document.getElementById('performanceDirtyCells');
+  if (dirtyCells) {
+    dirtyCells.textContent = performanceMetrics.dirtyGridCount || 0;
+    // Color based on dirt ratio
+    const dirtyRatio = (performanceMetrics.dirtyGridCount || 0) / (performanceMetrics.cacheHitCount || 1);
+    if (dirtyRatio > 0.5) {
+      dirtyCells.style.color = 'var(--orange)'; // Many cells dirty
+    } else {
+      dirtyCells.style.color = 'var(--lime)'; // Few cells dirty
+    }
+  }
+
+  const cellCache = document.getElementById('performanceCellCache');
+  if (cellCache) {
+    cellCache.textContent = performanceMetrics.cacheHitCount || 0;
   }
 
   // Update history chart (simple sparkline)
@@ -4523,6 +4635,20 @@ function toggleVideoExportVisualizer(analyzer) {
       <div>
         <div style="color:var(--text-dim);margin-bottom:3px">Lookahead</div>
         <div id="performanceLookahead" style="font-weight:600;color:var(--blue)">100ms</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 15d: Rendering Optimization Metrics -->
+  <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10px">
+      <div>
+        <div style="color:var(--text-dim);margin-bottom:3px">Dirty Cells</div>
+        <div id="performanceDirtyCells" style="font-weight:600;color:var(--magenta)">0</div>
+      </div>
+      <div>
+        <div style="color:var(--text-dim);margin-bottom:3px">Cell Cache</div>
+        <div id="performanceCellCache" style="font-weight:600;color:var(--magenta)">0</div>
       </div>
     </div>
   </div>
