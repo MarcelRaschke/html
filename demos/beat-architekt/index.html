@@ -2499,6 +2499,189 @@ class GrainCloud {
   }
 }
 
+// === PHASE 22a: TRANSIENT DETECTION ENGINE ===
+
+class TransientDetector {
+  constructor(audioBuffer, sampleRate = 44100) {
+    this.buffer = audioBuffer;
+    this.sampleRate = sampleRate;
+    this.hopSize = 512; // 50ms at 44.1kHz
+    this.fftSize = 2048;
+    this.onsets = [];
+    this.spectralFlux = [];
+    this.energyEnvelope = [];
+  }
+
+  analyzeSpectralFlux() {
+    const offlineCtx = new OfflineAudioContext(this.buffer.numberOfChannels, this.buffer.length, this.sampleRate);
+    const analyser = offlineCtx.createAnalyser();
+    analyser.fftSize = this.fftSize;
+    analyser.smoothingTimeConstant = 0.8;
+
+    const buffSource = offlineCtx.createBufferSource();
+    buffSource.buffer = this.buffer;
+    buffSource.connect(analyser);
+    analyser.connect(offlineCtx.destination);
+
+    buffSource.start(0);
+
+    const spectrumBins = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(spectrumBins);
+    const numHops = Math.floor(this.buffer.duration * this.sampleRate / this.hopSize);
+
+    let prevMagnitudes = new Float32Array(spectrumBins);
+
+    for (let hop = 0; hop < numHops; hop++) {
+      const time = (hop * this.hopSize) / this.sampleRate;
+
+      // Simulate FFT at this time by analyzing spectrum
+      analyser.getByteFrequencyData(dataArray);
+
+      let flux = 0;
+      for (let i = 0; i < spectrumBins; i++) {
+        const mag = dataArray[i] / 255;
+        const diff = Math.max(0, mag - prevMagnitudes[i]);
+        flux += diff;
+        prevMagnitudes[i] = mag;
+      }
+
+      this.spectralFlux.push({time, flux: flux / spectrumBins});
+    }
+
+    return this.spectralFlux;
+  }
+
+  analyzeEnergyPeaks() {
+    const channels = this.buffer.getChannelData(0); // Mono analysis
+    const numHops = Math.floor(this.buffer.duration * this.sampleRate / this.hopSize);
+
+    for (let hop = 0; hop < numHops; hop++) {
+      const startSample = hop * this.hopSize;
+      const endSample = Math.min(startSample + this.hopSize, channels.length);
+
+      let rms = 0;
+      for (let i = startSample; i < endSample; i++) {
+        rms += channels[i] * channels[i];
+      }
+      rms = Math.sqrt(rms / this.hopSize);
+
+      const time = startSample / this.sampleRate;
+      this.energyEnvelope.push({time, energy: rms});
+    }
+
+    return this.energyEnvelope;
+  }
+
+  findOnsets(fluxThreshold = 0.3, energyThreshold = 0.05) {
+    if (this.spectralFlux.length === 0) this.analyzeSpectralFlux();
+    if (this.energyEnvelope.length === 0) this.analyzeEnergyPeaks();
+
+    const onsets = [];
+
+    for (let i = 1; i < this.spectralFlux.length - 1; i++) {
+      const flux = this.spectralFlux[i].flux;
+      const energy = this.energyEnvelope[i].energy;
+      const time = this.spectralFlux[i].time;
+
+      // Peak detection: flux peaks above neighbors
+      const isPeakFlux = flux > this.spectralFlux[i - 1].flux && flux > this.spectralFlux[i + 1].flux;
+      const isAboveFluxThreshold = flux > fluxThreshold;
+      const isAboveEnergyThreshold = energy > energyThreshold;
+
+      if (isPeakFlux && isAboveFluxThreshold && isAboveEnergyThreshold) {
+        const confidence = Math.min(1, (flux / fluxThreshold) * (energy / energyThreshold) / 2);
+        onsets.push({time, flux, energy, confidence, strength: confidence});
+      }
+    }
+
+    // Post-process: remove duplicates within 50ms
+    const filteredOnsets = [];
+    let lastOnsetTime = -Infinity;
+
+    onsets.forEach(onset => {
+      if (onset.time - lastOnsetTime > 0.05) {
+        filteredOnsets.push(onset);
+        lastOnsetTime = onset.time;
+      }
+    });
+
+    this.onsets = filteredOnsets;
+    return filteredOnsets;
+  }
+
+  scoreConfidence() {
+    return this.onsets.map(onset => ({
+      ...onset,
+      confidence: onset.confidence || 0.5
+    }));
+  }
+}
+
+// Phase 22a: Helper function to visualize onset strength
+function visualizeOnsetStrength(canvas, onsets, duration) {
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+
+  // Clear canvas
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(0, 0, width, height);
+
+  // Draw grid background
+  ctx.strokeStyle = '#333333';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = (i / 4) * height;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+    ctx.stroke();
+  }
+
+  // Draw onset strength bars
+  if (onsets.length > 0) {
+    const pixelsPerSecond = width / duration;
+
+    onsets.forEach(onset => {
+      const x = (onset.time / duration) * width;
+      const barHeight = onset.strength * height;
+
+      ctx.fillStyle = `rgba(${Math.floor(onset.confidence * 255)}, 100, 255, 0.7)`;
+      ctx.fillRect(Math.max(0, x - 1), height - barHeight, 2, barHeight);
+    });
+  }
+
+  // Draw border
+  ctx.strokeStyle = '#00ccff';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(0, 0, width, height);
+}
+
+// Phase 22a: Create slices from detected onsets
+function detectSlicesFromOnsets(onsets, audioBuffer) {
+  const slices = [];
+  const sampleRate = audioBuffer.sampleRate;
+
+  for (let i = 0; i < onsets.length; i++) {
+    const startTime = onsets[i].time;
+    const endTime = i < onsets.length - 1 ? onsets[i + 1].time : audioBuffer.duration;
+
+    // Add 50ms decay time to slice endpoint
+    const decayTime = Math.min(0.05, (endTime - startTime) * 0.1);
+
+    slices.push({
+      id: `slice_${i}`,
+      startMs: startTime * 1000,
+      endMs: (endTime + decayTime) * 1000,
+      label: `Slice ${i + 1}`,
+      confidence: onsets[i].confidence,
+      isAutoDetected: true
+    });
+  }
+
+  return slices;
+}
+
 // === PHASE 20c: AUTOMATION VISUALIZATION & PERFORMANCE DASHBOARD ===
 
 class AutomationCurveVisualizer {
@@ -8389,6 +8572,132 @@ function toggleLoopRecordingPanel() {
   }
 }
 
+// === PHASE 22a: SLICE DETECTOR FUNCTIONS ===
+
+let transientDetector = null;
+let lastDetectedSlices = [];
+
+function initSliceDetector() {
+  const sampleSelect = document.getElementById('sliceDetectorSampleSelect');
+  const sensitivitySlider = document.getElementById('sliceDetectorSensitivity');
+
+  // Populate sample selector
+  if (sampleLibrary) {
+    const samples = sampleLibrary.listSamples();
+    samples.forEach(sample => {
+      const option = document.createElement('option');
+      option.value = sample.id;
+      option.textContent = sample.name + ` (${sample.duration.toFixed(1)}s)`;
+      sampleSelect.appendChild(option);
+    });
+  }
+
+  // Sensitivity slider
+  sensitivitySlider.oninput = (e) => {
+    document.getElementById('sliceDetectorSensitivityLabel').textContent = e.target.value;
+  };
+}
+
+async function autoDetectSlices() {
+  const sampleSelect = document.getElementById('sliceDetectorSampleSelect');
+  const sensitivitySlider = document.getElementById('sliceDetectorSensitivity');
+  const sampleId = sampleSelect.value;
+  const sensitivity = parseFloat(sensitivitySlider.value);
+
+  if (!sampleId) {
+    showToast('❌ Please select a sample');
+    return;
+  }
+
+  if (!sampleLibrary) return;
+
+  const sample = sampleLibrary.getSample(sampleId);
+  if (!sample || !sample.buffer) {
+    showToast('❌ Sample not found');
+    return;
+  }
+
+  // Show loading status
+  document.getElementById('sliceOnsetLoadingStatus').textContent = 'Analyzing...';
+  document.getElementById('sliceOnsetCanvas').style.display = 'none';
+
+  try {
+    transientDetector = new TransientDetector(sample.buffer, audioCtx.sampleRate);
+    transientDetector.analyzeSpectralFlux();
+    transientDetector.analyzeEnergyPeaks();
+    lastDetectedSlices = transientDetector.findOnsets(sensitivity, 0.05);
+
+    // Visualize
+    const canvas = document.getElementById('sliceOnsetCanvas');
+    canvas.style.display = 'block';
+    visualizeOnsetStrength(canvas, lastDetectedSlices, sample.duration);
+
+    // Update slice list
+    updateSliceList();
+
+    // Update statistics
+    if (lastDetectedSlices.length > 0) {
+      const avgConfidence = lastDetectedSlices.reduce((a, b) => a + b.confidence, 0) / lastDetectedSlices.length;
+      document.getElementById('sliceStats').style.display = 'block';
+      document.getElementById('sliceTotalCount').textContent = lastDetectedSlices.length;
+      document.getElementById('sliceAvgConfidence').textContent = avgConfidence.toFixed(2);
+    }
+
+    document.getElementById('sliceOnsetLoadingStatus').textContent = `✅ Found ${lastDetectedSlices.length} onsets`;
+    showToast(`✅ Found ${lastDetectedSlices.length} onset points`);
+  } catch (err) {
+    console.error('Slice detection error:', err);
+    showToast(`❌ Detection failed: ${err.message}`);
+    document.getElementById('sliceOnsetLoadingStatus').textContent = '❌ Analysis failed';
+  }
+}
+
+function updateSliceList() {
+  const sliceList = document.getElementById('sliceList');
+
+  if (lastDetectedSlices.length === 0) {
+    sliceList.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:20px">No slices detected</div>';
+    return;
+  }
+
+  sliceList.innerHTML = lastDetectedSlices.map((slice, idx) => `
+    <div style="padding:6px;border-bottom:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-weight:600;color:#ff9966">${slice.id}</div>
+        <div style="font-size:8px;color:var(--text-dim)">${(slice.time * 1000).toFixed(0)}ms — ${((slice.time + 0.1) * 1000).toFixed(0)}ms</div>
+        <div style="font-size:8px;color:var(--text-dim)">Confidence: ${(slice.confidence * 100).toFixed(0)}%</div>
+      </div>
+      <button onclick="auditSlice('${slice.id}')" style="padding:4px 8px;background:rgba(255,150,100,0.2);border:1px solid rgba(255,150,100,0.4);border-radius:3px;color:#ff9966;font-size:9px;cursor:pointer">▶</button>
+    </div>
+  `).join('');
+}
+
+function auditSlice(sliceId) {
+  const slice = lastDetectedSlices.find(s => s.id === sliceId);
+  if (!slice) return;
+
+  const sampleSelect = document.getElementById('sliceDetectorSampleSelect');
+  const sampleId = sampleSelect.value;
+  if (!sampleLibrary) return;
+
+  const sample = sampleLibrary.getSample(sampleId);
+  if (!sample || !sample.buffer) return;
+
+  // Extract slice region and play
+  const startSample = Math.floor(slice.time * audioCtx.sampleRate);
+  const endSample = Math.floor((slice.time + 0.15) * audioCtx.sampleRate);
+  const sliceDuration = (endSample - startSample) / audioCtx.sampleRate;
+
+  const source = audioCtx.createBufferSource();
+  source.buffer = sample.buffer;
+  const gain = audioCtx.createGain();
+  gain.connect(audioCtx.destination);
+  source.connect(gain);
+
+  source.start(audioCtx.currentTime, slice.time, sliceDuration);
+  source.stop(audioCtx.currentTime + sliceDuration);
+}
+
 // === PHASE 21c: SAMPLE PLAYBACK FUNCTIONS ===
 
 let activeSamplePlayers = new Map();
@@ -9487,6 +9796,54 @@ function startRecordingLevelAnimation() {
   </button>
 </div>
 
+<!-- Phase 22a: Slice Detector Panel -->
+<div id="sliceDetectorPanel" style="position:fixed;bottom:20px;right:800px;width:420px;background:var(--bg-card);border:1px solid rgba(255,150,100,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:70vh;overflow-y:auto;display:none">
+  <div style="font-size:13px;font-weight:600;color:#ff9966;margin-bottom:12px">🔪 Slice Detector</div>
+
+  <!-- Sample Selector -->
+  <div style="margin-bottom:12px">
+    <div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-bottom:4px">Select Sample</div>
+    <select id="sliceDetectorSampleSelect" style="width:100%;padding:6px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:11px">
+      <option value="">-- Choose sample --</option>
+    </select>
+  </div>
+
+  <!-- Sensitivity Control -->
+  <div style="margin-bottom:12px">
+    <div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-bottom:4px">Onset Sensitivity (0.01-0.5)</div>
+    <input type="range" id="sliceDetectorSensitivity" min="0.01" max="0.5" step="0.02" value="0.3" style="width:100%;cursor:pointer">
+    <div style="font-size:9px;color:var(--text-dim);margin-top:2px">Value: <span id="sliceDetectorSensitivityLabel">0.3</span></div>
+  </div>
+
+  <!-- Onset Strength Visualization -->
+  <div style="margin-bottom:12px">
+    <div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-bottom:4px">Onset Strength Waveform</div>
+    <canvas id="sliceOnsetCanvas" width="380" height="60" style="width:100%;height:60px;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:4px;display:none"></canvas>
+    <div id="sliceOnsetLoadingStatus" style="font-size:10px;color:var(--text-dim);text-align:center;padding:10px">Select a sample to analyze</div>
+  </div>
+
+  <!-- Auto-Detect Button -->
+  <button onclick="autoDetectSlices()" style="width:100%;padding:8px;background:rgba(255,150,100,0.2);border:1px solid rgba(255,150,100,0.5);border-radius:6px;color:#ff9966;cursor:pointer;font-size:11px;font-weight:600;margin-bottom:12px;transition:all 0.2s;hover:background rgba(255,150,100,0.3)">
+    🎯 Auto-Detect Slices
+  </button>
+
+  <!-- Detected Slices List -->
+  <div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">Detected Slices</div>
+  <div id="sliceList" style="max-height:200px;overflow-y:auto;background:rgba(0,0,0,0.2);border-radius:6px;padding:8px;font-size:9px">
+    <div style="color:var(--text-dim);text-align:center;padding:20px">Run auto-detect to find slices</div>
+  </div>
+
+  <!-- Statistics -->
+  <div id="sliceStats" style="margin-top:12px;padding:8px;background:rgba(0,0,0,0.2);border-radius:6px;font-size:9px;color:var(--text-dim);display:none">
+    <div>Total Slices: <span id="sliceTotalCount">0</span></div>
+    <div>Avg Confidence: <span id="sliceAvgConfidence">0.0</span></div>
+  </div>
+
+  <button onclick="document.getElementById('sliceDetectorPanel').style.display='none'" style="width:100%;margin-top:12px;padding:8px;background:rgba(100,120,140,0.1);border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">
+    ✕ Close
+  </button>
+</div>
+
 <!-- Toggle Sample Library Panel Button -->
 <style>
 #sampleLibraryToggleBtn {
@@ -9847,6 +10204,44 @@ document.addEventListener('DOMContentLoaded', () => {
   `;
   document.body.appendChild(sampleLibraryToggleBtn);
 
+  // Phase 22a: Slice Detector toggle button
+  const sliceDetectorToggleBtn = document.createElement('button');
+  sliceDetectorToggleBtn.id = 'sliceDetectorToggleBtn';
+  sliceDetectorToggleBtn.textContent = '🔪';
+  sliceDetectorToggleBtn.title = 'Slice Detector (Phase 22)';
+  sliceDetectorToggleBtn.onclick = () => {
+    const panel = document.getElementById('sliceDetectorPanel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  };
+  sliceDetectorToggleBtn.onmouseover = () => {
+    sliceDetectorToggleBtn.style.transform = 'scale(1.1)';
+    sliceDetectorToggleBtn.style.boxShadow = '0 0 30px rgba(255,150,100,0.4)';
+  };
+  sliceDetectorToggleBtn.onmouseout = () => {
+    sliceDetectorToggleBtn.style.transform = 'scale(1)';
+    sliceDetectorToggleBtn.style.boxShadow = '0 0 20px rgba(255,150,100,0.2)';
+  };
+  sliceDetectorToggleBtn.style.cssText = `
+    position: fixed;
+    bottom: 260px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(255,150,100,0.2), rgba(255,100,150,0.2));
+    border: 2px solid #ff9966;
+    color: #ff9966;
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    z-index: 899;
+    box-shadow: 0 0 20px rgba(255,150,100,0.2);
+  `;
+  document.body.appendChild(sliceDetectorToggleBtn);
+
   // Initialize Performance Monitoring
   initPerformanceMonitoring();
 
@@ -9884,6 +10279,11 @@ document.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => {
     initSampleLibrary();
   }, 200);
+
+  // Phase 22a: Initialize Slice Detector
+  setTimeout(() => {
+    initSliceDetector();
+  }, 250);
 });
 </script>
 
