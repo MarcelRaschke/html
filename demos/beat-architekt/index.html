@@ -787,6 +787,43 @@ body::before {
         </div>
       </div>
 
+      <!-- Phase 20d: Probabilistic Sequencing & Music Theory Engine -->
+      <div style="margin-top:12px;padding:8px;background:rgba(255,136,68,0.05);border-radius:4px;border:1px solid rgba(255,136,68,0.2)">
+        <div style="font-size:11px;color:var(--orange);font-weight:600;margin-bottom:8px">🎲 Probabilistic Mode</div>
+
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <button class="ai-pat-btn" id="probabilityToggle" onclick="toggleProbabilityMode()" style="flex:1;font-size:10px">📊 Probability Mode</button>
+          <button class="ai-pat-btn" onclick="randomizeWithConstraints()" style="flex:1;font-size:10px">🔀 Randomize</button>
+        </div>
+
+        <div style="font-size:10px;margin-bottom:6px">
+          <label style="display:flex;align-items:center;gap:4px;font-size:10px;margin-bottom:4px">
+            <input type="checkbox" id="applyMusicTheory" checked>
+            Apply Music Theory Rules
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:10px">
+            <input type="checkbox" id="useChordBias">
+            Chord-Based Bias
+          </label>
+        </div>
+
+        <div style="font-size:9px;margin-bottom:6px">
+          <div style="margin-bottom:2px">Probability Density:</div>
+          <input type="range" id="densitySlider" min="0" max="100" value="50" style="width:100%;height:6px" oninput="updateDensityDisplay()">
+          <div style="display:flex;justify-content:space-between;font-size:8px;color:var(--text-dim);margin-top:2px">
+            <span>Sparse</span>
+            <span id="densityValue">50%</span>
+            <span>Dense</span>
+          </div>
+        </div>
+
+        <button class="ai-pat-btn" onclick="applyMusicTheoryRules()" style="width:100%;font-size:10px;padding:4px;margin-bottom:6px">🎼 Apply Rules</button>
+
+        <div id="probabilityStatus" style="font-size:9px;color:var(--text-dim);padding:4px;border-radius:2px">
+          Ready for probabilistic generation
+        </div>
+      </div>
+
       <!-- AI Generate Panel -->
       <div id="aiGeneratePanel" style="margin-top:16px;padding:12px;background:rgba(0,240,255,0.05);border:1px solid rgba(0,240,255,0.2);border-radius:8px">
         <div style="font-size:11px;font-weight:600;color:var(--cyan);margin-bottom:8px">🤖 Generate from Prompt</div>
@@ -4653,6 +4690,182 @@ function startAutomationAnimation() {
   }
 
   animate();
+}
+
+// === PHASE 20d: PROBABILISTIC SEQUENCING & MUSIC THEORY ENGINE ===
+
+let probabilityMode = false;
+let probabilityMap = new Array(32).fill(0.5);
+let musicTheoryRules = {
+  enforceScale: true,
+  enforceHarmony: false,
+  chordBias: 0.7,
+  densityFactor: 0.5
+};
+
+function toggleProbabilityMode() {
+  if (!currentPattern) {
+    alert('Load or create a pattern first');
+    return;
+  }
+
+  probabilityMode = !probabilityMode;
+  const toggle = document.getElementById('probabilityToggle');
+
+  if (probabilityMode) {
+    probabilityMap = new Array(currentPattern.grid[0]?.length || 32).fill(0.5);
+    toggle.style.background = 'rgba(255,136,68,0.3)';
+    toggle.textContent = '📊 Probability Active';
+    updateProbabilityStatus('Probability mode active - adjust density slider');
+  } else {
+    toggle.style.background = '';
+    toggle.textContent = '📊 Probability Mode';
+    updateProbabilityStatus('Ready for probabilistic generation');
+  }
+}
+
+function updateProbabilityStatus(message) {
+  const status = document.getElementById('probabilityStatus');
+  if (status) status.textContent = message;
+}
+
+function randomizeWithConstraints() {
+  if (!currentPattern) {
+    alert('Load or create a pattern first');
+    return;
+  }
+
+  const scale = getSelectedScale();
+  const densityFactor = parseInt(document.getElementById('densitySlider')?.value || 50) / 100;
+
+  for (let trackIdx = 0; trackIdx < currentPattern.grid.length; trackIdx++) {
+    for (let stepIdx = 0; stepIdx < currentPattern.grid[trackIdx].length; stepIdx++) {
+      const step = currentPattern.grid[trackIdx][stepIdx];
+
+      if (Math.random() < densityFactor) {
+        if (document.getElementById('applyMusicTheory')?.checked) {
+          const notes = scale.notes.map(n => n + (Math.floor(stepIdx / 8) * 12));
+          const randomNote = notes[Math.floor(Math.random() * notes.length)];
+          step.note = randomNote;
+        } else {
+          step.note = 36 + Math.floor(Math.random() * 24);
+        }
+        step.velocity = 0.7 + Math.random() * 0.3;
+      } else {
+        step.note = null;
+        step.velocity = 0;
+      }
+    }
+  }
+
+  pushUndoState();
+  renderGrid();
+  updateProbabilityStatus('Pattern randomized with constraints');
+}
+
+function applyMusicTheoryRules() {
+  if (!currentPattern) {
+    alert('Load or create a pattern first');
+    return;
+  }
+
+  const scale = getSelectedScale();
+  const chordBias = document.getElementById('useChordBias')?.checked ? 0.7 : 0;
+  const densityFactor = parseInt(document.getElementById('densitySlider')?.value || 50) / 100;
+
+  let activeChord = null;
+  let chordStepCounter = 0;
+  const stepsPerChord = 8;
+
+  for (let trackIdx = 0; trackIdx < currentPattern.grid.length; trackIdx++) {
+    for (let stepIdx = 0; stepIdx < currentPattern.grid[trackIdx].length; stepIdx++) {
+      const step = currentPattern.grid[trackIdx][stepIdx];
+
+      if (!step.note) continue;
+
+      // Calculate current chord based on step position
+      if (chordBias > 0) {
+        if (chordStepCounter % stepsPerChord === 0) {
+          activeChord = getChordForStep(stepIdx);
+        }
+      }
+
+      // Apply scale quantization
+      if (document.getElementById('applyMusicTheory')?.checked) {
+        step.note = scale.nearestInScale(step.note);
+
+        // Bias toward chord tones if harmony is enforced
+        if (chordBias > 0 && activeChord && Math.random() < chordBias) {
+          const chordNotes = activeChord.notes || [0, 2, 4];
+          const noteClass = step.note % 12;
+          const octave = Math.floor(step.note / 12);
+
+          const closestChordNote = chordNotes.reduce((prev, curr) => {
+            return Math.abs(curr - noteClass) < Math.abs(prev - noteClass) ? curr : prev;
+          });
+
+          step.note = closestChordNote + octave * 12;
+        }
+      }
+
+      chordStepCounter++;
+    }
+  }
+
+  pushUndoState();
+  renderGrid();
+  updateProbabilityStatus('Music theory rules applied to pattern');
+}
+
+function getSelectedScale() {
+  const scaleName = document.getElementById('scaleSelector')?.value || 'Major';
+  const keyName = document.getElementById('keySelector')?.value || 'C';
+  const keyNotes = {C: 0, 'C#': 1, D: 2, 'D#': 3, E: 4, F: 5, 'F#': 6, G: 7, 'G#': 8, A: 9, 'A#': 10, B: 11};
+  const keyOffset = keyNotes[keyName] || 0;
+
+  const scaleMap = {
+    'Major': MusicalScale.Major,
+    'Minor': MusicalScale.Minor,
+    'Dorian': MusicalScale.Dorian,
+    'Phrygian': MusicalScale.Phrygian,
+    'Pentatonic': MusicalScale.Pentatonic,
+    'Chromatic': MusicalScale.Chromatic
+  };
+
+  const scale = scaleMap[scaleName] || MusicalScale.Major;
+  return {
+    notes: scale.notes,
+    nearestInScale: (note) => scale.nearestInScale(note + keyOffset) - keyOffset,
+    name: scaleName
+  };
+}
+
+function getChordForStep(stepIndex) {
+  const progressions = {
+    'I-IV-V-I': [
+      {notes: [0, 4, 7], name: 'I'},
+      {notes: [5, 9, 12], name: 'IV'},
+      {notes: [7, 11, 14], name: 'V'},
+      {notes: [0, 4, 7], name: 'I'}
+    ],
+    'ii-V-I': [
+      {notes: [2, 6, 9], name: 'ii'},
+      {notes: [7, 11, 14], name: 'V'},
+      {notes: [0, 4, 7], name: 'I'}
+    ]
+  };
+
+  const prog = progressions['I-IV-V-I'];
+  const chordIndex = Math.floor((stepIndex / 8) % prog.length);
+  return prog[chordIndex];
+}
+
+function updateDensityDisplay() {
+  const slider = document.getElementById('densitySlider');
+  const value = document.getElementById('densityValue');
+  if (slider && value) {
+    value.textContent = slider.value + '%';
+  }
 }
 
 // === PHASE 20b: PATTERN GENERATION FUNCTIONS ===
