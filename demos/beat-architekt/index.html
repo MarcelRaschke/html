@@ -2289,6 +2289,134 @@ class GranularSamplePlayer {
   }
 }
 
+// === PHASE 21d: GRAIN CLOUD MICROSOUND ENGINE ===
+
+class GrainCloud {
+  constructor(audioBuffer) {
+    this.buffer = audioBuffer;
+    this.grainDensity = 10;
+    this.grainDuration = 100;
+    this.grainSpacing = 50;
+    this.pitchVariation = 0;
+    this.amplitudeVariation = 0;
+    this.playing = false;
+    this.destination = audioCtx.destination;
+    this.activeGrains = [];
+    this.startTime = 0;
+    this.lastGrainTime = 0;
+  }
+
+  setGrainDensity(count) {
+    this.grainDensity = Math.max(1, Math.min(50, count));
+  }
+
+  setGrainDuration(ms) {
+    this.grainDuration = Math.max(10, Math.min(500, ms));
+  }
+
+  setGrainSpacing(ms) {
+    this.grainSpacing = Math.max(0, Math.min(500, ms));
+  }
+
+  setPitchVariation(semitones) {
+    this.pitchVariation = Math.max(0, Math.min(24, semitones));
+  }
+
+  setAmplitudeVariation(db) {
+    this.amplitudeVariation = Math.max(0, Math.min(6, db));
+  }
+
+  trigger(duration = 2) {
+    this.playing = true;
+    this.startTime = audioCtx.currentTime;
+    this.lastGrainTime = this.startTime;
+    this.scheduleDuration = duration;
+    this.scheduleGrainCloud();
+  }
+
+  stop() {
+    this.playing = false;
+    this.activeGrains.forEach(grain => grain.stop());
+    this.activeGrains = [];
+  }
+
+  scheduleGrainCloud() {
+    while (this.playing && this.lastGrainTime < this.startTime + this.scheduleDuration) {
+      this.spawnGrain();
+      this.lastGrainTime += this.grainSpacing;
+    }
+
+    if (this.playing) {
+      setTimeout(() => this.scheduleGrainCloud(), 25);
+    }
+  }
+
+  spawnGrain() {
+    const bufferStart = Math.random() * (this.buffer.duration - this.grainDuration / 1000);
+    const grainDurationSecs = this.grainDuration / 1000;
+
+    const pitchShift = (Math.random() - 0.5) * this.pitchVariation * 2;
+    const ampShift = Math.pow(10, ((Math.random() - 0.5) * this.amplitudeVariation) / 20);
+
+    const source = audioCtx.createBufferSource();
+    source.buffer = this.buffer;
+    source.playbackRate.value = Math.pow(2, pitchShift / 12);
+
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0, audioCtx.currentTime);
+    gain.gain.linearRampToValueAtTime(ampShift * 0.5, audioCtx.currentTime + grainDurationSecs * 0.2);
+    gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + grainDurationSecs);
+
+    source.connect(gain);
+    gain.connect(this.destination);
+
+    source.start(audioCtx.currentTime, bufferStart, grainDurationSecs);
+    source.stop(audioCtx.currentTime + grainDurationSecs);
+
+    this.activeGrains.push({stop: () => source.stop()});
+    if (this.activeGrains.length > this.grainDensity) {
+      this.activeGrains.shift();
+    }
+  }
+
+  setDestination(node) {
+    this.destination = node;
+  }
+
+  setPreset(presetName) {
+    switch(presetName) {
+      case 'smooth':
+        this.setGrainDensity(20);
+        this.setGrainDuration(150);
+        this.setGrainSpacing(75);
+        this.setPitchVariation(2);
+        this.setAmplitudeVariation(1);
+        break;
+      case 'scattered':
+        this.setGrainDensity(8);
+        this.setGrainDuration(80);
+        this.setGrainSpacing(200);
+        this.setPitchVariation(6);
+        this.setAmplitudeVariation(3);
+        break;
+      case 'dense':
+        this.setGrainDensity(30);
+        this.setGrainDuration(120);
+        this.setGrainSpacing(40);
+        this.setPitchVariation(3);
+        this.setAmplitudeVariation(2);
+        break;
+      case 'sparse':
+        this.setGrainDensity(3);
+        this.setGrainDuration(200);
+        this.setGrainSpacing(300);
+        this.setPitchVariation(12);
+        this.setAmplitudeVariation(4);
+        break;
+    }
+  }
+}
+
 // === PHASE 20c: AUTOMATION VISUALIZATION & PERFORMANCE DASHBOARD ===
 
 class AutomationCurveVisualizer {
@@ -8241,6 +8369,92 @@ function triggerSampleFromStep(trackId, stepIndex, sample) {
   if (!sample) return;
   triggerSample(sample.id, sample.pitch || 0, sample.playbackRate || 1);
 }
+
+// === PHASE 21d: GRAIN CLOUD FUNCTIONS ===
+
+let currentGrainCloud = null;
+let activeGrainClouds = [];
+
+function updateGrainDensity(value) {
+  document.getElementById('grainDensityValue').textContent = value;
+  if (currentGrainCloud) {
+    currentGrainCloud.setGrainDensity(parseInt(value));
+  }
+}
+
+function updateGrainDuration(value) {
+  document.getElementById('grainDurationValue').textContent = value;
+  if (currentGrainCloud) {
+    currentGrainCloud.setGrainDuration(parseInt(value));
+  }
+}
+
+function updateGrainSpacing(value) {
+  document.getElementById('grainSpacingValue').textContent = value;
+  if (currentGrainCloud) {
+    currentGrainCloud.setGrainSpacing(parseInt(value));
+  }
+}
+
+function updatePitchVariation(value) {
+  document.getElementById('pitchVariationValue').textContent = value;
+  if (currentGrainCloud) {
+    currentGrainCloud.setPitchVariation(parseInt(value));
+  }
+}
+
+function setGrainPreset(presetName) {
+  if (!currentGrainCloud) return;
+  currentGrainCloud.setPreset(presetName);
+
+  document.getElementById('grainDensitySlider').value = currentGrainCloud.grainDensity;
+  document.getElementById('grainDensityValue').textContent = currentGrainCloud.grainDensity;
+  document.getElementById('grainDurationSlider').value = currentGrainCloud.grainDuration;
+  document.getElementById('grainDurationValue').textContent = currentGrainCloud.grainDuration;
+  document.getElementById('grainSpacingSlider').value = currentGrainCloud.grainSpacing;
+  document.getElementById('grainSpacingValue').textContent = currentGrainCloud.grainSpacing;
+  document.getElementById('pitchVariationSlider').value = currentGrainCloud.pitchVariation;
+  document.getElementById('pitchVariationValue').textContent = currentGrainCloud.pitchVariation;
+}
+
+function triggerGrainCloud(sampleId, duration = 2) {
+  if (!sampleLibrary) {
+    showToast('❌ Sample library not initialized');
+    return;
+  }
+
+  const samples = sampleLibrary.listSamples();
+  if (samples.length === 0) {
+    showToast('❌ No samples imported');
+    return;
+  }
+
+  const sample = samples[0];
+  if (!sample.buffer) {
+    showToast('❌ Sample buffer not ready');
+    return;
+  }
+
+  currentGrainCloud = new GrainCloud(sample.buffer);
+  currentGrainCloud.setGrainDensity(parseInt(document.getElementById('grainDensitySlider').value));
+  currentGrainCloud.setGrainDuration(parseInt(document.getElementById('grainDurationSlider').value));
+  currentGrainCloud.setGrainSpacing(parseInt(document.getElementById('grainSpacingSlider').value));
+  currentGrainCloud.setPitchVariation(parseInt(document.getElementById('pitchVariationSlider').value));
+  currentGrainCloud.setDestination(samplePlaybackGain);
+  currentGrainCloud.trigger(duration);
+
+  activeGrainClouds.push(currentGrainCloud);
+  showToast('✨ Grain cloud triggered');
+
+  setTimeout(() => {
+    currentGrainCloud.stop();
+  }, duration * 1000);
+}
+
+function toggleGrainCloudPanel() {
+  const panel = document.getElementById('grainCloudPanel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
 </script>
 
 <!-- Cloud Sync Settings Modal -->
@@ -8810,6 +9024,64 @@ function triggerSampleFromStep(trackId, stepIndex, sample) {
   </button>
 </div>
 
+<!-- Phase 21d: Grain Cloud Panel -->
+<div id="grainCloudPanel" style="position:fixed;bottom:20px;right:1180px;width:360px;background:var(--bg-card);border:1px solid rgba(150,100,255,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:70vh;overflow-y:auto;display:none">
+  <div style="font-size:13px;font-weight:600;color:var(--magenta);margin-bottom:12px">✨ Grain Cloud</div>
+
+  <!-- Grain Density -->
+  <div style="margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+      <label style="font-size:10px;color:var(--text-secondary)">Grain Density</label>
+      <span id="grainDensityValue" style="font-size:10px;color:var(--cyan)">10</span>
+    </div>
+    <input type="range" id="grainDensitySlider" min="1" max="50" value="10" oninput="updateGrainDensity(this.value)" style="width:100%">
+  </div>
+
+  <!-- Grain Duration -->
+  <div style="margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+      <label style="font-size:10px;color:var(--text-secondary)">Grain Duration (ms)</label>
+      <span id="grainDurationValue" style="font-size:10px;color:var(--cyan)">100</span>
+    </div>
+    <input type="range" id="grainDurationSlider" min="10" max="500" value="100" step="10" oninput="updateGrainDuration(this.value)" style="width:100%">
+  </div>
+
+  <!-- Grain Spacing -->
+  <div style="margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+      <label style="font-size:10px;color:var(--text-secondary)">Grain Spacing (ms)</label>
+      <span id="grainSpacingValue" style="font-size:10px;color:var(--cyan)">50</span>
+    </div>
+    <input type="range" id="grainSpacingSlider" min="0" max="500" value="50" step="10" oninput="updateGrainSpacing(this.value)" style="width:100%">
+  </div>
+
+  <!-- Pitch Variation -->
+  <div style="margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+      <label style="font-size:10px;color:var(--text-secondary)">Pitch Variation (semitones)</label>
+      <span id="pitchVariationValue" style="font-size:10px;color:var(--cyan)">0</span>
+    </div>
+    <input type="range" id="pitchVariationSlider" min="0" max="24" value="0" step="1" oninput="updatePitchVariation(this.value)" style="width:100%">
+  </div>
+
+  <!-- Presets -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px">
+    <button onclick="setGrainPreset('smooth')" style="padding:8px;background:rgba(150,100,255,0.1);border:1px solid rgba(150,100,255,0.4);color:var(--magenta);border-radius:4px;cursor:pointer;font-size:9px;font-weight:600">Smooth</button>
+    <button onclick="setGrainPreset('scattered')" style="padding:8px;background:rgba(150,100,255,0.1);border:1px solid rgba(150,100,255,0.4);color:var(--magenta);border-radius:4px;cursor:pointer;font-size:9px;font-weight:600">Scattered</button>
+    <button onclick="setGrainPreset('dense')" style="padding:8px;background:rgba(150,100,255,0.1);border:1px solid rgba(150,100,255,0.4);color:var(--magenta);border-radius:4px;cursor:pointer;font-size:9px;font-weight:600">Dense</button>
+    <button onclick="setGrainPreset('sparse')" style="padding:8px;background:rgba(150,100,255,0.1);border:1px solid rgba(150,100,255,0.4);color:var(--magenta);border-radius:4px;cursor:pointer;font-size:9px;font-weight:600">Sparse</button>
+  </div>
+
+  <!-- Trigger Button -->
+  <button onclick="triggerGrainCloud()" style="width:100%;padding:10px;background:rgba(150,100,255,0.15);border:1px solid var(--magenta);color:var(--magenta);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;margin-bottom:12px">
+    ▶ Trigger Grain Cloud
+  </button>
+
+  <button onclick="document.getElementById('grainCloudPanel').style.display='none'" style="width:100%;padding:8px;background:rgba(100,120,140,0.1);border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">
+    ✕ Close
+  </button>
+</div>
+
 <!-- Phase 21b: Loop Recording Panel -->
 <div id="loopRecordingPanel" style="position:fixed;bottom:20px;right:800px;width:360px;background:var(--bg-card);border:1px solid rgba(200,100,255,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:70vh;overflow-y:auto;display:none">
   <div style="font-size:13px;font-weight:600;color:var(--purple);margin-bottom:12px">🎙️ Loop Recording</div>
@@ -9138,6 +9410,41 @@ document.addEventListener('DOMContentLoaded', () => {
     aiMixingToggleBtn.style.boxShadow = '0 0 20px rgba(255,136,68,0.2)';
   };
   document.body.appendChild(aiMixingToggleBtn);
+
+  // Phase 21d: Grain Cloud toggle button
+  const grainCloudToggleBtn = document.createElement('button');
+  grainCloudToggleBtn.id = 'grainCloudToggleBtn';
+  grainCloudToggleBtn.textContent = '✨';
+  grainCloudToggleBtn.title = 'Grain Cloud (Phase 21)';
+  grainCloudToggleBtn.onclick = toggleGrainCloudPanel;
+  grainCloudToggleBtn.onmouseover = () => {
+    grainCloudToggleBtn.style.transform = 'scale(1.1)';
+    grainCloudToggleBtn.style.boxShadow = '0 0 30px rgba(150,100,255,0.4)';
+  };
+  grainCloudToggleBtn.onmouseout = () => {
+    grainCloudToggleBtn.style.transform = 'scale(1)';
+    grainCloudToggleBtn.style.boxShadow = '0 0 20px rgba(150,100,255,0.2)';
+  };
+  grainCloudToggleBtn.style.cssText = `
+    position: fixed;
+    bottom: 260px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(150,100,255,0.2), rgba(200,150,255,0.2));
+    border: 2px solid var(--magenta);
+    color: var(--magenta);
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    z-index: 899;
+    box-shadow: 0 0 20px rgba(150,100,255,0.2);
+  `;
+  document.body.appendChild(grainCloudToggleBtn);
 
   // Phase 21b: Loop Recording toggle button
   const loopRecordingToggleBtn = document.createElement('button');
