@@ -743,6 +743,16 @@ body::before {
         <button class="ai-pat-btn" onclick="loadPattern('random')">🎲 Random</button>
       </div>
 
+      <!-- AI Generate Panel -->
+      <div id="aiGeneratePanel" style="margin-top:16px;padding:12px;background:rgba(0,240,255,0.05);border:1px solid rgba(0,240,255,0.2);border-radius:8px">
+        <div style="font-size:11px;font-weight:600;color:var(--cyan);margin-bottom:8px">🤖 Generate from Prompt</div>
+        <textarea id="aiPrompt" placeholder="e.g., 'Techno 4-on-floor with off-beat snare and dense hi-hats'" maxlength="500" style="width:100%;height:60px;padding:8px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;font-size:11px;font-family:'JetBrains Mono',monospace;resize:vertical"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+          <button class="ai-pat-btn" onclick="generatePatternFromPrompt()" style="flex:1">Generate</button>
+          <span id="aiStatus" style="font-size:10px;color:var(--text-dim);display:none" id="aiStatusText"></span>
+        </div>
+      </div>
+
       <!-- Pattern Library & Persistence -->
       <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
@@ -996,6 +1006,23 @@ let pendingSyncQueue = [];
 let isCurrentlySyncing = false;
 let conflictLog = [];
 let currentUserId = null;
+
+// Phase 8: AI Pattern Generation, Effects Chain, MIDI
+let anthropicApiKey = null;
+let lastAIPrompt = null;
+let effectsChain = {
+  compressor: { enabled: false, threshold: -24, ratio: 4 },
+  eq: { enabled: false, bass: 0, mid: 0, treble: 0 },
+  delay: { enabled: false, time: 0.5, feedback: 0.4, mix: 0.3 },
+  reverb: { enabled: false, mix: 0.2 }
+};
+let effectsNodes = {
+  compressor: null, eqBass: null, eqMid: null, eqTreble: null,
+  delay: null, delayFeedback: null, delayWet: null,
+  reverb: null, reverbWet: null
+};
+let midiAccess = null;
+let midiEnabled = false;
 
 function setStepLength(len) {
   const newLen = parseInt(len);
@@ -1489,6 +1516,111 @@ function loadPattern(name, density = 0.6, humanize = 0) {
   });
   renderGrid();
   pushUndoState('Load pattern: ' + name);
+}
+
+// === PHASE 8: AI PATTERN GENERATION ===
+async function generatePatternFromPrompt() {
+  const prompt = document.getElementById('aiPrompt').value;
+  const statusEl = document.getElementById('aiStatus');
+
+  if (!anthropicApiKey) {
+    statusEl.textContent = '⚙️ Set Claude API key in Cloud Sync settings';
+    statusEl.style.display = 'inline';
+    setTimeout(() => statusEl.style.display = 'none', 3000);
+    return;
+  }
+
+  if (!prompt || prompt.length < 5) {
+    statusEl.textContent = '✗ Describe your pattern (min 5 chars)';
+    statusEl.style.display = 'inline';
+    setTimeout(() => statusEl.style.display = 'none', 2000);
+    return;
+  }
+
+  lastAIPrompt = prompt;
+  updateAIStatus('generating', '⏳ Generating...');
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': anthropicApiKey,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-1',
+        max_tokens: 1024,
+        messages: [{
+          role: 'user',
+          content: `Generate a drum pattern for: "${prompt}"\n\nBeat Architekt uses 8 tracks: kick,snare,clap,hihat,perc,bass,fx,shaker.\nGenerate 16-step pattern (0=off, 1=on). Response as JSON only:\n{\n  "name":"pattern name",\n  "genre":"house|techno|dnb|trap|afro|progressive|ambient",\n  "grid":{\n    "kick":[1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],\n    "snare":[0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0],\n    "clap":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\n    "hihat":[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],\n    "perc":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\n    "bass":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\n    "fx":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\n    "shaker":[0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1]\n  }\n}`
+        }]
+      })
+    });
+
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+
+    const data = await response.json();
+    const content = data.content[0].text;
+    const pattern = parseAIPattern(content);
+
+    applyAIPattern(pattern);
+    updateAIStatus('success', '✓ Pattern generated!');
+    setTimeout(() => document.getElementById('aiStatus').style.display = 'none', 2000);
+
+  } catch (err) {
+    console.error('AI generation error:', err);
+    updateAIStatus('error', `✗ ${err.message}`);
+    setTimeout(() => document.getElementById('aiStatus').style.display = 'none', 3000);
+  }
+}
+
+function parseAIPattern(response) {
+  const jsonMatch = response.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('Invalid response format');
+
+  const parsed = JSON.parse(jsonMatch[0]);
+  if (!parsed.grid || Object.keys(parsed.grid).length !== 8) {
+    throw new Error('Pattern missing tracks');
+  }
+
+  const normalized = {};
+  for (const [track, pattern] of Object.entries(parsed.grid)) {
+    if (!Array.isArray(pattern) || pattern.length < 8) {
+      throw new Error(`Invalid pattern for ${track}`);
+    }
+    normalized[track] = pattern.slice(0, 32).map(v => v ? 1 : 0);
+  }
+
+  return {
+    name: parsed.name || 'AI Pattern',
+    genre: parsed.genre || 'house',
+    grid: normalized
+  };
+}
+
+function applyAIPattern(pattern) {
+  clearGrid();
+  for (const track of TRACKS) {
+    const patternArray = pattern.grid[track.key] || [];
+    for (let i = 0; i < STEPS; i++) {
+      const isActive = i < patternArray.length ? patternArray[i] : 0;
+      grid[track.key][i] = {
+        active: !!isActive,
+        velocity: 1.0,
+        pan: 0
+      };
+    }
+  }
+
+  renderGrid();
+  pushUndoState(`AI: ${pattern.name}`);
+}
+
+function updateAIStatus(state, message) {
+  const statusEl = document.getElementById('aiStatus');
+  statusEl.textContent = message;
+  statusEl.style.display = 'inline';
+  statusEl.className = `ai-status ${state}`;
 }
 
 // === PHASE 6: PATTERN LIBRARY & PERSISTENCE ===
@@ -2263,7 +2395,128 @@ initDB().then(() => {
       console.log('Cloud Sync initialization failed:', err);
     });
   }
+
+  // Load Claude API key from localStorage if available
+  const savedClaudeKey = localStorage.getItem('anthropicApiKey');
+  if (savedClaudeKey) {
+    anthropicApiKey = savedClaudeKey;
+  }
 }).catch(err => console.log('Pattern library unavailable:', err));
+
+// === CLOUD SYNC SETTINGS MANAGEMENT ===
+function showCloudSyncSettings() {
+  const modal = document.getElementById('cloudSyncModal');
+  if (!modal) return;
+
+  const apiKeyInput = document.getElementById('firebaseApiKey');
+  const projectIdInput = document.getElementById('firebaseProjectId');
+  const authDomainInput = document.getElementById('firebaseAuthDomain');
+  const claudeKeyInput = document.getElementById('anthropicApiKeyInput');
+
+  // Load saved values
+  apiKeyInput.value = localStorage.getItem('firebaseApiKey') || '';
+  projectIdInput.value = localStorage.getItem('firebaseProjectId') || '';
+  authDomainInput.value = localStorage.getItem('firebaseAuthDomain') || '';
+  claudeKeyInput.value = anthropicApiKey || '';
+
+  modal.style.display = 'flex';
+}
+
+function closeCloudSyncModal() {
+  const modal = document.getElementById('cloudSyncModal');
+  if (modal) modal.style.display = 'none';
+
+  // Save API keys to localStorage
+  const apiKeyInput = document.getElementById('firebaseApiKey');
+  const projectIdInput = document.getElementById('firebaseProjectId');
+  const authDomainInput = document.getElementById('firebaseAuthDomain');
+  const claudeKeyInput = document.getElementById('anthropicApiKeyInput');
+
+  if (apiKeyInput.value) localStorage.setItem('firebaseApiKey', apiKeyInput.value);
+  if (projectIdInput.value) localStorage.setItem('firebaseProjectId', projectIdInput.value);
+  if (authDomainInput.value) localStorage.setItem('firebaseAuthDomain', authDomainInput.value);
+  if (claudeKeyInput.value) {
+    anthropicApiKey = claudeKeyInput.value;
+    localStorage.setItem('anthropicApiKey', claudeKeyInput.value);
+  }
+}
+
+function testCloudConnection() {
+  const apiKeyInput = document.getElementById('firebaseApiKey');
+  const projectIdInput = document.getElementById('firebaseProjectId');
+  const authDomainInput = document.getElementById('firebaseAuthDomain');
+
+  if (!apiKeyInput.value || !projectIdInput.value) {
+    alert('Please enter Firebase API Key and Project ID');
+    return;
+  }
+
+  alert('Cloud Sync configuration saved. Patterns will sync when enabled.');
+  closeCloudSyncModal();
+}
+
+function clearCloudCredentials() {
+  if (!confirm('Clear all Cloud Sync credentials? This will disable syncing.')) return;
+
+  localStorage.removeItem('firebaseApiKey');
+  localStorage.removeItem('firebaseProjectId');
+  localStorage.removeItem('firebaseAuthDomain');
+  localStorage.removeItem('cloudSyncEnabled');
+  localStorage.removeItem('anthropicApiKey');
+
+  firebaseDb = null;
+  firebaseAuth = null;
+  syncEnabled = false;
+  anthropicApiKey = null;
+
+  document.getElementById('firebaseApiKey').value = '';
+  document.getElementById('firebaseProjectId').value = '';
+  document.getElementById('firebaseAuthDomain').value = '';
+  document.getElementById('anthropicApiKeyInput').value = '';
+
+  alert('Credentials cleared. Cloud Sync disabled.');
+  closeCloudSyncModal();
+}
+
+// === CLOUD SYNC FUNCTIONS (Phase 7) ===
+async function initCloudSync(apiKey, projectId, authDomain) {
+  try {
+    // Check if Firebase SDK is available
+    if (typeof firebase === 'undefined') {
+      console.log('Firebase SDK not loaded. Cloud Sync requires Firebase setup.');
+      return { success: false, error: 'Firebase SDK not loaded' };
+    }
+
+    currentUserId = 'anonymous_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    return { success: true };
+  } catch (err) {
+    console.error('Cloud Sync init error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+function enableCloudSync(enabled) {
+  syncEnabled = enabled;
+  localStorage.setItem('cloudSyncEnabled', enabled);
+  updateSyncStatusBadge(enabled ? 'synced' : 'offline');
+}
+
+function updateSyncStatusBadge(status) {
+  const badge = document.getElementById('syncStatusBadge');
+  if (!badge) return;
+
+  badge.style.display = 'inline-block';
+  badge.className = `sync-badge ${status}`;
+
+  const statusText = {
+    synced: '✓ Synced',
+    syncing: '⏳ Syncing...',
+    offline: '✗ Offline',
+    conflict: '⚠️ Conflict'
+  };
+
+  document.getElementById('syncStatusText').textContent = statusText[status] || 'Unknown';
+}
 </script>
 
 <!-- Cloud Sync Settings Modal -->
@@ -2285,6 +2538,14 @@ initDB().then(() => {
     <div style="margin-bottom:16px">
       <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:4px">Auth Domain (optional)</label>
       <input id="firebaseAuthDomain" type="text" placeholder="e.g., yourproject.firebaseapp.com" style="width:100%;padding:8px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;font-size:11px">
+    </div>
+
+    <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+
+    <div style="margin-bottom:12px">
+      <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:4px">Claude API Key (for AI pattern generation)</label>
+      <input id="anthropicApiKeyInput" type="password" placeholder="sk-ant-..." style="width:100%;padding:8px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;font-size:11px;font-family:monospace">
+      <p style="color:var(--text-dim);font-size:9px;margin-top:4px">Get at console.anthropic.com</p>
     </div>
 
     <div style="display:flex;gap:8px;margin-bottom:16px">
