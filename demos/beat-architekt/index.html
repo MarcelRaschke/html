@@ -1108,6 +1108,11 @@ let remixHistory = [];
 let currentRemixPair = null;
 let remixComparisonActive = false;
 
+// Phase 10: Remix Batch + Presets
+let remixPresets = [];
+let batchSelectionMode = false;
+let batchSelectedPatterns = new Set();
+
 function setStepLength(len) {
   const newLen = parseInt(len);
   if (newLen === STEPS) return;
@@ -2564,15 +2569,18 @@ function renderPatternLibrary() {
   }
 
   list.innerHTML = patternLibrary.map(p => `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid var(--border);hover:background:var(--bg-card-hover)">
-      <div style="flex:1;cursor:pointer" onclick="loadPatternById('${p.id}')">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid var(--border);background:${batchSelectedPatterns.has(p.id) ? 'rgba(0,240,255,0.1)' : 'transparent'}">
+      ${batchSelectionMode ? `<input type="checkbox" checked="${batchSelectedPatterns.has(p.id)}" onchange="toggleBatchSelection('${p.id}')" style="margin-right:8px;cursor:pointer">` : ''}
+      <div style="flex:1;cursor:pointer;${batchSelectionMode ? 'pointer-events:none;' : ''}" onclick="loadPatternById('${p.id}')">
         <div style="color:var(--cyan);font-weight:600">${p.name}</div>
         <div style="color:var(--text-dim);font-size:9px">${p.genre} • ${p.bpm}BPM • ${new Date(p.created).toLocaleDateString()}</div>
       </div>
       <div style="display:flex;gap:4px">
-        <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px" onclick="exportPatternAsJSON('${p.id}')">JSON</button>
-        <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px" onclick="exportPatternAsMIDI('${p.id}')">MIDI</button>
-        <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px;background:var(--red)" onclick="deletePattern('${p.id}').then(() => renderPatternLibrary())">✕</button>
+        ${!batchSelectionMode ? `
+          <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px" onclick="exportPatternAsJSON('${p.id}')">JSON</button>
+          <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px" onclick="exportPatternAsMIDI('${p.id}')">MIDI</button>
+          <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px;background:var(--red)" onclick="deletePattern('${p.id}').then(() => renderPatternLibrary())">✕</button>
+        ` : ''}
       </div>
     </div>
   `).join('');
@@ -2724,6 +2732,9 @@ initDB().then(() => {
   loadPatternLibrary().then(() => {
     renderPatternLibrary();
   });
+
+  // Phase 10: Initialize Remix Presets from localStorage
+  initRemixPresets();
 
   // Cloud Sync: load saved credentials if available
   const savedApiKey = localStorage.getItem('firebaseApiKey');
@@ -3155,6 +3166,213 @@ function updateRemixStatus(state, message) {
   statusEl.style.display = 'block';
   statusEl.style.color = state === 'error' ? 'var(--red)' : state === 'success' ? 'var(--lime)' : 'var(--cyan)';
 }
+
+// === PHASE 10: REMIX BATCH + PRESETS ===
+
+function toggleBatchSelectionMode() {
+  batchSelectionMode = !batchSelectionMode;
+  batchSelectedPatterns.clear();
+
+  const btn = document.getElementById('batchToggleBtn');
+  if (btn) {
+    btn.style.background = batchSelectionMode ? 'rgba(0,240,255,0.2)' : 'rgba(100,120,140,0.1)';
+    btn.style.borderColor = batchSelectionMode ? 'var(--cyan)' : 'var(--border)';
+  }
+
+  loadPatternLibrary();
+  updateBatchUI();
+}
+
+function toggleBatchSelection(patternId) {
+  if (batchSelectedPatterns.has(patternId)) {
+    batchSelectedPatterns.delete(patternId);
+  } else {
+    batchSelectedPatterns.add(patternId);
+  }
+  loadPatternLibrary();
+}
+
+function updateBatchUI() {
+  const applyBtn = document.getElementById('batchApplyBtn');
+  const countLabel = document.getElementById('batchCountLabel');
+
+  const count = batchSelectedPatterns.size;
+
+  if (applyBtn) {
+    applyBtn.style.display = batchSelectionMode ? 'block' : 'none';
+    applyBtn.disabled = count === 0 || !currentRemixPair;
+    applyBtn.textContent = `✓ Apply to ${count} pattern${count !== 1 ? 's' : ''}`;
+  }
+
+  if (countLabel) {
+    countLabel.style.display = batchSelectionMode ? 'inline' : 'none';
+    countLabel.textContent = `(${count} selected)`;
+  }
+}
+
+async function applyRemixToBatch() {
+  if (!currentRemixPair || batchSelectedPatterns.size === 0) {
+    updateRemixStatus('error', '✗ No remix or patterns selected');
+    return;
+  }
+
+  const selectedIds = Array.from(batchSelectedPatterns);
+  const results = { success: 0, failed: 0 };
+
+  updateRemixStatus('generating', `⏳ Applying to ${selectedIds.length} pattern${selectedIds.length !== 1 ? 's' : ''}...`);
+
+  try {
+    const tx = db.transaction([STORE_NAME], 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+
+    selectedIds.forEach(patternId => {
+      store.get(patternId).onsuccess = (e) => {
+        const pattern = e.target.result;
+        if (pattern) {
+          pattern.grid = JSON.parse(JSON.stringify(currentRemixPair.grid));
+          pattern.lastModified = new Date().toISOString();
+          store.put(pattern);
+          results.success++;
+        }
+      };
+    });
+
+    tx.oncomplete = () => {
+      updateRemixStatus('success', `✓ Applied to ${results.success} pattern${results.success !== 1 ? 's' : ''}`);
+      loadPatternLibrary();
+
+      pushUndoState(`Batch remix to ${results.success} pattern${results.success !== 1 ? 's' : ''}`);
+
+      setTimeout(() => {
+        batchSelectionMode = false;
+        updateBatchUI();
+      }, 2000);
+    };
+  } catch (err) {
+    updateRemixStatus('error', '✗ Error applying batch remix');
+  }
+}
+
+function saveRemixAsPreset() {
+  if (!currentRemixPair) {
+    alert('Generate a remix first');
+    return;
+  }
+
+  const name = prompt('Preset name:', currentRemixPair.prompt.substring(0, 30));
+  if (!name) return;
+
+  const preset = {
+    id: Date.now(),
+    name: name,
+    prompt: document.getElementById('remixPrompt').value,
+    strategy: document.getElementById('remixStrategy').value,
+    preserveLength: document.getElementById('remixPreserveLength').checked,
+    createdAt: new Date().toISOString()
+  };
+
+  remixPresets.push(preset);
+  localStorage.setItem('remixPresets', JSON.stringify(remixPresets));
+
+  populateRemixPresets();
+  updateRemixStatus('success', `✓ Preset saved: ${name}`);
+}
+
+function loadRemixPreset(presetId) {
+  const preset = remixPresets.find(p => p.id === presetId);
+  if (!preset) return;
+
+  document.getElementById('remixPrompt').value = preset.prompt;
+  document.getElementById('remixStrategy').value = preset.strategy;
+  document.getElementById('remixPreserveLength').checked = preset.preserveLength;
+
+  updateRemixStatus('loaded', `✓ Loaded preset: ${preset.name}`);
+}
+
+function deleteRemixPreset(presetId) {
+  if (!confirm('Delete this preset?')) return;
+
+  remixPresets = remixPresets.filter(p => p.id !== presetId);
+  localStorage.setItem('remixPresets', JSON.stringify(remixPresets));
+
+  populateRemixPresets();
+  updateRemixStatus('success', '✓ Preset deleted');
+}
+
+function populateRemixPresets() {
+  const container = document.getElementById('remixPresetsList');
+  if (!container) return;
+
+  if (remixPresets.length === 0) {
+    container.innerHTML = '<div style="font-size:11px;color:var(--text-dim);text-align:center;padding:12px">No presets yet</div>';
+    return;
+  }
+
+  container.innerHTML = remixPresets.map(p => `
+    <div style="padding:8px;background:rgba(0,240,255,0.05);border:1px solid rgba(0,240,255,0.2);border-radius:6px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;font-weight:600;color:var(--cyan);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+        <div style="font-size:9px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.prompt.substring(0, 40)}...</div>
+      </div>
+      <div style="display:flex;gap:4px;margin-left:8px">
+        <button onclick="loadRemixPreset(${p.id})" style="padding:4px 8px;background:rgba(0,240,255,0.1);border:1px solid var(--cyan);color:var(--cyan);border-radius:3px;cursor:pointer;font-size:10px;white-space:nowrap">Load</button>
+        <button onclick="deleteRemixPreset(${p.id})" style="padding:4px 6px;background:rgba(255,51,85,0.1);border:1px solid var(--red);color:var(--red);border-radius:3px;cursor:pointer;font-size:10px">×</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function exportRemixPresetsJSON() {
+  if (remixPresets.length === 0) {
+    alert('No presets to export');
+    return;
+  }
+
+  const json = JSON.stringify(remixPresets, null, 2);
+  const blob = new Blob([json], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `remix-presets-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importRemixPresetsJSON(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const imported = JSON.parse(e.target.result);
+      if (!Array.isArray(imported)) throw new Error('Invalid format');
+
+      imported.forEach(p => {
+        if (p.prompt && p.strategy) {
+          p.id = Date.now() + Math.random();
+          remixPresets.push(p);
+        }
+      });
+
+      localStorage.setItem('remixPresets', JSON.stringify(remixPresets));
+      populateRemixPresets();
+      updateRemixStatus('success', `✓ Imported ${imported.length} preset${imported.length !== 1 ? 's' : ''}`);
+    } catch (err) {
+      updateRemixStatus('error', '✗ Invalid preset file');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function initRemixPresets() {
+  const stored = localStorage.getItem('remixPresets');
+  if (stored) {
+    try {
+      remixPresets = JSON.parse(stored);
+    } catch (e) {
+      remixPresets = [];
+    }
+  }
+  populateRemixPresets();
+}
 </script>
 
 <!-- Cloud Sync Settings Modal -->
@@ -3259,6 +3477,33 @@ function updateRemixStatus(state, message) {
   <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px">
     <div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">Recent Remixes</div>
     <div id="remixHistory" style="max-height:200px;overflow-y:auto"></div>
+  </div>
+
+  <!-- Phase 10: Batch Processing -->
+  <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:10px;font-weight:600;color:var(--text-secondary)">📦 Batch Apply <span id="batchCountLabel" style="display:none;color:var(--cyan);font-size:9px"></span></div>
+      <button id="batchToggleBtn" onclick="toggleBatchSelectionMode()" style="padding:4px 8px;background:rgba(100,120,140,0.1);border:1px solid var(--border);color:var(--text-secondary);border-radius:4px;cursor:pointer;font-size:9px;transition:all 0.2s">
+        Toggle
+      </button>
+    </div>
+    <button id="batchApplyBtn" onclick="applyRemixToBatch()" style="width:100%;padding:8px;background:rgba(0,240,255,0.1);border:1px solid var(--cyan);color:var(--cyan);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;display:none;margin-bottom:8px;transition:all 0.2s">
+      ✓ Apply to Selected
+    </button>
+  </div>
+
+  <!-- Phase 10: Remix Presets -->
+  <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:10px;font-weight:600;color:var(--text-secondary)">💾 Presets</div>
+      <button onclick="saveRemixAsPreset()" style="padding:4px 8px;background:rgba(170,255,0,0.15);border:1px solid var(--lime);color:var(--lime);border-radius:4px;cursor:pointer;font-size:9px;font-weight:600">+ Save</button>
+    </div>
+    <div id="remixPresetsList" style="max-height:200px;overflow-y:auto;margin-bottom:8px"></div>
+    <div style="display:flex;gap:4px">
+      <button onclick="document.getElementById('presetsImportFile').click()" style="flex:1;padding:6px;background:rgba(0,240,255,0.1);border:1px solid var(--cyan);color:var(--cyan);border-radius:4px;cursor:pointer;font-size:9px">📥 Import</button>
+      <button onclick="exportRemixPresetsJSON()" style="flex:1;padding:6px;background:rgba(0,240,255,0.1);border:1px solid var(--cyan);color:var(--cyan);border-radius:4px;cursor:pointer;font-size:9px">📤 Export</button>
+    </div>
+    <input id="presetsImportFile" type="file" accept=".json" onchange="importRemixPresetsJSON(this.files[0])" style="display:none">
   </div>
 </div>
 
