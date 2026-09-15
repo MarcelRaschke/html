@@ -1113,9 +1113,24 @@ body::before {
             <span>Modulations:</span>
             <span id="metricsModulation" style="color:var(--magenta)">0</span>
           </div>
-          <div style="display:flex;justify-content:space-between">
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px">
             <span>Latency:</span>
             <span id="metricsLatency" style="color:var(--text-dim)">—ms</span>
+          </div>
+
+          <!-- Phase 20c: Automation Visualization Displays -->
+          <div style="margin-top:8px;border-top:1px solid rgba(0,240,255,0.1);padding-top:6px">
+            <div style="font-size:8px;color:var(--cyan);font-weight:600;margin-bottom:4px">Automation Curve</div>
+            <canvas id="automationCurveCanvas" width="280" height="120" style="width:100%;height:120px;background:rgba(0,0,0,0.3);border-radius:2px;border:1px solid rgba(0,240,255,0.1)"></canvas>
+
+            <div style="font-size:8px;color:var(--orange);font-weight:600;margin-top:6px;margin-bottom:4px">LFO Waveform</div>
+            <canvas id="lfoPreviewCanvas" width="280" height="80" style="width:100%;height:80px;background:rgba(0,0,0,0.3);border-radius:2px;border:1px solid rgba(255,136,68,0.1)"></canvas>
+
+            <div style="font-size:8px;color:var(--orange);font-weight:600;margin-top:6px;margin-bottom:4px">Envelope (ADSR)</div>
+            <canvas id="envelopeCanvas" width="280" height="100" style="width:100%;height:100px;background:rgba(0,0,0,0.3);border-radius:2px;border:1px solid rgba(255,136,68,0.1)"></canvas>
+
+            <div style="font-size:8px;color:var(--lime);font-weight:600;margin-top:6px;margin-bottom:4px">Performance Timeline</div>
+            <canvas id="timelineCanvas" width="280" height="60" style="width:100%;height:60px;background:rgba(0,0,0,0.3);border-radius:2px;border:1px solid rgba(0,200,100,0.1)"></canvas>
           </div>
         </div>
       </div>
@@ -1866,6 +1881,249 @@ class SpectralAnalyzer {
     const nyquist = 20000;
     return (index / this.bands) * nyquist;
   }
+}
+
+// === PHASE 20c: AUTOMATION VISUALIZATION & PERFORMANCE DASHBOARD ===
+
+class AutomationCurveVisualizer {
+  constructor(width = 280, height = 120) {
+    this.width = width;
+    this.height = height;
+    this.points = [];
+    this.min = 0;
+    this.max = 1;
+    this.lineWidth = 2;
+  }
+
+  addPoint(time, value) {
+    this.points.push({time, value});
+    this.points.sort((a, b) => a.time - b.time);
+    if (this.points.length > 100) this.points.shift();
+  }
+
+  clear() {
+    this.points = [];
+  }
+
+  draw(ctx) {
+    ctx.fillStyle = 'rgba(20, 20, 30, 0.6)';
+    ctx.fillRect(0, 0, this.width, this.height);
+
+    if (this.points.length === 0) return;
+
+    const range = this.max - this.min;
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.8)';
+    ctx.lineWidth = this.lineWidth;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    if (this.points.length > 0) {
+      const tMin = Math.min(...this.points.map(p => p.time));
+      const tMax = Math.max(...this.points.map(p => p.time));
+      const tRange = tMax - tMin || 1;
+
+      ctx.beginPath();
+      for (let i = 0; i < this.points.length; i++) {
+        const {time, value} = this.points[i];
+        const x = ((time - tMin) / tRange) * this.width;
+        const y = this.height - ((value - this.min) / range) * this.height;
+
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(0, 240, 255, 0.4)';
+      for (const {time, value} of this.points) {
+        const x = ((time - tMin) / tRange) * this.width;
+        const y = this.height - ((value - this.min) / range) * this.height;
+        ctx.fillRect(x - 2, y - 2, 4, 4);
+      }
+    }
+  }
+}
+
+class LFOWaveformPreview {
+  constructor(width = 280, height = 80) {
+    this.width = width;
+    this.height = height;
+  }
+
+  draw(ctx, frequency, waveshape = 'sine', amplitude = 0.5, samples = 64) {
+    ctx.fillStyle = 'rgba(20, 20, 30, 0.6)';
+    ctx.fillRect(0, 0, this.width, this.height);
+
+    const period = 1 / frequency;
+    const sampleRate = samples / period;
+    const centerY = this.height / 2;
+
+    ctx.strokeStyle = 'rgba(255, 136, 68, 0.9)';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    ctx.beginPath();
+    for (let i = 0; i < samples; i++) {
+      const t = (i / samples) * period;
+      const phase = (t * frequency * 2 * Math.PI) % (2 * Math.PI);
+
+      let value = 0;
+      if (waveshape === 'sine') value = Math.sin(phase);
+      else if (waveshape === 'saw') value = 2 * (phase / (2 * Math.PI)) - 1;
+      else if (waveshape === 'square') value = phase < Math.PI ? 1 : -1;
+      else if (waveshape === 'triangle') value = Math.abs((4 * (phase / (2 * Math.PI) - 0.25)) % 2 - 1) - 0.5;
+
+      const x = (i / samples) * this.width;
+      const y = centerY - value * amplitude * (this.height / 2);
+
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(200, 200, 200, 0.3)';
+    ctx.beginPath();
+    ctx.moveTo(0, centerY);
+    ctx.lineTo(this.width, centerY);
+    ctx.stroke();
+  }
+}
+
+class EnvelopeVisualizer {
+  constructor(width = 280, height = 100) {
+    this.width = width;
+    this.height = height;
+    this.attack = 0.2;
+    this.decay = 0.3;
+    this.sustain = 0.6;
+    this.release = 0.3;
+  }
+
+  draw(ctx, isActive = false) {
+    ctx.fillStyle = 'rgba(20, 20, 30, 0.6)';
+    ctx.fillRect(0, 0, this.width, this.height);
+
+    const total = this.attack + this.decay + this.release + 0.5;
+    const attackX = (this.attack / total) * this.width;
+    const decayX = attackX + (this.decay / total) * this.width;
+    const sustainX = decayX + (0.5 / total) * this.width;
+
+    const bottomY = this.height - 10;
+    const attackY = this.height - 10;
+    const decayY = bottomY - (this.sustain * (this.height - 20));
+    const releaseY = bottomY;
+
+    ctx.strokeStyle = isActive ? 'rgba(0, 240, 255, 0.9)' : 'rgba(255, 136, 68, 0.7)';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    ctx.beginPath();
+    ctx.moveTo(10, bottomY);
+    ctx.lineTo(attackX, attackY);
+    ctx.lineTo(decayX, decayY);
+    ctx.lineTo(sustainX, decayY);
+    ctx.lineTo(sustainX + (this.release / total) * this.width, releaseY);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(200, 200, 200, 0.2)';
+    ctx.font = '9px monospace';
+    ctx.fillText(`A:${(this.attack*1000|0)}ms D:${(this.decay*1000|0)}ms S:${(this.sustain*100|0)}% R:${(this.release*1000|0)}ms`, 5, 10);
+  }
+
+  setADSR(a, d, s, r) {
+    this.attack = Math.max(0, Math.min(1, a));
+    this.decay = Math.max(0, Math.min(1, d));
+    this.sustain = Math.max(0, Math.min(1, s));
+    this.release = Math.max(0, Math.min(1, r));
+  }
+}
+
+class PerformanceTimeline {
+  constructor(width = 280, height = 60) {
+    this.width = width;
+    this.height = height;
+    this.events = [];
+    this.playheadTime = 0;
+  }
+
+  addEvent(time, type, value) {
+    this.events.push({time, type, value});
+    if (this.events.length > 50) this.events.shift();
+  }
+
+  clear() {
+    this.events = [];
+  }
+
+  setPlayheadTime(time) {
+    this.playheadTime = time;
+  }
+
+  draw(ctx, minTime = 0, maxTime = 10) {
+    ctx.fillStyle = 'rgba(20, 20, 30, 0.6)';
+    ctx.fillRect(0, 0, this.width, this.height);
+
+    const range = maxTime - minTime || 1;
+    const playheadX = ((this.playheadTime - minTime) / range) * this.width;
+
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
+    ctx.beginPath();
+    ctx.moveTo(playheadX, 0);
+    ctx.lineTo(playheadX, this.height);
+    ctx.stroke();
+
+    for (const event of this.events) {
+      const x = ((event.time - minTime) / range) * this.width;
+      if (x >= 0 && x <= this.width) {
+        ctx.fillStyle = event.type === 'note' ? 'rgba(100, 200, 255, 0.7)' : 'rgba(255, 136, 68, 0.7)';
+        ctx.fillRect(x - 1, 0, 2, this.height);
+      }
+    }
+  }
+}
+
+// Phase 20c: Initialize automation visualizers
+let automationVisualizers = {};
+let lfoPreview = null;
+let envelopeViz = null;
+let performanceTimeline = null;
+
+function initAutomationVisualizers() {
+  const container = document.getElementById('performanceMetricsPanel');
+  if (!container) return;
+
+  lfoPreview = new LFOWaveformPreview(280, 80);
+  envelopeViz = new EnvelopeVisualizer(280, 100);
+  performanceTimeline = new PerformanceTimeline(280, 60);
+
+  automationVisualizers = {
+    automation: new AutomationCurveVisualizer(280, 120),
+    lfo: lfoPreview,
+    envelope: envelopeViz,
+    timeline: performanceTimeline
+  };
+}
+
+function updateAutomationVisualization() {
+  if (!automationVisualizers.automation || !currentRecording) return;
+
+  const recording = currentRecording;
+  automationVisualizers.automation.clear();
+
+  for (const event of recording.events || []) {
+    if (event.parameter) {
+      automationVisualizers.automation.addPoint(event.time, event.value || 0.5);
+    }
+  }
+}
+
+function drawAutomationDisplays(canvasId, vizKey) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !automationVisualizers[vizKey]) return;
+
+  const ctx = canvas.getContext('2d');
+  if (ctx) automationVisualizers[vizKey].draw(ctx);
 }
 
 // Phase 15a: Voice Pool Architecture (Hybrid Approach)
@@ -4334,6 +4592,67 @@ function updatePerformanceMetricsDisplay() {
     const latency = (audioCtx.baseLatency || 0) * 1000 + (audioCtx.outputLatency || 0) * 1000;
     latencyEl.textContent = latency.toFixed(1) + 'ms';
   }
+}
+
+// Phase 20c: Update automation displays
+function updateAutomationDisplays() {
+  if (!automationVisualizers) return;
+
+  // Update automation curve with current performance recording data
+  if (currentRecording && automationVisualizers.automation) {
+    updateAutomationVisualization();
+    const canvas = document.getElementById('automationCurveCanvas');
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) automationVisualizers.automation.draw(ctx);
+    }
+  }
+
+  // Draw LFO waveform if modulation is active
+  if (currentPattern && currentPattern.modulationRack && currentPattern.modulationRack.length > 0 && automationVisualizers.lfo) {
+    const firstLFO = currentPattern.modulationRack.find(m => m.source === 'lfo1');
+    if (firstLFO) {
+      const canvas = document.getElementById('lfoPreviewCanvas');
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) automationVisualizers.lfo.draw(ctx, firstLFO.frequency || 2.5, firstLFO.waveshape || 'sine', firstLFO.depth || 0.5);
+      }
+    }
+  }
+
+  // Draw envelope visualization
+  if (automationVisualizers.envelope) {
+    const canvas = document.getElementById('envelopeCanvas');
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const isActive = isPlaying && currentRecording;
+        automationVisualizers.envelope.draw(ctx, isActive);
+      }
+    }
+  }
+
+  // Draw performance timeline
+  if (automationVisualizers.timeline && isPlaying) {
+    automationVisualizers.timeline.setPlayheadTime(audioCtx.currentTime % 30);
+    const canvas = document.getElementById('timelineCanvas');
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) automationVisualizers.timeline.draw(ctx, 0, 30);
+    }
+  }
+}
+
+// Phase 20c: Add to spectral animation loop
+function startAutomationAnimation() {
+  if (!automationVisualizers) return;
+
+  function animate() {
+    updateAutomationDisplays();
+    requestAnimationFrame(animate);
+  }
+
+  animate();
 }
 
 // === PHASE 20b: PATTERN GENERATION FUNCTIONS ===
@@ -7887,6 +8206,12 @@ document.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => {
     initSpectralDisplay();
   }, 100);
+
+  // Phase 20c: Initialize Automation Visualizers
+  setTimeout(() => {
+    initAutomationVisualizers();
+    startAutomationAnimation();
+  }, 150);
 });
 </script>
 
