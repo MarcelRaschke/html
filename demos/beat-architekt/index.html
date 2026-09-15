@@ -1920,6 +1920,185 @@ class SpectralAnalyzer {
   }
 }
 
+// === PHASE 21a: SAMPLE LIBRARY & IMPORT SYSTEM ===
+
+class SampleLibrary {
+  constructor() {
+    this.db = null;
+    this.samples = new Map();
+    this.initialized = false;
+  }
+
+  async init() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open('BeatArchitekt', 1);
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        this.db = request.result;
+        this.loadAllSamples().then(() => {
+          this.initialized = true;
+          resolve();
+        });
+      };
+
+      request.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('samples')) {
+          const store = db.createObjectStore('samples', { keyPath: 'id' });
+          store.createIndex('name', 'name', { unique: false });
+          store.createIndex('timestamp', 'timestamp', { unique: false });
+        }
+      };
+    });
+  }
+
+  async importSample(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = async (e) => {
+        try {
+          const arrayBuffer = e.target.result;
+          const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+          const sample = {
+            id: 'sample_' + Date.now(),
+            name: file.name,
+            duration: audioBuffer.duration,
+            sampleRate: audioBuffer.sampleRate,
+            channels: audioBuffer.numberOfChannels,
+            timestamp: Date.now(),
+            buffer: audioBuffer,
+            bpm: await this.detectBPM(audioBuffer),
+            waveformCache: null
+          };
+
+          await this.saveSample(sample);
+          this.samples.set(sample.id, sample);
+          resolve(sample);
+        } catch (err) {
+          reject(err);
+        }
+      };
+
+      reader.onerror = () => reject(reader.error);
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  async saveSample(sample) {
+    return new Promise((resolve, reject) => {
+      const store = this.db.transaction('samples', 'readwrite').objectStore('samples');
+      const sampleData = {
+        id: sample.id,
+        name: sample.name,
+        duration: sample.duration,
+        sampleRate: sample.sampleRate,
+        channels: sample.channels,
+        timestamp: sample.timestamp,
+        bpm: sample.bpm,
+        pcmData: Array.from(sample.buffer.getChannelData(0))
+      };
+
+      const request = store.put(sampleData);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(sample.id);
+    });
+  }
+
+  async loadAllSamples() {
+    return new Promise((resolve, reject) => {
+      const store = this.db.transaction('samples', 'readonly').objectStore('samples');
+      const request = store.getAll();
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = async () => {
+        for (const sampleData of request.result) {
+          try {
+            const pcmArray = new Float32Array(sampleData.pcmData);
+            const audioBuffer = audioCtx.createBuffer(sampleData.channels, sampleData.pcmData.length, sampleData.sampleRate);
+            audioBuffer.getChannelData(0).set(pcmArray);
+
+            this.samples.set(sampleData.id, {
+              id: sampleData.id,
+              name: sampleData.name,
+              duration: sampleData.duration,
+              sampleRate: sampleData.sampleRate,
+              channels: sampleData.channels,
+              buffer: audioBuffer,
+              bpm: sampleData.bpm,
+              timestamp: sampleData.timestamp,
+              waveformCache: null
+            });
+          } catch (err) {
+            console.error('Error loading sample:', err);
+          }
+        }
+        resolve();
+      };
+    });
+  }
+
+  getSample(sampleId) {
+    return this.samples.get(sampleId);
+  }
+
+  listSamples() {
+    return Array.from(this.samples.values()).sort((a, b) => b.timestamp - a.timestamp);
+  }
+
+  async deleteSample(sampleId) {
+    return new Promise((resolve, reject) => {
+      const store = this.db.transaction('samples', 'readwrite').objectStore('samples');
+      const request = store.delete(sampleId);
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        this.samples.delete(sampleId);
+        resolve();
+      };
+    });
+  }
+
+  async detectBPM(audioBuffer) {
+    const offlineCtx = new OfflineAudioContext(1, audioBuffer.length, audioBuffer.sampleRate);
+    const source = offlineCtx.createBufferSource();
+    source.buffer = audioBuffer;
+
+    const analyser = offlineCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    source.connect(analyser);
+    analyser.connect(offlineCtx.destination);
+
+    source.start(0);
+    await offlineCtx.startRendering();
+
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(data);
+
+    let energySum = 0;
+    for (let i = 0; i < data.length; i++) {
+      energySum += data[i];
+    }
+    const avgEnergy = energySum / data.length;
+
+    return Math.round((avgEnergy / 255) * 160 + 80);
+  }
+
+  cacheWaveform(sampleId, canvas) {
+    const sample = this.samples.get(sampleId);
+    if (sample) {
+      sample.waveformCache = canvas;
+    }
+  }
+
+  getWaveformCache(sampleId) {
+    const sample = this.samples.get(sampleId);
+    return sample ? sample.waveformCache : null;
+  }
+}
+
 // === PHASE 20c: AUTOMATION VISUALIZATION & PERFORMANCE DASHBOARD ===
 
 class AutomationCurveVisualizer {
@@ -7596,6 +7775,109 @@ function toggleVideoExportVisualizer(analyzer) {
     videoExportAnalyzer[analyzer].enabled = !videoExportAnalyzer[analyzer].enabled;
   }
 }
+
+// === PHASE 21a: SAMPLE LIBRARY FUNCTIONS ===
+
+let sampleLibrary = null;
+
+async function initSampleLibrary() {
+  try {
+    sampleLibrary = new SampleLibrary();
+    await sampleLibrary.init();
+    setupSampleLibraryUI();
+    updateSampleList();
+  } catch (err) {
+    console.error('Sample Library init error:', err);
+  }
+}
+
+function setupSampleLibraryUI() {
+  const dragZone = document.getElementById('sampleDragZone');
+  const fileInput = document.getElementById('sampleFileInput');
+
+  dragZone.addEventListener('click', () => fileInput.click());
+  dragZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dragZone.style.background = 'rgba(100,200,255,0.1)';
+    dragZone.style.borderColor = 'rgba(100,200,255,0.6)';
+  });
+  dragZone.addEventListener('dragleave', () => {
+    dragZone.style.background = 'rgba(100,200,255,0.02)';
+    dragZone.style.borderColor = 'rgba(100,200,255,0.4)';
+  });
+  dragZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragZone.style.background = 'rgba(100,200,255,0.02)';
+    dragZone.style.borderColor = 'rgba(100,200,255,0.4)';
+    handleSampleDrop(e.dataTransfer.files);
+  });
+}
+
+function handleSampleDrop(files) {
+  for (let file of files) {
+    if (file.type.startsWith('audio/')) {
+      handleSampleImport(file);
+    }
+  }
+}
+
+function handleSampleFileSelect(event) {
+  const files = event.target.files;
+  for (let file of files) {
+    handleSampleImport(file);
+  }
+}
+
+async function handleSampleImport(file) {
+  try {
+    const sample = await sampleLibrary.importSample(file);
+    updateSampleList();
+    showToast(`✅ Imported: ${sample.name} (${sample.duration.toFixed(2)}s)`);
+  } catch (err) {
+    console.error('Sample import error:', err);
+    showToast(`❌ Failed to import ${file.name}: ${err.message}`);
+  }
+}
+
+function updateSampleList() {
+  const listDiv = document.getElementById('sampleList');
+  const samples = sampleLibrary.listSamples();
+
+  if (samples.length === 0) {
+    listDiv.innerHTML = '<div style="font-size:10px;color:var(--text-dim);text-align:center;padding:20px">No samples imported yet</div>';
+    return;
+  }
+
+  listDiv.innerHTML = samples.map((sample, idx) => `
+    <div style="display:flex;gap:8px;padding:8px;background:rgba(0,0,0,0.3);border-radius:6px;margin-bottom:6px;align-items:center;justify-content:space-between">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:10px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sample.name}</div>
+        <div style="font-size:9px;color:var(--text-dim)">${sample.duration.toFixed(2)}s @ ${sample.sampleRate/1000}kHz</div>
+        <div style="font-size:9px;color:var(--cyan)">BPM: ${sample.bpm}</div>
+      </div>
+      <button onclick="deleteSample('${sample.id}')" style="padding:6px 10px;background:rgba(255,51,85,0.15);border:1px solid var(--red);color:var(--red);border-radius:4px;cursor:pointer;font-size:10px;white-space:nowrap">
+        🗑️ Delete
+      </button>
+    </div>
+  `).join('');
+}
+
+async function deleteSample(sampleId) {
+  if (!confirm('Delete this sample?')) return;
+  try {
+    await sampleLibrary.deleteSample(sampleId);
+    updateSampleList();
+    showToast('✅ Sample deleted');
+  } catch (err) {
+    console.error('Delete error:', err);
+    showToast('❌ Failed to delete sample');
+  }
+}
+
+function toggleSampleLibraryPanel() {
+  const panel = document.getElementById('sampleLibraryPanel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
 </script>
 
 <!-- Cloud Sync Settings Modal -->
@@ -8165,6 +8447,56 @@ function toggleVideoExportVisualizer(analyzer) {
   </button>
 </div>
 
+<!-- Phase 21a: Sample Library Panel -->
+<div id="sampleLibraryPanel" style="position:fixed;bottom:20px;right:420px;width:380px;background:var(--bg-card);border:1px solid rgba(100,200,255,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:70vh;overflow-y:auto;display:none">
+  <div style="font-size:13px;font-weight:600;color:var(--cyan);margin-bottom:12px">📁 Sample Library</div>
+
+  <!-- Import Zone -->
+  <div id="sampleDragZone" style="border:2px dashed rgba(100,200,255,0.4);border-radius:8px;padding:20px;text-align:center;margin-bottom:12px;cursor:pointer;transition:all 0.2s;background:rgba(100,200,255,0.02)">
+    <div style="font-size:24px;margin-bottom:8px">📥</div>
+    <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">Drag audio files here or click to browse</div>
+    <div style="font-size:9px;color:var(--text-dim)">WAV, MP3, OGG, WEBM</div>
+    <input type="file" id="sampleFileInput" accept="audio/*" style="display:none" onchange="handleSampleFileSelect(event)">
+  </div>
+
+  <!-- Sample List -->
+  <div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">Imported Samples</div>
+  <div id="sampleList" style="max-height:300px;overflow-y:auto;background:rgba(0,0,0,0.2);border-radius:6px;padding:8px">
+    <div style="font-size:10px;color:var(--text-dim);text-align:center;padding:20px">No samples imported yet</div>
+  </div>
+
+  <button onclick="document.getElementById('sampleLibraryPanel').style.display='none'" style="width:100%;margin-top:12px;padding:8px;background:rgba(100,120,140,0.1);border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">
+    ✕ Close
+  </button>
+</div>
+
+<!-- Toggle Sample Library Panel Button -->
+<style>
+#sampleLibraryToggleBtn {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(100,200,255,0.2), rgba(200,100,255,0.2));
+  border: 2px solid var(--cyan);
+  color: var(--cyan);
+  font-size: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+  z-index: 899;
+  box-shadow: 0 0 20px rgba(100,200,255,0.2);
+}
+#sampleLibraryToggleBtn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 30px rgba(100,200,255,0.4);
+}
+</style>
+
 <!-- Toggle Video Export Panel Button -->
 <style>
 #videoExportToggleBtn {
@@ -8393,6 +8725,22 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   document.body.appendChild(aiMixingToggleBtn);
 
+  // Phase 21a: Sample Library toggle button
+  const sampleLibraryToggleBtn = document.createElement('button');
+  sampleLibraryToggleBtn.id = 'sampleLibraryToggleBtn';
+  sampleLibraryToggleBtn.textContent = '📁';
+  sampleLibraryToggleBtn.title = 'Sample Library (Phase 21)';
+  sampleLibraryToggleBtn.onclick = toggleSampleLibraryPanel;
+  sampleLibraryToggleBtn.onmouseover = () => {
+    sampleLibraryToggleBtn.style.transform = 'scale(1.1)';
+    sampleLibraryToggleBtn.style.boxShadow = '0 0 30px rgba(100,200,255,0.4)';
+  };
+  sampleLibraryToggleBtn.onmouseout = () => {
+    sampleLibraryToggleBtn.style.transform = 'scale(1)';
+    sampleLibraryToggleBtn.style.boxShadow = '0 0 20px rgba(100,200,255,0.2)';
+  };
+  document.body.appendChild(sampleLibraryToggleBtn);
+
   // Initialize Performance Monitoring
   initPerformanceMonitoring();
 
@@ -8425,6 +8773,11 @@ document.addEventListener('DOMContentLoaded', () => {
     initAutomationVisualizers();
     startAutomationAnimation();
   }, 150);
+
+  // Phase 21a: Initialize Sample Library
+  setTimeout(() => {
+    initSampleLibrary();
+  }, 200);
 });
 </script>
 
