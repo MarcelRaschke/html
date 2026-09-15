@@ -862,6 +862,17 @@ body::before {
           </div>
         </div>
 
+        <!-- Phase 16b: Spectrum Analyzer -->
+        <div style="margin-bottom:12px;padding:10px;background:rgba(0,240,255,0.05);border-radius:4px">
+          <label style="display:flex;gap:8px;align-items:center;margin-bottom:8px;cursor:pointer">
+            <input type="checkbox" id="spectrumToggle" onchange="toggleSpectrumAnalyzer()">
+            <span style="font-size:11px;font-weight:600">📊 Spectrum Analyzer</span>
+          </label>
+          <div id="spectrumControls" style="display:none">
+            <canvas id="spectrumCanvas" width="280" height="80" style="width:100%;height:80px;background:rgba(10,20,40,0.9);border-radius:3px;border:1px solid rgba(0,240,255,0.2)"></canvas>
+          </div>
+        </div>
+
       <!-- MIDI Controller Panel -->
       <div id="midiPanel" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
         <div style="font-size:12px;color:var(--cyan);font-weight:600;margin-bottom:12px">🎛️ MIDI Controller</div>
@@ -1150,7 +1161,13 @@ let advancedAudio = {
     ambient: { duration: 3.0, decayShape: 1.0, diffusion: 0.5 }
   },
   currentPreset: 'mediumHall',
-  reverbWarmth: 0.5
+  reverbWarmth: 0.5,
+  // Phase 16b: Spectral Analyzer
+  spectrumEnabled: false,
+  analyser: null,
+  frequencyData: null,
+  peakFrequencies: [],
+  spectrumUpdateRate: 30 // Hz
 };
 
 let midiAccess = null;
@@ -1889,6 +1906,16 @@ function initEffectsChain() {
   effectsNodes.reverb.connect(effectsNodes.reverbWet);
   effectsNodes.reverbWet.connect(audioCtx.destination);
 
+  // Phase 16b: Spectral Analyzer
+  advancedAudio.analyser = audioCtx.createAnalyser();
+  advancedAudio.analyser.fftSize = 2048;
+  advancedAudio.analyser.smoothingTimeConstant = 0.8;
+  advancedAudio.frequencyData = new Uint8Array(advancedAudio.analyser.frequencyBinCount);
+
+  // Connect analyser to reverb output for complete spectrum
+  effectsNodes.reverbWet.connect(advancedAudio.analyser);
+  effectsNodes.eqTreble.connect(advancedAudio.analyser);
+
   // Dry signal path (bypass effects)
   effectsNodes.eqTreble.connect(audioCtx.destination);
 }
@@ -1915,6 +1942,84 @@ function createPresetImpulse(presetName) {
   const preset = advancedAudio.impulsePresets[presetName];
   if (!preset) return createReverbImpulse(2);
   return createReverbImpulse(preset.duration, preset.decayShape, preset.diffusion);
+}
+
+// Phase 16b: Spectral Analyzer
+function updateSpectrumData() {
+  if (!advancedAudio.analyser || !advancedAudio.spectrumEnabled) return;
+
+  advancedAudio.analyser.getByteFrequencyData(advancedAudio.frequencyData);
+
+  // Find peak frequencies (top 5 peaks)
+  const data = Array.from(advancedAudio.frequencyData);
+  const peaks = [];
+
+  for (let i = 1; i < data.length - 1; i++) {
+    if (data[i] > data[i - 1] && data[i] > data[i + 1] && data[i] > 50) {
+      const frequency = (i * audioCtx.sampleRate) / advancedAudio.analyser.fftSize;
+      peaks.push({ frequency, magnitude: data[i], binIndex: i });
+    }
+  }
+
+  advancedAudio.peakFrequencies = peaks.sort((a, b) => b.magnitude - a.magnitude).slice(0, 5);
+}
+
+function toggleSpectrumAnalyzer() {
+  advancedAudio.spectrumEnabled = !advancedAudio.spectrumEnabled;
+  const checkbox = document.getElementById('spectrumToggle');
+  const controls = document.getElementById('spectrumControls');
+  if (checkbox) checkbox.checked = advancedAudio.spectrumEnabled;
+  if (controls) controls.style.display = advancedAudio.spectrumEnabled ? 'block' : 'none';
+
+  if (advancedAudio.spectrumEnabled) {
+    updateSpectrumDisplay();
+  }
+}
+
+function updateSpectrumDisplay() {
+  if (!advancedAudio.spectrumEnabled) return;
+
+  updateSpectrumData();
+
+  const canvas = document.getElementById('spectrumCanvas');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+
+  ctx.fillStyle = 'rgba(10, 20, 40, 0.9)';
+  ctx.fillRect(0, 0, width, height);
+
+  // Draw frequency spectrum
+  const data = advancedAudio.frequencyData;
+  const barWidth = width / data.length;
+
+  ctx.fillStyle = 'rgba(0, 240, 255, 0.6)';
+  for (let i = 0; i < data.length; i++) {
+    const barHeight = (data[i] / 255) * height;
+    ctx.fillRect(i * barWidth, height - barHeight, barWidth - 1, barHeight);
+  }
+
+  // Draw peak markers
+  ctx.strokeStyle = 'rgba(255, 100, 100, 0.8)';
+  ctx.lineWidth = 2;
+  for (const peak of advancedAudio.peakFrequencies) {
+    const x = (peak.binIndex / data.length) * width;
+    const y = height - (peak.magnitude / 255) * height;
+
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Label peak frequency
+    const freqKHz = (peak.frequency / 1000).toFixed(1);
+    ctx.fillStyle = 'rgba(255, 100, 100, 0.8)';
+    ctx.font = '9px monospace';
+    ctx.fillText(freqKHz + 'kHz', x - 20, y - 8);
+  }
+
+  requestAnimationFrame(updateSpectrumDisplay);
 }
 
 // Phase 12: Effect control functions
