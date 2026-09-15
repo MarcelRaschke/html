@@ -908,6 +908,27 @@ body::before {
           </div>
         </div>
 
+        <!-- Phase 16d: Stereo & Tone Curve -->
+        <div style="margin-bottom:12px;padding:10px;background:rgba(0,240,255,0.05);border-radius:4px">
+          <div style="margin-bottom:8px">
+            <label>Stereo Width: <span id="stereoWidthDisplay">1.0x</span></label>
+            <input type="range" id="stereoWidth" min="0" max="2.5" value="1.0" step="0.1" oninput="setStereoWidth(this.value); document.getElementById('stereoWidthDisplay').textContent = parseFloat(this.value).toFixed(1) + 'x'" style="width:100%">
+          </div>
+          <label style="display:flex;gap:8px;align-items:center;cursor:pointer">
+            <input type="checkbox" id="toneCurveToggle" onchange="toggleToneCurve()">
+            <span style="font-size:11px;font-weight:600">📈 Tone Curve EQ</span>
+          </label>
+          <canvas id="toneCurveCanvas" width="280" height="100" style="display:none;width:100%;height:100px;background:rgba(10,20,40,0.9);border-radius:3px;border:1px solid rgba(0,240,255,0.2);margin-top:8px"></canvas>
+          <div id="toneCurveControls" style="display:none;font-size:9px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+              <div><label>60Hz: <input type="range" min="-12" max="12" value="0" step="1" oninput="updateToneCurvePoint(0, this.value)" style="width:100%"></label></div>
+              <div><label>250Hz: <input type="range" min="-12" max="12" value="0" step="1" oninput="updateToneCurvePoint(1, this.value)" style="width:100%"></label></div>
+              <div><label>1kHz: <input type="range" min="-12" max="12" value="0" step="1" oninput="updateToneCurvePoint(2, this.value)" style="width:100%"></label></div>
+              <div><label>4kHz: <input type="range" min="-12" max="12" value="0" step="1" oninput="updateToneCurvePoint(3, this.value)" style="width:100%"></label></div>
+            </div>
+          </div>
+        </div>
+
       <!-- MIDI Controller Panel -->
       <div id="midiPanel" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
         <div style="font-size:12px;color:var(--cyan);font-weight:600;margin-bottom:12px">🎛️ MIDI Controller</div>
@@ -1210,7 +1231,17 @@ let advancedAudio = {
   lfoDepth: 0.2, // 0-1 normalized
   lfoWaveform: 'sine', // sine, triangle, square, saw
   lfoPhase: 0,
-  lfoBaseValues: {}
+  lfoBaseValues: {},
+  // Phase 16d: Stereo Imaging & Tone Curve
+  stereoWidth: 1.0, // 0 = mono, 1 = normal, 2+ = ultra-wide
+  toneCurveEnabled: false,
+  toneCurvePoints: [
+    { freq: 60, gain: 0 },
+    { freq: 250, gain: 0 },
+    { freq: 1000, gain: 0 },
+    { freq: 4000, gain: 0 },
+    { freq: 12000, gain: 0 }
+  ]
 };
 
 let midiAccess = null;
@@ -1963,6 +1994,14 @@ function initEffectsChain() {
   effectsNodes.reverbWet.connect(advancedAudio.analyser);
   effectsNodes.eqTreble.connect(advancedAudio.analyser);
 
+  // Phase 16d: Stereo width control (via channel manipulation)
+  effectsNodes.stereoSplitter = audioCtx.createChannelSplitter(2);
+  effectsNodes.stereoMerger = audioCtx.createChannelMerger(2);
+  effectsNodes.stereoGainL = audioCtx.createGain();
+  effectsNodes.stereoGainR = audioCtx.createGain();
+  effectsNodes.stereoGainL.gain.value = 1;
+  effectsNodes.stereoGainR.gain.value = 1;
+
   // Dry signal path (bypass effects)
   effectsNodes.eqTreble.connect(audioCtx.destination);
 }
@@ -2156,6 +2195,112 @@ function setLFODepth(depth) {
 
 function setLFOWaveform(waveform) {
   advancedAudio.lfoWaveform = waveform;
+}
+
+// Phase 16d: Stereo Imaging & Tone Curve
+function setStereoWidth(width) {
+  advancedAudio.stereoWidth = parseFloat(width);
+
+  if (advancedAudio.stereoWidth <= 1) {
+    // Mono to normal stereo
+    const monoAmount = 1 - advancedAudio.stereoWidth;
+    effectsNodes.stereoGainL.gain.value = 1 - monoAmount * 0.5;
+    effectsNodes.stereoGainR.gain.value = 1 - monoAmount * 0.5;
+  } else {
+    // Ultra-wide stereo (mid/side expansion)
+    effectsNodes.stereoGainL.gain.value = advancedAudio.stereoWidth;
+    effectsNodes.stereoGainR.gain.value = advancedAudio.stereoWidth;
+  }
+}
+
+function toggleToneCurve() {
+  advancedAudio.toneCurveEnabled = !advancedAudio.toneCurveEnabled;
+  const checkbox = document.getElementById('toneCurveToggle');
+  const canvas = document.getElementById('toneCurveCanvas');
+  const controls = document.getElementById('toneCurveControls');
+  if (checkbox) checkbox.checked = advancedAudio.toneCurveEnabled;
+  if (canvas) canvas.style.display = advancedAudio.toneCurveEnabled ? 'block' : 'none';
+  if (controls) controls.style.display = advancedAudio.toneCurveEnabled ? 'block' : 'none';
+  if (advancedAudio.toneCurveEnabled) drawToneCurve();
+}
+
+function updateToneCurvePoint(index, gain) {
+  if (index >= 0 && index < advancedAudio.toneCurvePoints.length) {
+    advancedAudio.toneCurvePoints[index].gain = parseFloat(gain);
+    drawToneCurve();
+  }
+}
+
+function drawToneCurve() {
+  const canvas = document.getElementById('toneCurveCanvas');
+  if (!canvas || !advancedAudio.toneCurveEnabled) return;
+
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+
+  // Background
+  ctx.fillStyle = 'rgba(10, 20, 40, 0.9)';
+  ctx.fillRect(0, 0, width, height);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(0, 240, 255, 0.1)';
+  ctx.lineWidth = 1;
+  const gridSpacing = width / 5;
+  for (let i = 0; i <= 5; i++) {
+    ctx.beginPath();
+    ctx.moveTo(i * gridSpacing, 0);
+    ctx.lineTo(i * gridSpacing, height);
+    ctx.stroke();
+  }
+
+  // Center line (0dB)
+  ctx.strokeStyle = 'rgba(0, 240, 255, 0.3)';
+  ctx.beginPath();
+  ctx.moveTo(0, height / 2);
+  ctx.lineTo(width, height / 2);
+  ctx.stroke();
+
+  // Draw curve
+  ctx.strokeStyle = 'rgba(0, 240, 255, 0.8)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+
+  const points = advancedAudio.toneCurvePoints;
+  const minFreq = Math.log10(20);
+  const maxFreq = Math.log10(20000);
+
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    const x = ((Math.log10(p.freq) - minFreq) / (maxFreq - minFreq)) * width;
+    const y = height / 2 - (p.gain / 12) * (height / 2);
+
+    if (i === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  }
+
+  ctx.stroke();
+
+  // Draw control points
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    const x = ((Math.log10(p.freq) - minFreq) / (maxFreq - minFreq)) * width;
+    const y = height / 2 - (p.gain / 12) * (height / 2);
+
+    ctx.fillStyle = 'rgba(255, 100, 100, 0.8)';
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Label frequency
+    ctx.fillStyle = 'rgba(0, 240, 255, 0.8)';
+    ctx.font = '8px monospace';
+    const freqLabel = p.freq < 1000 ? p.freq + 'Hz' : (p.freq / 1000).toFixed(1) + 'k';
+    ctx.fillText(freqLabel, x - 15, y - 8);
+  }
 }
 
 // Phase 12: Effect control functions
