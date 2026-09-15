@@ -824,7 +824,41 @@ body::before {
             <span style="font-size:11px;font-weight:600">Reverb</span>
           </label>
           <div id="reverbControls" style="display:none;margin-left:20px">
-            <div style="font-size:10px">Mix: <input type="range" id="reverbMixSlider" min="0" max="1" value="0.2" step="0.05" oninput="updateReverb(this.value)" style="width:80px;vertical-align:middle"></div>
+            <div style="font-size:10px;margin-bottom:6px">Mix: <input type="range" id="reverbMixSlider" min="0" max="1" value="0.2" step="0.05" oninput="updateReverb(this.value)" style="width:80px;vertical-align:middle"></div>
+            <div style="font-size:10px;margin-bottom:6px">Preset: <select id="impulsePreset" onchange="changeImpulsePreset(this.value)" style="font-size:9px;padding:2px;width:100px">
+              <option value="smallRoom">Small Room</option>
+              <option value="mediumHall" selected>Medium Hall</option>
+              <option value="largeCathedral">Cathedral</option>
+              <option value="ambient">Ambient</option>
+            </select></div>
+          </div>
+        </div>
+
+        <!-- Phase 16: Multi-tap Delay -->
+        <div style="margin-bottom:12px;padding:10px;background:rgba(0,240,255,0.05);border-radius:4px">
+          <label style="display:flex;gap:8px;align-items:center;margin-bottom:6px;cursor:pointer">
+            <input type="checkbox" id="multiTapDelayToggle" onchange="toggleMultiTapDelay()">
+            <span style="font-size:11px;font-weight:600">Multi-Tap Delay</span>
+          </label>
+          <div id="multiTapControls" style="display:none;margin-left:20px;font-size:9px">
+            <div style="margin-bottom:8px;padding:6px;background:rgba(0,240,255,0.1);border-radius:3px">
+              <div style="margin-bottom:4px"><strong>Tap 1:</strong></div>
+              <div style="margin-bottom:2px">Time: <input type="range" id="tap1Time" min="0.1" max="0.8" value="0.25" step="0.05" oninput="updateMultiTapDelay(0, this.value, document.getElementById('tap1Feedback').value, document.getElementById('tap1Mix').value)" style="width:60px;vertical-align:middle"></div>
+              <div style="margin-bottom:2px">Feedback: <input type="range" id="tap1Feedback" min="0" max="0.8" value="0.3" step="0.05" oninput="updateMultiTapDelay(0, document.getElementById('tap1Time').value, this.value, document.getElementById('tap1Mix').value)" style="width:60px;vertical-align:middle"></div>
+              <div>Mix: <input type="range" id="tap1Mix" min="0" max="1" value="0.25" step="0.05" oninput="updateMultiTapDelay(0, document.getElementById('tap1Time').value, document.getElementById('tap1Feedback').value, this.value)" style="width:60px;vertical-align:middle"></div>
+            </div>
+            <div style="margin-bottom:8px;padding:6px;background:rgba(0,240,255,0.1);border-radius:3px">
+              <div style="margin-bottom:4px"><strong>Tap 2:</strong></div>
+              <div style="margin-bottom:2px">Time: <input type="range" id="tap2Time" min="0.2" max="1.5" value="0.5" step="0.05" oninput="updateMultiTapDelay(1, this.value, document.getElementById('tap2Feedback').value, document.getElementById('tap2Mix').value)" style="width:60px;vertical-align:middle"></div>
+              <div style="margin-bottom:2px">Feedback: <input type="range" id="tap2Feedback" min="0" max="0.8" value="0.25" step="0.05" oninput="updateMultiTapDelay(1, document.getElementById('tap2Time').value, this.value, document.getElementById('tap2Mix').value)" style="width:60px;vertical-align:middle"></div>
+              <div>Mix: <input type="range" id="tap2Mix" min="0" max="1" value="0.2" step="0.05" oninput="updateMultiTapDelay(1, document.getElementById('tap2Time').value, document.getElementById('tap2Feedback').value, this.value)" style="width:60px;vertical-align:middle"></div>
+            </div>
+            <div style="padding:6px;background:rgba(0,240,255,0.1);border-radius:3px">
+              <div style="margin-bottom:4px"><strong>Tap 3:</strong></div>
+              <div style="margin-bottom:2px">Time: <input type="range" id="tap3Time" min="0.5" max="2" value="1.0" step="0.05" oninput="updateMultiTapDelay(2, this.value, document.getElementById('tap3Feedback').value, document.getElementById('tap3Mix').value)" style="width:60px;vertical-align:middle"></div>
+              <div style="margin-bottom:2px">Feedback: <input type="range" id="tap3Feedback" min="0" max="0.8" value="0.2" step="0.05" oninput="updateMultiTapDelay(2, document.getElementById('tap3Time').value, this.value, document.getElementById('tap3Mix').value)" style="width:60px;vertical-align:middle"></div>
+              <div>Mix: <input type="range" id="tap3Mix" min="0" max="1" value="0.15" step="0.05" oninput="updateMultiTapDelay(2, document.getElementById('tap3Time').value, document.getElementById('tap3Feedback').value, this.value)" style="width:60px;vertical-align:middle"></div>
+            </div>
           </div>
         </div>
 
@@ -1100,6 +1134,25 @@ let effectsNodes = {
   delay: null, delayFeedback: null, delayWet: null,
   reverb: null, reverbWet: null
 };
+
+// Phase 16: Advanced Audio Features
+let advancedAudio = {
+  multiTapDelayEnabled: false,
+  delayTaps: [
+    { time: 0.25, feedback: 0.3, mix: 0.25, node: null, feedbackNode: null, wetNode: null },
+    { time: 0.5, feedback: 0.25, mix: 0.2, node: null, feedbackNode: null, wetNode: null },
+    { time: 1.0, feedback: 0.2, mix: 0.15, node: null, feedbackNode: null, wetNode: null }
+  ],
+  impulsePresets: {
+    smallRoom: { duration: 0.5, decayShape: 1.5, diffusion: 0.4 },
+    mediumHall: { duration: 1.2, decayShape: 2.0, diffusion: 0.6 },
+    largeCathedral: { duration: 2.5, decayShape: 2.5, diffusion: 0.8 },
+    ambient: { duration: 3.0, decayShape: 1.0, diffusion: 0.5 }
+  },
+  currentPreset: 'mediumHall',
+  reverbWarmth: 0.5
+};
+
 let midiAccess = null;
 let midiEnabled = false;
 
@@ -1772,7 +1825,7 @@ function initEffectsChain() {
   effectsNodes.eqTreble.frequency.value = 10000;
   effectsNodes.eqTreble.gain.value = 0;
 
-  // Delay
+  // Phase 16: Multi-tap Delay System
   effectsNodes.delay = audioCtx.createDelay(2);
   effectsNodes.delay.delayTime.value = 0.5;
   effectsNodes.delayFeedback = audioCtx.createGain();
@@ -1780,26 +1833,59 @@ function initEffectsChain() {
   effectsNodes.delayWet = audioCtx.createGain();
   effectsNodes.delayWet.gain.value = 0;
 
-  // Reverb (Convolver with impulse response)
+  // Initialize multi-tap delay nodes
+  effectsNodes.multiTapMix = audioCtx.createGain();
+  effectsNodes.multiTapMix.gain.value = 0;
+
+  for (let i = 0; i < advancedAudio.delayTaps.length; i++) {
+    const tap = advancedAudio.delayTaps[i];
+    tap.node = audioCtx.createDelay(2);
+    tap.node.delayTime.value = tap.time;
+    tap.feedbackNode = audioCtx.createGain();
+    tap.feedbackNode.gain.value = tap.feedback;
+    tap.wetNode = audioCtx.createGain();
+    tap.wetNode.gain.value = 0;
+  }
+
+  // Reverb (Convolver with preset impulse responses)
   effectsNodes.reverb = audioCtx.createConvolver();
   effectsNodes.reverbWet = audioCtx.createGain();
   effectsNodes.reverbWet.gain.value = 0;
+  effectsNodes.reverbDry = audioCtx.createGain();
+  effectsNodes.reverbDry.gain.value = 1.0;
 
-  const impulse = createReverbImpulse(2);
+  const impulse = createPresetImpulse(advancedAudio.currentPreset);
   effectsNodes.reverb.buffer = impulse;
 
-  // Connect effects chain: globalMasterGain → Compressor → EQ → Delay → Reverb → Destination
+  // Connect effects chain: globalMasterGain → Compressor → EQ → Delay/MultiTapDelay → Reverb → Destination
   globalMasterGain.connect(effectsNodes.compressor);
   effectsNodes.compressor.connect(effectsNodes.eqBass);
   effectsNodes.eqBass.connect(effectsNodes.eqMid);
   effectsNodes.eqMid.connect(effectsNodes.eqTreble);
-  effectsNodes.eqTreble.connect(effectsNodes.delay);
 
+  // Single-tap delay (original)
+  effectsNodes.eqTreble.connect(effectsNodes.delay);
   effectsNodes.delay.connect(effectsNodes.delayFeedback);
   effectsNodes.delayFeedback.connect(effectsNodes.delay);
   effectsNodes.delay.connect(effectsNodes.delayWet);
-  effectsNodes.delayWet.connect(effectsNodes.reverb);
 
+  // Multi-tap delay (Phase 16)
+  effectsNodes.eqTreble.connect(effectsNodes.multiTapMix);
+  for (let i = 0; i < advancedAudio.delayTaps.length; i++) {
+    const tap = advancedAudio.delayTaps[i];
+    effectsNodes.multiTapMix.connect(tap.node);
+    tap.node.connect(tap.feedbackNode);
+    tap.feedbackNode.connect(tap.node);
+    tap.node.connect(tap.wetNode);
+  }
+
+  // Connect to reverb
+  effectsNodes.delayWet.connect(effectsNodes.reverbDry);
+  for (let i = 0; i < advancedAudio.delayTaps.length; i++) {
+    advancedAudio.delayTaps[i].wetNode.connect(effectsNodes.reverbDry);
+  }
+
+  effectsNodes.reverbDry.connect(effectsNodes.reverb);
   effectsNodes.reverb.connect(effectsNodes.reverbWet);
   effectsNodes.reverbWet.connect(audioCtx.destination);
 
@@ -1807,18 +1893,28 @@ function initEffectsChain() {
   effectsNodes.eqTreble.connect(audioCtx.destination);
 }
 
-function createReverbImpulse(duration) {
+function createReverbImpulse(duration, decayShape = 2, diffusion = 0.6) {
   const length = audioCtx.sampleRate * duration;
   const impulse = audioCtx.createBuffer(2, length, audioCtx.sampleRate);
   const left = impulse.getChannelData(0);
   const right = impulse.getChannelData(1);
 
   for (let i = 0; i < length; i++) {
-    left[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2);
-    right[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2);
+    const progress = i / length;
+    const envelope = Math.pow(1 - progress, decayShape);
+    const diffusionFactor = 1 + (Math.sin(i * 0.01) * diffusion);
+
+    left[i] = (Math.random() * 2 - 1) * envelope * diffusionFactor;
+    right[i] = (Math.random() * 2 - 1) * envelope * diffusionFactor;
   }
 
   return impulse;
+}
+
+function createPresetImpulse(presetName) {
+  const preset = advancedAudio.impulsePresets[presetName];
+  if (!preset) return createReverbImpulse(2);
+  return createReverbImpulse(preset.duration, preset.decayShape, preset.diffusion);
 }
 
 // Phase 12: Effect control functions
@@ -1855,6 +1951,46 @@ function updateReverb(mix) {
   if (!effectsNodes.reverb) return;
   effectsParams.reverb = { mix };
   effectsNodes.reverbWet.gain.setTargetAtTime(mix, audioCtx.currentTime, 0.01);
+}
+
+// Phase 16: Multi-tap delay controls
+function toggleMultiTapDelay() {
+  if (!effectsNodes.multiTapMix) return;
+  advancedAudio.multiTapDelayEnabled = !advancedAudio.multiTapDelayEnabled;
+
+  if (advancedAudio.multiTapDelayEnabled) {
+    effectsNodes.multiTapMix.gain.setTargetAtTime(1, audioCtx.currentTime, 0.05);
+  } else {
+    effectsNodes.multiTapMix.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+  }
+
+  const checkbox = document.getElementById('multiTapDelayToggle');
+  const controls = document.getElementById('multiTapControls');
+  if (checkbox) checkbox.checked = advancedAudio.multiTapDelayEnabled;
+  if (controls) controls.style.display = advancedAudio.multiTapDelayEnabled ? 'block' : 'none';
+}
+
+function updateMultiTapDelay(tapIndex, time, feedback, mix) {
+  if (!effectsNodes.multiTapMix || tapIndex >= advancedAudio.delayTaps.length) return;
+
+  const tap = advancedAudio.delayTaps[tapIndex];
+  tap.time = time;
+  tap.feedback = feedback;
+  tap.mix = mix;
+
+  if (tap.node) {
+    tap.node.delayTime.setTargetAtTime(time, audioCtx.currentTime, 0.01);
+    tap.feedbackNode.gain.setTargetAtTime(feedback, audioCtx.currentTime, 0.01);
+    tap.wetNode.gain.setTargetAtTime(mix, audioCtx.currentTime, 0.01);
+  }
+}
+
+function changeImpulsePreset(presetName) {
+  if (!effectsNodes.reverb || !advancedAudio.impulsePresets[presetName]) return;
+
+  advancedAudio.currentPreset = presetName;
+  const impulse = createPresetImpulse(presetName);
+  effectsNodes.reverb.buffer = impulse;
 }
 
 function updateEffectUI(effectName) {
