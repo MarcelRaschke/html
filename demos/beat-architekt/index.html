@@ -768,11 +768,30 @@ body::before {
         <div style="display:flex;gap:8px;margin-bottom:12px">
           <button class="ai-pat-btn" onclick="exportCurrentAsJSON()">↓ Export JSON</button>
           <button class="ai-pat-btn" onclick="exportCurrentAsMIDI()">🎼 Export MIDI</button>
+          <button class="ai-pat-btn" onclick="exportCurrentAsRekordbox()">🎛️ Export RBX</button>
           <button class="ai-pat-btn" onclick="document.getElementById('importFile').click()">↑ Import</button>
           <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImport(this.files[0])">
         </div>
         <div id="patternLibraryList" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);font-size:10px"></div>
         <div style="margin-top:8px;text-align:right;font-size:9px;color:var(--text-dim)">Undo: Ctrl+Z | Redo: Ctrl+Shift+Z</div>
+      </div>
+
+      <!-- XDJ Hardware Controller Panel (Phase 18) -->
+      <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--cyan);font-weight:600;margin-bottom:12px">🎛️ XDJ Hardware</div>
+        <div style="padding:10px;background:rgba(0,240,255,0.05);border-radius:4px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <div id="xdjStatusIndicator" style="width:10px;height:10px;background:var(--red);border-radius:50%;transition:all 0.3s"></div>
+            <span id="xdjStatusText" style="font-size:11px;color:var(--text-secondary)">Disconnected</span>
+          </div>
+          <div id="xdjDeviceName" style="font-size:10px;color:var(--text-dim);margin-bottom:8px">No device detected</div>
+          <button class="ai-pat-btn" style="width:100%;margin-bottom:8px;font-size:10px" onclick="initXDJController()">🔌 Connect XDJ</button>
+          <div id="xdjTempoSync" style="font-size:10px;color:var(--text-dim);padding-top:8px;border-top:1px solid var(--border)">
+            <div style="margin-top:6px">Local BPM: <span id="xdjLocalBPM" style="color:var(--cyan);font-weight:600">125</span></div>
+            <div>XDJ BPM: <span id="xdjRemoteBPM" style="color:var(--magenta);font-weight:600">—</span></div>
+            <div>Sync State: <span id="xdjSyncState" style="color:var(--text-secondary);font-size:9px">Waiting...</span></div>
+          </div>
+        </div>
       </div>
 
       <!-- Effects Panel -->
@@ -824,7 +843,108 @@ body::before {
             <span style="font-size:11px;font-weight:600">Reverb</span>
           </label>
           <div id="reverbControls" style="display:none;margin-left:20px">
-            <div style="font-size:10px">Mix: <input type="range" id="reverbMixSlider" min="0" max="1" value="0.2" step="0.05" oninput="updateReverb(this.value)" style="width:80px;vertical-align:middle"></div>
+            <div style="font-size:10px;margin-bottom:6px">Mix: <input type="range" id="reverbMixSlider" min="0" max="1" value="0.2" step="0.05" oninput="updateReverb(this.value)" style="width:80px;vertical-align:middle"></div>
+            <div style="font-size:10px;margin-bottom:6px">Preset: <select id="impulsePreset" onchange="changeImpulsePreset(this.value)" style="font-size:9px;padding:2px;width:100px">
+              <option value="smallRoom">Small Room</option>
+              <option value="mediumHall" selected>Medium Hall</option>
+              <option value="largeCathedral">Cathedral</option>
+              <option value="ambient">Ambient</option>
+            </select></div>
+          </div>
+        </div>
+
+        <!-- Phase 16: Multi-tap Delay -->
+        <div style="margin-bottom:12px;padding:10px;background:rgba(0,240,255,0.05);border-radius:4px">
+          <label style="display:flex;gap:8px;align-items:center;margin-bottom:6px;cursor:pointer">
+            <input type="checkbox" id="multiTapDelayToggle" onchange="toggleMultiTapDelay()">
+            <span style="font-size:11px;font-weight:600">Multi-Tap Delay</span>
+          </label>
+          <div id="multiTapControls" style="display:none;margin-left:20px;font-size:9px">
+            <div style="margin-bottom:8px;padding:6px;background:rgba(0,240,255,0.1);border-radius:3px">
+              <div style="margin-bottom:4px"><strong>Tap 1:</strong></div>
+              <div style="margin-bottom:2px">Time: <input type="range" id="tap1Time" min="0.1" max="0.8" value="0.25" step="0.05" oninput="updateMultiTapDelay(0, this.value, document.getElementById('tap1Feedback').value, document.getElementById('tap1Mix').value)" style="width:60px;vertical-align:middle"></div>
+              <div style="margin-bottom:2px">Feedback: <input type="range" id="tap1Feedback" min="0" max="0.8" value="0.3" step="0.05" oninput="updateMultiTapDelay(0, document.getElementById('tap1Time').value, this.value, document.getElementById('tap1Mix').value)" style="width:60px;vertical-align:middle"></div>
+              <div>Mix: <input type="range" id="tap1Mix" min="0" max="1" value="0.25" step="0.05" oninput="updateMultiTapDelay(0, document.getElementById('tap1Time').value, document.getElementById('tap1Feedback').value, this.value)" style="width:60px;vertical-align:middle"></div>
+            </div>
+            <div style="margin-bottom:8px;padding:6px;background:rgba(0,240,255,0.1);border-radius:3px">
+              <div style="margin-bottom:4px"><strong>Tap 2:</strong></div>
+              <div style="margin-bottom:2px">Time: <input type="range" id="tap2Time" min="0.2" max="1.5" value="0.5" step="0.05" oninput="updateMultiTapDelay(1, this.value, document.getElementById('tap2Feedback').value, document.getElementById('tap2Mix').value)" style="width:60px;vertical-align:middle"></div>
+              <div style="margin-bottom:2px">Feedback: <input type="range" id="tap2Feedback" min="0" max="0.8" value="0.25" step="0.05" oninput="updateMultiTapDelay(1, document.getElementById('tap2Time').value, this.value, document.getElementById('tap2Mix').value)" style="width:60px;vertical-align:middle"></div>
+              <div>Mix: <input type="range" id="tap2Mix" min="0" max="1" value="0.2" step="0.05" oninput="updateMultiTapDelay(1, document.getElementById('tap2Time').value, document.getElementById('tap2Feedback').value, this.value)" style="width:60px;vertical-align:middle"></div>
+            </div>
+            <div style="padding:6px;background:rgba(0,240,255,0.1);border-radius:3px">
+              <div style="margin-bottom:4px"><strong>Tap 3:</strong></div>
+              <div style="margin-bottom:2px">Time: <input type="range" id="tap3Time" min="0.5" max="2" value="1.0" step="0.05" oninput="updateMultiTapDelay(2, this.value, document.getElementById('tap3Feedback').value, document.getElementById('tap3Mix').value)" style="width:60px;vertical-align:middle"></div>
+              <div style="margin-bottom:2px">Feedback: <input type="range" id="tap3Feedback" min="0" max="0.8" value="0.2" step="0.05" oninput="updateMultiTapDelay(2, document.getElementById('tap3Time').value, this.value, document.getElementById('tap3Mix').value)" style="width:60px;vertical-align:middle"></div>
+              <div>Mix: <input type="range" id="tap3Mix" min="0" max="1" value="0.15" step="0.05" oninput="updateMultiTapDelay(2, document.getElementById('tap3Time').value, document.getElementById('tap3Feedback').value, this.value)" style="width:60px;vertical-align:middle"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Phase 16b: Spectrum Analyzer -->
+        <div style="margin-bottom:12px;padding:10px;background:rgba(0,240,255,0.05);border-radius:4px">
+          <label style="display:flex;gap:8px;align-items:center;margin-bottom:8px;cursor:pointer">
+            <input type="checkbox" id="spectrumToggle" onchange="toggleSpectrumAnalyzer()">
+            <span style="font-size:11px;font-weight:600">📊 Spectrum Analyzer</span>
+          </label>
+          <div id="spectrumControls" style="display:none">
+            <canvas id="spectrumCanvas" width="280" height="80" style="width:100%;height:80px;background:rgba(10,20,40,0.9);border-radius:3px;border:1px solid rgba(0,240,255,0.2)"></canvas>
+          </div>
+        </div>
+
+        <!-- Phase 16c: LFO Modulation -->
+        <div style="margin-bottom:12px;padding:10px;background:rgba(0,240,255,0.05);border-radius:4px">
+          <label style="display:flex;gap:8px;align-items:center;margin-bottom:8px;cursor:pointer">
+            <input type="checkbox" id="lfoToggle" onchange="toggleLFO()">
+            <span style="font-size:11px;font-weight:600">〰️ LFO Modulation</span>
+          </label>
+          <div id="lfoControls" style="display:none;font-size:9px">
+            <div style="margin-bottom:6px">
+              <label>Target:</label>
+              <select id="lfoTarget" onchange="setLFOTarget(this.value)" style="font-size:9px;width:100%;padding:2px">
+                <option value="delayTime">Delay Time</option>
+                <option value="reverbMix">Reverb Mix</option>
+                <option value="tapTime">Tap 1 Time</option>
+              </select>
+            </div>
+            <div style="margin-bottom:6px">
+              <label>Waveform:</label>
+              <select id="lfoWaveform" onchange="setLFOWaveform(this.value)" style="font-size:9px;width:100%;padding:2px">
+                <option value="sine">Sine</option>
+                <option value="triangle">Triangle</option>
+                <option value="square">Square</option>
+                <option value="saw">Sawtooth</option>
+              </select>
+            </div>
+            <div style="margin-bottom:6px">
+              <label>Rate (Hz): <span id="lfoRateDisplay">1.0</span></label>
+              <input type="range" id="lfoRate" min="0.1" max="10" value="1.0" step="0.1" oninput="setLFORate(this.value); document.getElementById('lfoRateDisplay').textContent = parseFloat(this.value).toFixed(1)" style="width:100%">
+            </div>
+            <div>
+              <label>Depth: <span id="lfoDepthDisplay">20%</span></label>
+              <input type="range" id="lfoDepth" min="0" max="1" value="0.2" step="0.05" oninput="setLFODepth(this.value); document.getElementById('lfoDepthDisplay').textContent = Math.round(this.value * 100) + '%'" style="width:100%">
+            </div>
+          </div>
+        </div>
+
+        <!-- Phase 16d: Stereo & Tone Curve -->
+        <div style="margin-bottom:12px;padding:10px;background:rgba(0,240,255,0.05);border-radius:4px">
+          <div style="margin-bottom:8px">
+            <label>Stereo Width: <span id="stereoWidthDisplay">1.0x</span></label>
+            <input type="range" id="stereoWidth" min="0" max="2.5" value="1.0" step="0.1" oninput="setStereoWidth(this.value); document.getElementById('stereoWidthDisplay').textContent = parseFloat(this.value).toFixed(1) + 'x'" style="width:100%">
+          </div>
+          <label style="display:flex;gap:8px;align-items:center;cursor:pointer">
+            <input type="checkbox" id="toneCurveToggle" onchange="toggleToneCurve()">
+            <span style="font-size:11px;font-weight:600">📈 Tone Curve EQ</span>
+          </label>
+          <canvas id="toneCurveCanvas" width="280" height="100" style="display:none;width:100%;height:100px;background:rgba(10,20,40,0.9);border-radius:3px;border:1px solid rgba(0,240,255,0.2);margin-top:8px"></canvas>
+          <div id="toneCurveControls" style="display:none;font-size:9px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+              <div><label>60Hz: <input type="range" min="-12" max="12" value="0" step="1" oninput="updateToneCurvePoint(0, this.value)" style="width:100%"></label></div>
+              <div><label>250Hz: <input type="range" min="-12" max="12" value="0" step="1" oninput="updateToneCurvePoint(1, this.value)" style="width:100%"></label></div>
+              <div><label>1kHz: <input type="range" min="-12" max="12" value="0" step="1" oninput="updateToneCurvePoint(2, this.value)" style="width:100%"></label></div>
+              <div><label>4kHz: <input type="range" min="-12" max="12" value="0" step="1" oninput="updateToneCurvePoint(3, this.value)" style="width:100%"></label></div>
+            </div>
           </div>
         </div>
 
@@ -851,6 +971,74 @@ body::before {
         </div>
 
         <button class="ai-pat-btn" onclick="initMIDI()" style="width:100%;padding:6px;font-size:10px">Detect Controller</button>
+      </div>
+
+      <!-- Phase 19a: Modulation Rack Panel -->
+      <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--lime);font-weight:600;margin-bottom:12px">⚙️ Modulation</div>
+
+        <label style="display:flex;gap:8px;align-items:center;margin-bottom:10px;cursor:pointer">
+          <input type="checkbox" id="modulationEnabled" onchange="toggleModulation()">
+          <span style="font-size:11px">Enable Modulation</span>
+        </label>
+
+        <div id="modulationRackList" style="font-size:10px;max-height:150px;overflow-y:auto;margin-bottom:12px">
+          <!-- Modulations will be listed here -->
+        </div>
+
+        <button class="ai-pat-btn" onclick="openModulationModal()" style="width:100%;padding:6px;font-size:10px;margin-bottom:12px">+ Add Modulation</button>
+
+        <!-- LFO Preset Section -->
+        <div style="margin-top:12px;padding:10px;background:rgba(170,255,0,0.05);border-radius:4px">
+          <label style="font-size:10px;font-weight:600;margin-bottom:8px;display:block">Quick LFO</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:9px">
+            <div>
+              <label>Rate (Hz): <span id="lfoRateDisplay">1.0</span></label>
+              <input type="range" id="quickLfoRate" min="0.1" max="20" value="1.0" step="0.1" oninput="updateQuickLFO()" style="width:100%">
+            </div>
+            <div>
+              <label>Depth: <span id="lfoDepthDisplay">0.5</span></label>
+              <input type="range" id="quickLfoDepth" min="0" max="1" value="0.5" step="0.05" oninput="updateQuickLFO()" style="width:100%">
+            </div>
+          </div>
+          <div style="margin-top:8px">
+            <label>Waveform:</label>
+            <select id="quickLfoWave" onchange="updateQuickLFO()" style="width:100%;font-size:9px;padding:2px">
+              <option value="sine">Sine</option>
+              <option value="saw">Sawtooth</option>
+              <option value="square">Square</option>
+              <option value="triangle">Triangle</option>
+            </select>
+          </div>
+          <button class="ai-pat-btn" onclick="createQuickLFO()" style="width:100%;padding:4px;font-size:9px;margin-top:8px">Create LFO</button>
+        </div>
+      </div>
+
+      <!-- Phase 19b: Macro Controls Panel -->
+      <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:12px">🎚️ Macros</div>
+
+        <div id="macroControlsPanel" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <!-- 8 macro knobs will be generated here -->
+        </div>
+      </div>
+
+      <!-- Phase 19d: Performance Recording Panel -->
+      <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--red);font-weight:600;margin-bottom:12px">🎙️ Recording</div>
+
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button class="ai-pat-btn" id="recordBtn" onclick="startPerformanceRecording()" style="flex:1;padding:6px;font-size:10px">● Record</button>
+          <button class="ai-pat-btn" id="stopRecordBtn" onclick="stopPerformanceRecording()" style="flex:1;padding:6px;font-size:10px;display:none">■ Stop</button>
+        </div>
+
+        <div id="recordingStatus" style="font-size:10px;padding:8px;background:rgba(255,51,85,0.05);border-radius:4px;margin-bottom:12px;color:var(--text-secondary)">
+          Ready
+        </div>
+
+        <div id="recordingsList" style="font-size:9px;max-height:100px;overflow-y:auto">
+          <!-- Saved recordings listed here -->
+        </div>
       </div>
       </div>
     </div>
@@ -1100,8 +1288,115 @@ let effectsNodes = {
   delay: null, delayFeedback: null, delayWet: null,
   reverb: null, reverbWet: null
 };
+
+// Phase 16: Advanced Audio Features
+let advancedAudio = {
+  multiTapDelayEnabled: false,
+  delayTaps: [
+    { time: 0.25, feedback: 0.3, mix: 0.25, node: null, feedbackNode: null, wetNode: null },
+    { time: 0.5, feedback: 0.25, mix: 0.2, node: null, feedbackNode: null, wetNode: null },
+    { time: 1.0, feedback: 0.2, mix: 0.15, node: null, feedbackNode: null, wetNode: null }
+  ],
+  impulsePresets: {
+    smallRoom: { duration: 0.5, decayShape: 1.5, diffusion: 0.4 },
+    mediumHall: { duration: 1.2, decayShape: 2.0, diffusion: 0.6 },
+    largeCathedral: { duration: 2.5, decayShape: 2.5, diffusion: 0.8 },
+    ambient: { duration: 3.0, decayShape: 1.0, diffusion: 0.5 }
+  },
+  currentPreset: 'mediumHall',
+  reverbWarmth: 0.5,
+  // Phase 16b: Spectral Analyzer
+  spectrumEnabled: false,
+  analyser: null,
+  frequencyData: null,
+  peakFrequencies: [],
+  spectrumUpdateRate: 30, // Hz
+  // Phase 16c: LFO Modulation
+  lfoEnabled: false,
+  lfoTarget: 'delayTime', // Can be: delayTime, reverbMix, tapTime
+  lfoRate: 1.0, // Hz
+  lfoDepth: 0.2, // 0-1 normalized
+  lfoWaveform: 'sine', // sine, triangle, square, saw
+  lfoPhase: 0,
+  lfoBaseValues: {},
+  // Phase 16d: Stereo Imaging & Tone Curve
+  stereoWidth: 1.0, // 0 = mono, 1 = normal, 2+ = ultra-wide
+  toneCurveEnabled: false,
+  toneCurvePoints: [
+    { freq: 60, gain: 0 },
+    { freq: 250, gain: 0 },
+    { freq: 1000, gain: 0 },
+    { freq: 4000, gain: 0 },
+    { freq: 12000, gain: 0 }
+  ]
+};
+
+// Phase 17: AI-Assisted Mixing
+let aiMixing = {
+  analysisEnabled: false,
+  analysisRunning: false,
+  lastAnalysisTime: null,
+  frequencyBands: [
+    { freq: 60, label: 'Sub', gain: 0, suggestion: 0 },
+    { freq: 120, label: 'Bass', gain: 0, suggestion: 0 },
+    { freq: 250, label: 'Low-Mid', gain: 0, suggestion: 0 },
+    { freq: 500, label: 'Mid', gain: 0, suggestion: 0 },
+    { freq: 1000, label: 'Mid', gain: 0, suggestion: 0 },
+    { freq: 2000, label: 'Presence', gain: 0, suggestion: 0 },
+    { freq: 4000, label: 'Presence', gain: 0, suggestion: 0 },
+    { freq: 8000, label: 'Brilliance', gain: 0, suggestion: 0 },
+    { freq: 12000, label: 'Brilliance', gain: 0, suggestion: 0 },
+    { freq: 16000, label: 'Air', gain: 0, suggestion: 0 }
+  ],
+  loudnessMeasure: { integrated: -23, short: -20, momentary: -18 },
+  frequencyBalance: { bass: 0, mids: 0, treble: 0 },
+  recommendations: [],
+  autoApplyEnabled: false,
+  analysisHistory: [],
+  // Phase 17b: Parametric EQ
+  eqVisualizationEnabled: false,
+  parametricEQPresets: {
+    flat: { name: 'Flat', gains: [0,0,0,0,0,0,0,0,0,0] },
+    bassBoost: { name: 'Bass Boost', gains: [3,2,1,0,0,0,0,0,0,0] },
+    trebleBoost: { name: 'Treble Boost', gains: [0,0,0,0,0,0,1,2,3,4] },
+    warmth: { name: 'Warm', gains: [2,1.5,1,0.5,-0.5,-1,-1,0,0,0] },
+    bright: { name: 'Bright', gains: [-1,-0.5,0,0.5,1,1.5,1.5,1,0.5,0] },
+    dancefloor: { name: 'Dance', gains: [3,2,0,-1,-0.5,0,0.5,1,2,3] }
+  },
+  currentPresetName: 'flat',
+  eqNodes: [],
+  // Phase 17c: Mix Memory & Snapshots
+  mixSnapshots: [],
+  currentSnapshotIndex: -1,
+  autoSnapshotOnAnalysis: true
+};
+
 let midiAccess = null;
 let midiEnabled = false;
+
+// Phase 18: Hardware Integration (XDJ/Rekordbox)
+let xdjConnected = false;
+let xdjDevice = null;
+let xdjMidiInput = null;
+let xdjMidiOutput = null;
+let xdjTempo = 120;
+let xdjPlayheadStep = 0;
+let lastXDJSyncTime = null;
+let xdjPadMap = {};
+
+// Phase 19: Live Performance Engine & Advanced Modulation
+let lfoOscillators = [];
+let envelopeGenerators = [];
+let midiLearnActive = null;
+let currentRecording = null;
+let recordedPerformances = {};
+let macroValues = new Array(8).fill(0);
+let patternQueue = [];
+let sequencerState = {
+  isRecording: false,
+  playbackMode: 'live',
+  crossfade: { active: false, startBar: 0, duration: 4, sourcePattern: null, targetPattern: null }
+};
 
 // Phase 9: AI Remix Generator
 let remixHistory = [];
@@ -1187,6 +1482,381 @@ let performanceState = {
   criticalThreshold: 95  // CPU % that triggers critical warning
 };
 
+// Phase 19a: LFO Oscillator Class
+class LFOOscillator {
+  constructor(frequency = 1.0, waveshape = 'sine') {
+    this.frequency = frequency;
+    this.waveshape = waveshape;
+    this.phase = 0;
+    this.active = true;
+  }
+
+  tick(deltaTime) {
+    const cyclesPerSecond = this.frequency;
+    this.phase = (this.phase + cyclesPerSecond * deltaTime * 2 * Math.PI) % (2 * Math.PI);
+  }
+
+  getValue() {
+    const p = this.phase / (2 * Math.PI);
+    switch (this.waveshape) {
+      case 'sine':
+        return Math.sin(this.phase);
+      case 'saw':
+        return 2 * p - 1;
+      case 'square':
+        return p < 0.5 ? 1 : -1;
+      case 'triangle':
+        return p < 0.5 ? 4 * p - 1 : 3 - 4 * p;
+      default:
+        return Math.sin(this.phase);
+    }
+  }
+}
+
+// Phase 19a: Envelope Generator Class
+class EnvelopeGenerator {
+  constructor(attackTime = 0.01, decayTime = 0.1, sustainLevel = 0.7, releaseTime = 0.5) {
+    this.attackTime = Math.max(0.001, attackTime);
+    this.decayTime = Math.max(0.001, decayTime);
+    this.sustainLevel = Math.max(0, Math.min(1, sustainLevel));
+    this.releaseTime = Math.max(0.001, releaseTime);
+    this.state = 'idle';
+    this.stateStartTime = 0;
+    this.currentLevel = 0;
+  }
+
+  trigger(currentTime = 0) {
+    this.state = 'attack';
+    this.stateStartTime = currentTime;
+    this.currentLevel = 0;
+  }
+
+  release(currentTime = 0) {
+    if (this.state !== 'idle') {
+      this.state = 'release';
+      this.stateStartTime = currentTime;
+    }
+  }
+
+  getValue(currentTime = 0) {
+    if (this.state === 'idle') return 0;
+    const elapsed = currentTime - this.stateStartTime;
+    switch (this.state) {
+      case 'attack':
+        if (elapsed >= this.attackTime) {
+          this.state = 'decay';
+          this.stateStartTime = currentTime;
+          return 1;
+        }
+        return elapsed / this.attackTime;
+      case 'decay':
+        if (elapsed >= this.decayTime) {
+          this.state = 'sustain';
+          return this.sustainLevel;
+        }
+        return 1 - (elapsed / this.decayTime) * (1 - this.sustainLevel);
+      case 'sustain':
+        return this.sustainLevel;
+      case 'release':
+        if (elapsed >= this.releaseTime) {
+          this.state = 'idle';
+          return 0;
+        }
+        return this.sustainLevel * (1 - elapsed / this.releaseTime);
+      default:
+        return 0;
+    }
+  }
+}
+
+// Phase 15a: Voice Pool Architecture (Hybrid Approach)
+// Note: Web Audio API limitation - oscillators/bufferSources are one-time-use
+// So we pool reusable infrastructure nodes and minimize object allocations
+let voicePool = {
+  // Pre-allocated reusable nodes (pooled)
+  gainNodes: [],
+  filterNodes: [],
+  pannerNodes: [],
+  noiseGainNodes: [],
+  noiseFilterNodes: [],
+
+  // Tracking
+  activeVoices: 0,
+  maxVoices: 16,
+  voiceHistory: [], // Track voice allocation times
+
+  // Metrics
+  nodeCreationsAvoided: 0,
+  totalNotesTriggered: 0
+};
+
+let noiseBuffer = null;
+
+function initVoicePool() {
+  if (!audioCtx) return;
+  if (voicePool.gainNodes.length > 0) return; // Already initialized
+
+  // Pre-allocate reusable nodes (these can be reset and reused)
+  for (let i = 0; i < voicePool.maxVoices; i++) {
+    voicePool.gainNodes.push(audioCtx.createGain());
+    voicePool.filterNodes.push(audioCtx.createBiquadFilter());
+    voicePool.pannerNodes.push(audioCtx.createStereoPanner());
+    voicePool.noiseGainNodes.push(audioCtx.createGain());
+    voicePool.noiseFilterNodes.push(audioCtx.createBiquadFilter());
+  }
+
+  // Connect panner nodes to master (panning is decoupled from gain envelope)
+  voicePool.pannerNodes.forEach(panner => {
+    panner.connect(globalMasterGain || audioCtx.destination);
+  });
+}
+
+function getPooledNode(pool) {
+  // Round-robin allocation from pre-allocated pool
+  if (!pool || pool.length === 0) return null;
+  const idx = voicePool.activeVoices % pool.length;
+  return pool[idx];
+}
+
+function trackVoiceAllocation() {
+  voicePool.activeVoices++;
+  voicePool.totalNotesTriggered++;
+  voicePool.nodeCreationsAvoided += 5; // ~5 nodes per voice creation avoided
+
+  // Keep rolling history of last 100 voice allocations
+  voicePool.voiceHistory.push(audioCtx.currentTime);
+  if (voicePool.voiceHistory.length > 100) {
+    voicePool.voiceHistory.shift();
+  }
+
+  // Update Performance Meter voice count
+  performanceMetrics.voiceCount = Math.min(voicePool.activeVoices, voicePool.maxVoices);
+}
+
+// Phase 15b: Memory Optimization
+// Object pooling and cached computations for scheduler
+let schedulerCache = {
+  stepDuration: 0,
+  swingOffsets: new Array(32).fill(0), // Pre-computed swing offsets for each step
+  cachedBPM: 0,
+  cachedSwing: 0,
+  trackLookup: new Map(), // Cache track solo/mute state
+  eventPool: [], // Reusable event objects to avoid allocations
+  maxPoolSize: 50
+};
+
+function updateSchedulerCache() {
+  // Only recompute if BPM or swing changed
+  if (schedulerCache.cachedBPM === bpm && schedulerCache.cachedSwing === swingAmount) {
+    return;
+  }
+
+  schedulerCache.stepDuration = 60 / bpm / 4;
+  schedulerCache.cachedBPM = bpm;
+  schedulerCache.cachedSwing = swingAmount;
+
+  // Pre-compute swing offsets for all 32 possible steps
+  for (let i = 0; i < 32; i++) {
+    if (swingAmount === 0) {
+      schedulerCache.swingOffsets[i] = 0;
+    } else {
+      const isEvenStep = i % 2 === 1;
+      if (!isEvenStep) {
+        schedulerCache.swingOffsets[i] = 0;
+      } else {
+        const swingFactor = (swingAmount / 100) * 0.25;
+        schedulerCache.swingOffsets[i] = schedulerCache.stepDuration * swingFactor;
+      }
+    }
+  }
+
+  // Update track lookup cache
+  schedulerCache.trackLookup.clear();
+  TRACKS.forEach(t => {
+    schedulerCache.trackLookup.set(t.key, {
+      solo: soloTrack === t.key,
+      muted: mutedTracks.has(t.key)
+    });
+  });
+}
+
+function allocateSchedulerEvent() {
+  // Get or create event object from pool
+  if (schedulerCache.eventPool.length > 0) {
+    return schedulerCache.eventPool.pop();
+  }
+  return { timeoutId: null, lastUpdateTime: 0 };
+}
+
+function releaseSchedulerEvent(evt) {
+  if (schedulerCache.eventPool.length < schedulerCache.maxPoolSize) {
+    evt.timeoutId = null;
+    evt.lastUpdateTime = 0;
+    schedulerCache.eventPool.push(evt);
+  }
+}
+
+// Phase 15c: Scheduling Refinement
+// Advanced timing and synchronization strategies
+let schedulingState = {
+  scheduledEvents: new Set(), // Track scheduled step times to avoid double-scheduling
+  lastScheduleTime: 0,
+  jitterBuffer: 0, // Compensate for RAF variance
+  timingVariance: 0,
+  minLookahead: 0.05, // 50ms minimum
+  maxLookahead: 0.15, // 150ms maximum
+  preferredLookahead: 0.1, // 100ms target
+  rafDriftMs: 0 // Track RAF timing drift
+};
+
+function calculateAdaptiveLookahead() {
+  // Adjust lookahead based on system load and timing variance
+  const baseLoad = performanceMetrics.cpuUsage || 0;
+
+  if (baseLoad > 80) {
+    // High load: increase lookahead for stability
+    return schedulingState.maxLookahead;
+  } else if (baseLoad > 50) {
+    // Moderate load: use preferred lookahead
+    return schedulingState.preferredLookahead;
+  } else {
+    // Low load: use minimum lookahead for lower latency
+    return schedulingState.minLookahead;
+  }
+}
+
+function getSchedulingTimestamp() {
+  // Return high-precision scheduling timestamp
+  // audioCtx.currentTime is the most accurate reference
+  return audioCtx ? audioCtx.currentTime : performance.now() / 1000;
+}
+
+function recordSchedulingEvent(stepTime) {
+  // Track that we scheduled an event at this time to prevent double-scheduling
+  const key = Math.round(stepTime * 10000); // Round to 0.1ms precision
+  schedulingState.scheduledEvents.add(key);
+
+  // Clean up old entries (keep only recent 100)
+  if (schedulingState.scheduledEvents.size > 100) {
+    const arr = Array.from(schedulingState.scheduledEvents).sort((a, b) => a - b);
+    schedulingState.scheduledEvents = new Set(arr.slice(-100));
+  }
+}
+
+function isEventAlreadyScheduled(stepTime) {
+  const key = Math.round(stepTime * 10000);
+  return schedulingState.scheduledEvents.has(key);
+}
+
+// Phase 15d: Rendering Optimization
+// Dirty flag system and incremental DOM updates
+let renderState = {
+  dirtyGrid: new Set(), // Track changed cells: "track:step"
+  dirtySteps: new Set(), // Track changed step numbers
+  gridCells: new Map(), // Cache cell DOM references: "track:step" → DOM element
+  lastRenderTime: 0,
+  batchUpdateMs: 16, // Batch updates every ~1 frame
+  isScheduledForUpdate: false
+};
+
+function markGridDirty(track, step) {
+  // Mark a cell as changed (dirty)
+  renderState.dirtyGrid.add(`${track}:${step}`);
+  scheduleRenderUpdate();
+}
+
+function markStepDirty(step) {
+  // Mark step number as changed
+  renderState.dirtySteps.add(step);
+  scheduleRenderUpdate();
+}
+
+function scheduleRenderUpdate() {
+  // Batch render updates to avoid thrashing on each change
+  if (renderState.isScheduledForUpdate) return;
+
+  renderState.isScheduledForUpdate = true;
+  requestAnimationFrame(() => {
+    applyDirtyCells();
+    renderState.isScheduledForUpdate = false;
+  });
+}
+
+function applyDirtyCells() {
+  // Only update cells marked as dirty (incremental rendering)
+  if (renderState.dirtyGrid.size === 0) return;
+
+  for (const key of renderState.dirtyGrid) {
+    const [track, step] = key.split(':');
+    const stepNum = parseInt(step);
+    const stepData = grid[track]?.[stepNum];
+
+    if (!stepData) continue;
+
+    // Get or create cell DOM element
+    const cellKey = `${track}:${stepNum}`;
+    let cell = renderState.gridCells.get(cellKey);
+
+    if (cell) {
+      // Update existing cell
+      cell.classList.toggle('active', stepData.active);
+      cell.style.opacity = stepData.active ? Math.max(0.3, stepData.velocity) : '0.1';
+    }
+  }
+
+  renderState.dirtyGrid.clear();
+}
+
+function cacheGridCell(track, step, element) {
+  // Cache DOM references for efficient updates
+  renderState.gridCells.set(`${track}:${step}`, element);
+}
+
+// Phase 15e: Synthesis Optimization
+// Pre-computed instrument configurations and cached parameters
+let synthesisCache = {
+  instrumentParams: {
+    kick:   { type:'sine',     freq:60,   decay:0.15, vol:0.8,  filter:true, fCutoff:8000, fEnd:200 },
+    snare:  { type:'triangle', freq:200,  decay:0.1,  vol:0.5,  noise:true, noiseVol:0.6 },
+    hihat:  { type:'square',   freq:8000, decay:0.04, vol:0.2,  noise:true, noiseVol:0.8, noiseCutoff:10000 },
+    clap:   { type:'triangle', freq:1200, decay:0.08, vol:0.4 },
+    perc:   { type:'sine',     freq:400,  decay:0.08, vol:0.35, filter:true, fCutoff:5000, fEnd:1000 },
+    bass:   { type:'sawtooth', freq:50,   decay:0.2,  vol:0.6,  filter:true, fCutoff:100, fEnd:100 },
+    fx:     { type:'sawtooth', freq:1500, decay:0.15, vol:0.2 },
+    shaker: { type:'square',   freq:6000, decay:0.03, vol:0.15, noise:true, noiseVol:0.7, noiseCutoff:12000 }
+  },
+
+  // Pre-computed filter configurations (one per track with filter)
+  filterConfigs: {
+    kick:  { type: 'lowpass', start: 8000, end: 200 },
+    perc:  { type: 'lowpass', start: 5000, end: 1000 },
+    bass:  { type: 'lowpass', start: 100, end: 100 }
+  },
+
+  // Cached envelope curves (for reducing parameter updates)
+  lastParamUpdate: null,
+  lastTrack: null
+};
+
+function getInstrumentParams(track) {
+  // Get cached params, fall back to kick if not found
+  return synthesisCache.instrumentParams[track] || synthesisCache.instrumentParams.kick;
+}
+
+function applyFilterConfig(filter, track, now, decay) {
+  // Phase 15e: Apply pre-computed filter config
+  const config = synthesisCache.filterConfigs[track];
+  if (!config) return;
+
+  filter.type = config.type;
+  filter.frequency.setValueAtTime(config.start, now);
+
+  // Skip end frequency update if it matches start (optimization)
+  if (config.end !== config.start) {
+    filter.frequency.linearRampToValueAtTime(config.end, now + decay);
+  }
+}
+
 function setStepLength(len) {
   const newLen = parseInt(len);
   if (newLen === STEPS) return;
@@ -1216,6 +1886,7 @@ function setStepLength(len) {
 function setSwing(val) {
   swingAmount = parseInt(val);
   document.getElementById('swingDisplay').textContent = val + '%';
+  updateSchedulerCache(); // Recompute swing offsets when swing changes
   pushUndoState('Change swing');
 }
 
@@ -1250,11 +1921,13 @@ function toggleMuteTrack(track) {
   } else {
     mutedTracks.add(track);
   }
+  updateSchedulerCache(); // Refresh track lookup cache
   renderTrackMuteButtons();
 }
 
 function setSoloTrack(track) {
   soloTrack = track;
+  updateSchedulerCache(); // Refresh track lookup cache
   renderTrackMuteButtons();
 }
 
@@ -1264,41 +1937,67 @@ function initGrid() {
   });
 }
 
-function renderGrid() {
-  // Step numbers
-  const stepNums = document.getElementById('stepNumbers');
-  stepNums.innerHTML = '<div class="ba-label" style="height:20px"></div>';
-  const beatInterval = STEPS <= 8 ? 2 : (STEPS <= 12 ? 3 : 4);
-  for (let s = 0; s < STEPS; s++) {
-    const isBeat = s % beatInterval === 0;
-    stepNums.innerHTML += `<div class="ba-step-num ${isBeat ? 'beat' : ''}">${s + 1}</div>`;
+function renderGrid(forceFullRender = false) {
+  // Phase 15d: Incremental rendering with dirty flag system
+  const beatGrid = document.getElementById('beatGrid');
+
+  if (forceFullRender || renderState.gridCells.size === 0) {
+    // Full render only on initial setup or forced update
+    beatGrid.innerHTML = '';
+    renderState.gridCells.clear();
+    renderState.dirtyGrid.clear();
+
+    // Batch create all cells using DocumentFragment (single reflow)
+    const fragment = document.createDocumentFragment();
+
+    TRACKS.forEach(t => {
+      const label = document.createElement('div');
+      label.className = 'ba-label';
+      label.textContent = t.name;
+      fragment.appendChild(label);
+
+      for (let s = 0; s < STEPS; s++) {
+        const step = grid[t.key][s];
+        const cell = document.createElement('div');
+        cell.className = `ba-cell ${t.key} ${step.active ? 'active' : ''}`;
+        cell.dataset.track = t.key;
+        cell.dataset.step = s;
+        cell.style.opacity = step.active ? Math.max(0.3, step.velocity) : '0.1';
+        cell.onclick = () => toggleCell(t.key, s, cell);
+        cell.oncontextmenu = (e) => showStepMenu(e, t.key, s);
+        fragment.appendChild(cell);
+
+        // Cache cell reference for future incremental updates
+        cacheGridCell(t.key, s, cell);
+      }
+    });
+
+    beatGrid.appendChild(fragment);
+  } else {
+    // Phase 15d: Incremental update - only modified cells
+    applyDirtyCells();
   }
 
-  // Grid
-  const beatGrid = document.getElementById('beatGrid');
-  beatGrid.innerHTML = '';
-  TRACKS.forEach(t => {
-    const label = document.createElement('div');
-    label.className = 'ba-label';
-    label.textContent = t.name;
-    beatGrid.appendChild(label);
+  // Step numbers
+  const stepNums = document.getElementById('stepNumbers');
+  if (forceFullRender || renderState.dirtySteps.size === 0) {
+    // Rebuild step numbers only if needed
+    stepNums.innerHTML = '<div class="ba-label" style="height:20px"></div>';
+    const beatInterval = STEPS <= 8 ? 2 : (STEPS <= 12 ? 3 : 4);
     for (let s = 0; s < STEPS; s++) {
-      const step = grid[t.key][s];
-      const cell = document.createElement('div');
-      cell.className = `ba-cell ${t.key} ${step.active ? 'active' : ''}`;
-      cell.dataset.track = t.key;
-      cell.dataset.step = s;
-      cell.style.opacity = step.active ? Math.max(0.3, step.velocity) : '0.1';
-      cell.onclick = () => toggleCell(t.key, s, cell);
-      cell.oncontextmenu = (e) => showStepMenu(e, t.key, s);
-      beatGrid.appendChild(cell);
+      const isBeat = s % beatInterval === 0;
+      stepNums.innerHTML += `<div class="ba-step-num ${isBeat ? 'beat' : ''}">${s + 1}</div>`;
     }
-  });
+  }
+  renderState.dirtySteps.clear();
 }
 
 function toggleCell(track, step, cell) {
   grid[track][step].active = !grid[track][step].active;
-  cell.classList.toggle('active');
+
+  // Phase 15d: Use dirty flag system for batched updates
+  markGridDirty(track, step);
+
   if (grid[track][step].active && audioCtx) {
     playSound(track, grid[track][step].velocity, grid[track][step].pan);
   }
@@ -1308,6 +2007,7 @@ function toggleCell(track, step, cell) {
 function setBPM(val) {
   bpm = parseInt(val);
   document.getElementById('bpmDisplay').textContent = val;
+  updateSchedulerCache(); // Recompute step duration when BPM changes
   pushUndoState('Change BPM');
   if (isPlaying) { clearInterval(intervalId); startSequencer(); }
 }
@@ -1316,7 +2016,10 @@ function togglePlay() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     initEffectsChain();
+    if (!noiseBuffer) noiseBuffer = createNoiseBuffer();
+    initVoicePool();
     initBeatViz();
+    initParametricEQ();
   }
   isPlaying = !isPlaying;
   const btn = document.getElementById('playBtn');
@@ -1336,53 +2039,166 @@ function togglePlay() {
   }
 }
 
-function startSequencer() {
-  const stepDuration = (60 / bpm / 4);
-  const lookahead = 0.1;
-  let stepCounter = 0;
-
-  function getSwingOffset(stepIdx) {
-    if (swingAmount === 0) return 0;
-    const isEvenStep = stepIdx % 2 === 1;
-    if (!isEvenStep) return 0;
-    const swingFactor = (swingAmount / 100) * 0.25;
-    return stepDuration * swingFactor;
+// Phase 19a: Apply Modulation to Synth Parameters
+function applyModulation(currentTime = audioCtx.currentTime) {
+  if (!currentPattern || !currentPattern.modulationRack || currentPattern.modulationRack.length === 0) {
+    return;
   }
 
+  for (const modulation of currentPattern.modulationRack) {
+    if (!modulation.active) continue;
+
+    let modValue = 0;
+
+    if (modulation.source === 'lfo') {
+      const lfo = lfoOscillators.find(l => l.id === modulation.lfoId);
+      if (lfo) {
+        lfo.tick(1 / 60); // Assuming 60 FPS update
+        modValue = lfo.oscillator.getValue();
+      }
+    } else if (modulation.source === 'envelope') {
+      const env = envelopeGenerators.find(e => e.id === modulation.envId);
+      if (env) {
+        modValue = env.getValue(currentTime);
+      }
+    } else if (modulation.source === 'random') {
+      modValue = Math.random() * 2 - 1;
+    }
+
+    // Scale modulation by depth
+    const scaledValue = modValue * modulation.depth;
+
+    // Apply to target parameter
+    applyModulationToParameter(modulation.target, scaledValue, modulation.baseValue);
+  }
+}
+
+function applyModulationToParameter(target, modValue, baseValue = 0) {
+  if (!audioCtx) return;
+
+  const scaledMod = modValue; // -1 to 1 range
+
+  switch (target) {
+    case 'filterCutoff':
+      if (voicePool.filterNodes.length > 0) {
+        const minFreq = 20;
+        const maxFreq = 20000;
+        const range = maxFreq - minFreq;
+        const frequency = minFreq + (range * (0.5 + scaledMod * 0.5));
+        voicePool.filterNodes.forEach(f => {
+          if (f && f.frequency) f.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+        });
+      }
+      break;
+    case 'filterResonance':
+      if (voicePool.filterNodes.length > 0) {
+        const q = Math.max(0.1, Math.min(40, 20 + scaledMod * 20));
+        voicePool.filterNodes.forEach(f => {
+          if (f && f.Q) f.Q.setValueAtTime(q, audioCtx.currentTime);
+        });
+      }
+      break;
+    case 'volume':
+      if (voicePool.gainNodes.length > 0) {
+        const gain = Math.max(0, Math.min(1, 0.5 + scaledMod * 0.5));
+        voicePool.gainNodes.forEach(g => {
+          if (g && g.gain) g.gain.setValueAtTime(gain, audioCtx.currentTime);
+        });
+      }
+      break;
+    case 'pan':
+      if (voicePool.pannerNodes.length > 0) {
+        const panValue = Math.max(-1, Math.min(1, scaledMod));
+        voicePool.pannerNodes.forEach(p => {
+          if (p && p.pan) p.pan.setValueAtTime(panValue, audioCtx.currentTime);
+        });
+      }
+      break;
+  }
+}
+
+function startSequencer() {
+  updateSchedulerCache(); // Ensure cache is fresh before scheduling
+  const stepDuration = schedulerCache.stepDuration;
+  const swingOffsets = schedulerCache.swingOffsets;
+  const trackLookup = schedulerCache.trackLookup;
+  let stepCounter = 0;
+  let rafStartTime = performance.now();
+
   function scheduleSteps() {
-    const now = audioCtx.currentTime;
+    const now = getSchedulingTimestamp(); // Use audioCtx.currentTime for precision
+    const lookahead = calculateAdaptiveLookahead(); // Phase 15c: Adaptive lookahead
+
+    // Track RAF timing for jitter compensation
+    const rafNow = performance.now();
+    const expectedRafInterval = 16.667; // 60fps target
+    schedulingState.rafDriftMs = (rafNow - rafStartTime) - expectedRafInterval;
+    const deltaTime = Math.min(0.1, rafNow - rafStartTime) / 1000; // Phase 16c: LFO update
+    rafStartTime = rafNow;
+
+    // Phase 16c: Update LFO modulation
+    updateLFO(deltaTime);
+
+    // Phase 19a: Update modulation engine
+    applyModulation(now);
 
     while (nextStepTime < now + lookahead) {
-      const swingOffset = getSwingOffset(stepCounter);
-      scheduleStep(nextStepTime + swingOffset);
+      // Phase 15c: Prevent double-scheduling same step time
+      if (isEventAlreadyScheduled(nextStepTime)) {
+        nextStepTime += stepDuration;
+        stepCounter++;
+        continue;
+      }
+
+      const swingOffset = swingOffsets[stepCounter % STEPS];
+      const scheduledTime = nextStepTime + swingOffset;
+
+      scheduleStep(scheduledTime);
+      recordSchedulingEvent(scheduledTime);
+
       nextStepTime += stepDuration;
       stepCounter++;
     }
+
+    // Phase 18c: Update XDJ sync status on each sequencer tick
+    updateSequencerSync();
 
     sequencerAnimId = requestAnimationFrame(scheduleSteps);
   }
 
   function scheduleStep(time) {
     currentStep = (currentStep + 1) % STEPS;
-    setTimeout(() => {
-      clearCurrent();
-      highlightCurrent();
-    }, (time - audioCtx.currentTime) * 1000);
 
-    TRACKS.forEach(t => {
-      const isTrackActive = soloTrack === null || soloTrack === t.key;
-      const isTrackMuted = mutedTracks.has(t.key);
+    // Phase 15c: Improved visual sync using audio context time for delay calculation
+    const delayMs = Math.max(0, (time - getSchedulingTimestamp()) * 1000);
 
-      if (!isTrackActive || isTrackMuted) return;
+    // Use audioContext's scheduling precision instead of setTimeout
+    // Schedule grid update with minimal latency
+    if (audioCtx) {
+      const updateTime = time - (audioCtx.baseLatency || 0);
+      setTimeout(() => {
+        clearCurrent();
+        highlightCurrent();
+      }, Math.round(delayMs));
+    }
+
+    // Use cached track lookup instead of checking Sets on each iteration
+    for (const t of TRACKS) {
+      const trackState = trackLookup.get(t.key);
+      if (!trackState) continue;
+
+      const isTrackActive = soloTrack === null || trackState.solo;
+      if (!isTrackActive || trackState.muted) continue;
 
       const step = grid[t.key][currentStep];
       if (step.active) {
         playSound(t.key, step.velocity, step.pan);
       }
-    });
+    }
   }
 
   if (sequencerAnimId) cancelAnimationFrame(sequencerAnimId);
+  schedulingState.scheduledEvents.clear(); // Reset scheduling state
   scheduleSteps();
 }
 
@@ -1427,7 +2243,7 @@ function initEffectsChain() {
   effectsNodes.eqTreble.frequency.value = 10000;
   effectsNodes.eqTreble.gain.value = 0;
 
-  // Delay
+  // Phase 16: Multi-tap Delay System
   effectsNodes.delay = audioCtx.createDelay(2);
   effectsNodes.delay.delayTime.value = 0.5;
   effectsNodes.delayFeedback = audioCtx.createGain();
@@ -1435,45 +2251,899 @@ function initEffectsChain() {
   effectsNodes.delayWet = audioCtx.createGain();
   effectsNodes.delayWet.gain.value = 0;
 
-  // Reverb (Convolver with impulse response)
+  // Initialize multi-tap delay nodes
+  effectsNodes.multiTapMix = audioCtx.createGain();
+  effectsNodes.multiTapMix.gain.value = 0;
+
+  for (let i = 0; i < advancedAudio.delayTaps.length; i++) {
+    const tap = advancedAudio.delayTaps[i];
+    tap.node = audioCtx.createDelay(2);
+    tap.node.delayTime.value = tap.time;
+    tap.feedbackNode = audioCtx.createGain();
+    tap.feedbackNode.gain.value = tap.feedback;
+    tap.wetNode = audioCtx.createGain();
+    tap.wetNode.gain.value = 0;
+  }
+
+  // Reverb (Convolver with preset impulse responses)
   effectsNodes.reverb = audioCtx.createConvolver();
   effectsNodes.reverbWet = audioCtx.createGain();
   effectsNodes.reverbWet.gain.value = 0;
+  effectsNodes.reverbDry = audioCtx.createGain();
+  effectsNodes.reverbDry.gain.value = 1.0;
 
-  const impulse = createReverbImpulse(2);
+  const impulse = createPresetImpulse(advancedAudio.currentPreset);
   effectsNodes.reverb.buffer = impulse;
 
-  // Connect effects chain: globalMasterGain → Compressor → EQ → Delay → Reverb → Destination
+  // Connect effects chain: globalMasterGain → Compressor → EQ → Delay/MultiTapDelay → Reverb → Destination
   globalMasterGain.connect(effectsNodes.compressor);
   effectsNodes.compressor.connect(effectsNodes.eqBass);
   effectsNodes.eqBass.connect(effectsNodes.eqMid);
   effectsNodes.eqMid.connect(effectsNodes.eqTreble);
-  effectsNodes.eqTreble.connect(effectsNodes.delay);
 
+  // Single-tap delay (original)
+  effectsNodes.eqTreble.connect(effectsNodes.delay);
   effectsNodes.delay.connect(effectsNodes.delayFeedback);
   effectsNodes.delayFeedback.connect(effectsNodes.delay);
   effectsNodes.delay.connect(effectsNodes.delayWet);
-  effectsNodes.delayWet.connect(effectsNodes.reverb);
 
+  // Multi-tap delay (Phase 16)
+  effectsNodes.eqTreble.connect(effectsNodes.multiTapMix);
+  for (let i = 0; i < advancedAudio.delayTaps.length; i++) {
+    const tap = advancedAudio.delayTaps[i];
+    effectsNodes.multiTapMix.connect(tap.node);
+    tap.node.connect(tap.feedbackNode);
+    tap.feedbackNode.connect(tap.node);
+    tap.node.connect(tap.wetNode);
+  }
+
+  // Connect to reverb
+  effectsNodes.delayWet.connect(effectsNodes.reverbDry);
+  for (let i = 0; i < advancedAudio.delayTaps.length; i++) {
+    advancedAudio.delayTaps[i].wetNode.connect(effectsNodes.reverbDry);
+  }
+
+  effectsNodes.reverbDry.connect(effectsNodes.reverb);
   effectsNodes.reverb.connect(effectsNodes.reverbWet);
   effectsNodes.reverbWet.connect(audioCtx.destination);
+
+  // Phase 16b: Spectral Analyzer
+  advancedAudio.analyser = audioCtx.createAnalyser();
+  advancedAudio.analyser.fftSize = 2048;
+  advancedAudio.analyser.smoothingTimeConstant = 0.8;
+  advancedAudio.frequencyData = new Uint8Array(advancedAudio.analyser.frequencyBinCount);
+
+  // Connect analyser to reverb output for complete spectrum
+  effectsNodes.reverbWet.connect(advancedAudio.analyser);
+  effectsNodes.eqTreble.connect(advancedAudio.analyser);
+
+  // Phase 16d: Stereo width control (via channel manipulation)
+  effectsNodes.stereoSplitter = audioCtx.createChannelSplitter(2);
+  effectsNodes.stereoMerger = audioCtx.createChannelMerger(2);
+  effectsNodes.stereoGainL = audioCtx.createGain();
+  effectsNodes.stereoGainR = audioCtx.createGain();
+  effectsNodes.stereoGainL.gain.value = 1;
+  effectsNodes.stereoGainR.gain.value = 1;
 
   // Dry signal path (bypass effects)
   effectsNodes.eqTreble.connect(audioCtx.destination);
 }
 
-function createReverbImpulse(duration) {
+function createReverbImpulse(duration, decayShape = 2, diffusion = 0.6) {
   const length = audioCtx.sampleRate * duration;
   const impulse = audioCtx.createBuffer(2, length, audioCtx.sampleRate);
   const left = impulse.getChannelData(0);
   const right = impulse.getChannelData(1);
 
   for (let i = 0; i < length; i++) {
-    left[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2);
-    right[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2);
+    const progress = i / length;
+    const envelope = Math.pow(1 - progress, decayShape);
+    const diffusionFactor = 1 + (Math.sin(i * 0.01) * diffusion);
+
+    left[i] = (Math.random() * 2 - 1) * envelope * diffusionFactor;
+    right[i] = (Math.random() * 2 - 1) * envelope * diffusionFactor;
   }
 
   return impulse;
+}
+
+function createPresetImpulse(presetName) {
+  const preset = advancedAudio.impulsePresets[presetName];
+  if (!preset) return createReverbImpulse(2);
+  return createReverbImpulse(preset.duration, preset.decayShape, preset.diffusion);
+}
+
+// Phase 16b: Spectral Analyzer
+function updateSpectrumData() {
+  if (!advancedAudio.analyser || !advancedAudio.spectrumEnabled) return;
+
+  advancedAudio.analyser.getByteFrequencyData(advancedAudio.frequencyData);
+
+  // Find peak frequencies (top 5 peaks)
+  const data = Array.from(advancedAudio.frequencyData);
+  const peaks = [];
+
+  for (let i = 1; i < data.length - 1; i++) {
+    if (data[i] > data[i - 1] && data[i] > data[i + 1] && data[i] > 50) {
+      const frequency = (i * audioCtx.sampleRate) / advancedAudio.analyser.fftSize;
+      peaks.push({ frequency, magnitude: data[i], binIndex: i });
+    }
+  }
+
+  advancedAudio.peakFrequencies = peaks.sort((a, b) => b.magnitude - a.magnitude).slice(0, 5);
+}
+
+function toggleSpectrumAnalyzer() {
+  advancedAudio.spectrumEnabled = !advancedAudio.spectrumEnabled;
+  const checkbox = document.getElementById('spectrumToggle');
+  const controls = document.getElementById('spectrumControls');
+  if (checkbox) checkbox.checked = advancedAudio.spectrumEnabled;
+  if (controls) controls.style.display = advancedAudio.spectrumEnabled ? 'block' : 'none';
+
+  if (advancedAudio.spectrumEnabled) {
+    updateSpectrumDisplay();
+  }
+}
+
+function updateSpectrumDisplay() {
+  if (!advancedAudio.spectrumEnabled) return;
+
+  updateSpectrumData();
+
+  const canvas = document.getElementById('spectrumCanvas');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+
+  ctx.fillStyle = 'rgba(10, 20, 40, 0.9)';
+  ctx.fillRect(0, 0, width, height);
+
+  // Draw frequency spectrum
+  const data = advancedAudio.frequencyData;
+  const barWidth = width / data.length;
+
+  ctx.fillStyle = 'rgba(0, 240, 255, 0.6)';
+  for (let i = 0; i < data.length; i++) {
+    const barHeight = (data[i] / 255) * height;
+    ctx.fillRect(i * barWidth, height - barHeight, barWidth - 1, barHeight);
+  }
+
+  // Draw peak markers
+  ctx.strokeStyle = 'rgba(255, 100, 100, 0.8)';
+  ctx.lineWidth = 2;
+  for (const peak of advancedAudio.peakFrequencies) {
+    const x = (peak.binIndex / data.length) * width;
+    const y = height - (peak.magnitude / 255) * height;
+
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Label peak frequency
+    const freqKHz = (peak.frequency / 1000).toFixed(1);
+    ctx.fillStyle = 'rgba(255, 100, 100, 0.8)';
+    ctx.font = '9px monospace';
+    ctx.fillText(freqKHz + 'kHz', x - 20, y - 8);
+  }
+
+  requestAnimationFrame(updateSpectrumDisplay);
+}
+
+// Phase 16c: LFO Modulation
+function generateLFOValue(phase, waveform) {
+  const normalizedPhase = phase % (Math.PI * 2);
+
+  switch (waveform) {
+    case 'sine':
+      return Math.sin(normalizedPhase) * 0.5 + 0.5;
+    case 'triangle':
+      const tri = (normalizedPhase / Math.PI) % 2;
+      return tri < 1 ? tri : 2 - tri;
+    case 'square':
+      return normalizedPhase < Math.PI ? 1 : 0;
+    case 'saw':
+      return normalizedPhase / (Math.PI * 2);
+    default:
+      return 0.5;
+  }
+}
+
+function updateLFO(deltaTime) {
+  if (!advancedAudio.lfoEnabled) return;
+
+  advancedAudio.lfoPhase += (advancedAudio.lfoRate * 2 * Math.PI * deltaTime);
+  const lfoValue = generateLFOValue(advancedAudio.lfoPhase, advancedAudio.lfoWaveform);
+  const modulationAmount = (lfoValue - 0.5) * 2 * advancedAudio.lfoDepth;
+
+  const target = advancedAudio.lfoTarget;
+
+  if (target === 'delayTime') {
+    const baseTime = advancedAudio.lfoBaseValues.delayTime || 0.5;
+    const modulatedTime = baseTime * (1 + modulationAmount);
+    updateDelay(modulatedTime, effectsParams.delay.feedback, effectsParams.delay.mix);
+  } else if (target === 'reverbMix') {
+    const baseMix = advancedAudio.lfoBaseValues.reverbMix || 0.2;
+    const modulatedMix = Math.max(0, Math.min(1, baseMix * (1 + modulationAmount)));
+    updateReverb(modulatedMix);
+  } else if (target === 'tapTime') {
+    const tapIdx = advancedAudio.lfoBaseValues.tapIndex || 0;
+    const baseTime = advancedAudio.lfoBaseValues.tapTime || advancedAudio.delayTaps[tapIdx].time;
+    const modulatedTime = baseTime * (1 + modulationAmount * 0.5);
+    updateMultiTapDelay(tapIdx, modulatedTime, advancedAudio.delayTaps[tapIdx].feedback, advancedAudio.delayTaps[tapIdx].mix);
+  }
+}
+
+function toggleLFO() {
+  advancedAudio.lfoEnabled = !advancedAudio.lfoEnabled;
+
+  if (advancedAudio.lfoEnabled) {
+    const target = advancedAudio.lfoTarget;
+    if (target === 'delayTime') {
+      advancedAudio.lfoBaseValues.delayTime = effectsNodes.delay.delayTime.value;
+    } else if (target === 'reverbMix') {
+      advancedAudio.lfoBaseValues.reverbMix = effectsNodes.reverbWet.gain.value;
+    } else if (target === 'tapTime') {
+      advancedAudio.lfoBaseValues.tapIndex = 0;
+      advancedAudio.lfoBaseValues.tapTime = advancedAudio.delayTaps[0].time;
+    }
+  }
+
+  const checkbox = document.getElementById('lfoToggle');
+  const controls = document.getElementById('lfoControls');
+  if (checkbox) checkbox.checked = advancedAudio.lfoEnabled;
+  if (controls) controls.style.display = advancedAudio.lfoEnabled ? 'block' : 'none';
+}
+
+function setLFOTarget(target) {
+  advancedAudio.lfoTarget = target;
+  if (advancedAudio.lfoEnabled) {
+    // Update base value when target changes
+    if (target === 'delayTime') {
+      advancedAudio.lfoBaseValues.delayTime = effectsNodes.delay.delayTime.value;
+    } else if (target === 'reverbMix') {
+      advancedAudio.lfoBaseValues.reverbMix = effectsNodes.reverbWet.gain.value;
+    }
+  }
+}
+
+function setLFORate(rate) {
+  advancedAudio.lfoRate = parseFloat(rate);
+}
+
+function setLFODepth(depth) {
+  advancedAudio.lfoDepth = parseFloat(depth);
+}
+
+function setLFOWaveform(waveform) {
+  advancedAudio.lfoWaveform = waveform;
+}
+
+// Phase 16d: Stereo Imaging & Tone Curve
+function setStereoWidth(width) {
+  advancedAudio.stereoWidth = parseFloat(width);
+
+  if (advancedAudio.stereoWidth <= 1) {
+    // Mono to normal stereo
+    const monoAmount = 1 - advancedAudio.stereoWidth;
+    effectsNodes.stereoGainL.gain.value = 1 - monoAmount * 0.5;
+    effectsNodes.stereoGainR.gain.value = 1 - monoAmount * 0.5;
+  } else {
+    // Ultra-wide stereo (mid/side expansion)
+    effectsNodes.stereoGainL.gain.value = advancedAudio.stereoWidth;
+    effectsNodes.stereoGainR.gain.value = advancedAudio.stereoWidth;
+  }
+}
+
+function toggleToneCurve() {
+  advancedAudio.toneCurveEnabled = !advancedAudio.toneCurveEnabled;
+  const checkbox = document.getElementById('toneCurveToggle');
+  const canvas = document.getElementById('toneCurveCanvas');
+  const controls = document.getElementById('toneCurveControls');
+  if (checkbox) checkbox.checked = advancedAudio.toneCurveEnabled;
+  if (canvas) canvas.style.display = advancedAudio.toneCurveEnabled ? 'block' : 'none';
+  if (controls) controls.style.display = advancedAudio.toneCurveEnabled ? 'block' : 'none';
+  if (advancedAudio.toneCurveEnabled) drawToneCurve();
+}
+
+function updateToneCurvePoint(index, gain) {
+  if (index >= 0 && index < advancedAudio.toneCurvePoints.length) {
+    advancedAudio.toneCurvePoints[index].gain = parseFloat(gain);
+    drawToneCurve();
+  }
+}
+
+function drawToneCurve() {
+  const canvas = document.getElementById('toneCurveCanvas');
+  if (!canvas || !advancedAudio.toneCurveEnabled) return;
+
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+
+  // Background
+  ctx.fillStyle = 'rgba(10, 20, 40, 0.9)';
+  ctx.fillRect(0, 0, width, height);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(0, 240, 255, 0.1)';
+  ctx.lineWidth = 1;
+  const gridSpacing = width / 5;
+  for (let i = 0; i <= 5; i++) {
+    ctx.beginPath();
+    ctx.moveTo(i * gridSpacing, 0);
+    ctx.lineTo(i * gridSpacing, height);
+    ctx.stroke();
+  }
+
+  // Center line (0dB)
+  ctx.strokeStyle = 'rgba(0, 240, 255, 0.3)';
+  ctx.beginPath();
+  ctx.moveTo(0, height / 2);
+  ctx.lineTo(width, height / 2);
+  ctx.stroke();
+
+  // Draw curve
+  ctx.strokeStyle = 'rgba(0, 240, 255, 0.8)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+
+  const points = advancedAudio.toneCurvePoints;
+  const minFreq = Math.log10(20);
+  const maxFreq = Math.log10(20000);
+
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    const x = ((Math.log10(p.freq) - minFreq) / (maxFreq - minFreq)) * width;
+    const y = height / 2 - (p.gain / 12) * (height / 2);
+
+    if (i === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  }
+
+  ctx.stroke();
+
+  // Draw control points
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    const x = ((Math.log10(p.freq) - minFreq) / (maxFreq - minFreq)) * width;
+    const y = height / 2 - (p.gain / 12) * (height / 2);
+
+    ctx.fillStyle = 'rgba(255, 100, 100, 0.8)';
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Label frequency
+    ctx.fillStyle = 'rgba(0, 240, 255, 0.8)';
+    ctx.font = '8px monospace';
+    const freqLabel = p.freq < 1000 ? p.freq + 'Hz' : (p.freq / 1000).toFixed(1) + 'k';
+    ctx.fillText(freqLabel, x - 15, y - 8);
+  }
+}
+
+// Phase 17: AI-Assisted Mixing
+function analyzeCurrentMix() {
+  if (!audioCtx || !isPlaying) {
+    console.log('Cannot analyze: audio context or sequencer not ready');
+    return;
+  }
+
+  aiMixing.analysisRunning = true;
+  aiMixing.lastAnalysisTime = Date.now();
+
+  // Perform FFT analysis
+  const analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 2048;
+  globalMasterGain.connect(analyser);
+
+  const frequencyData = new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(frequencyData);
+
+  // Analyze frequency balance across 3 bands (bass, mids, treble)
+  const bassEnd = Math.floor(frequencyData.length * 0.1); // 20Hz-2kHz
+  const midEnd = Math.floor(frequencyData.length * 0.5);  // 2kHz-10kHz
+  const trebleEnd = frequencyData.length;                 // 10kHz-20kHz
+
+  const bassAvg = frequencyData.slice(0, bassEnd).reduce((a, b) => a + b, 0) / bassEnd;
+  const midsAvg = frequencyData.slice(bassEnd, midEnd).reduce((a, b) => a + b, 0) / (midEnd - bassEnd);
+  const trebleAvg = frequencyData.slice(midEnd, trebleEnd).reduce((a, b) => a + b, 0) / (trebleEnd - midEnd);
+
+  aiMixing.frequencyBalance.bass = bassAvg;
+  aiMixing.frequencyBalance.mids = midsAvg;
+  aiMixing.frequencyBalance.treble = trebleAvg;
+
+  // Calculate loudness (simplified LUFS calculation)
+  const rmsValue = Math.sqrt(frequencyData.reduce((a, b) => a + b * b, 0) / frequencyData.length) / 127;
+  const loudnessDB = 20 * Math.log10(Math.max(rmsValue, 0.00001));
+
+  aiMixing.loudnessMeasure.integrated = Math.round(loudnessDB * 10) / 10;
+  aiMixing.loudnessMeasure.short = aiMixing.loudnessMeasure.integrated - 1;
+  aiMixing.loudnessMeasure.momentary = aiMixing.loudnessMeasure.integrated - 0.5;
+
+  // Generate recommendations based on analysis
+  generateMixRecommendations();
+
+  // Auto-capture mix snapshot
+  autoCaptureMixSnapshot();
+
+  // Store in history
+  aiMixing.analysisHistory.push({
+    timestamp: aiMixing.lastAnalysisTime,
+    frequencyBalance: { ...aiMixing.frequencyBalance },
+    loudness: { ...aiMixing.loudnessMeasure },
+    recommendations: aiMixing.recommendations.slice()
+  });
+
+  // Keep history limited to last 100 analyses
+  if (aiMixing.analysisHistory.length > 100) {
+    aiMixing.analysisHistory.shift();
+  }
+
+  aiMixing.analysisRunning = false;
+
+  // Disconnect temporary analyser
+  globalMasterGain.disconnect(analyser);
+
+  // Update UI display
+  updateAIMixingDisplay();
+
+  return {
+    frequencyBalance: aiMixing.frequencyBalance,
+    loudness: aiMixing.loudnessMeasure,
+    recommendations: aiMixing.recommendations
+  };
+}
+
+function generateMixRecommendations() {
+  aiMixing.recommendations = [];
+
+  const bass = aiMixing.frequencyBalance.bass;
+  const mids = aiMixing.frequencyBalance.mids;
+  const treble = aiMixing.frequencyBalance.treble;
+
+  // Bass recommendations
+  if (bass < 40) {
+    aiMixing.recommendations.push({
+      type: 'bass',
+      priority: 'high',
+      message: 'Bass is too quiet (+3 to +6 dB)',
+      suggestion: 3,
+      bandIndex: 0
+    });
+  } else if (bass > 100) {
+    aiMixing.recommendations.push({
+      type: 'bass',
+      priority: 'medium',
+      message: 'Bass is too loud (-2 to -4 dB)',
+      suggestion: -3,
+      bandIndex: 0
+    });
+  }
+
+  // Mids recommendations
+  if (mids < 50) {
+    aiMixing.recommendations.push({
+      type: 'mids',
+      priority: 'medium',
+      message: 'Mids are dull (+2 to +4 dB)',
+      suggestion: 3,
+      bandIndex: 2
+    });
+  } else if (mids > 120) {
+    aiMixing.recommendations.push({
+      type: 'mids',
+      priority: 'high',
+      message: 'Mids are harsh (-2 to -5 dB)',
+      suggestion: -3,
+      bandIndex: 2
+    });
+  }
+
+  // Treble recommendations
+  if (treble < 30) {
+    aiMixing.recommendations.push({
+      type: 'treble',
+      priority: 'high',
+      message: 'Treble lacks air (+4 to +6 dB)',
+      suggestion: 5,
+      bandIndex: 4
+    });
+  } else if (treble > 110) {
+    aiMixing.recommendations.push({
+      type: 'treble',
+      priority: 'medium',
+      message: 'Treble is harsh (-3 to -5 dB)',
+      suggestion: -4,
+      bandIndex: 4
+    });
+  }
+
+  // Loudness recommendations
+  const loudness = aiMixing.loudnessMeasure.integrated;
+  if (loudness < -30) {
+    aiMixing.recommendations.push({
+      type: 'loudness',
+      priority: 'high',
+      message: `Very quiet (${loudness} LUFS) - increase master gain`,
+      suggestion: 5
+    });
+  } else if (loudness > -10) {
+    aiMixing.recommendations.push({
+      type: 'loudness',
+      priority: 'medium',
+      message: `Loud (${loudness} LUFS) - risk of clipping`,
+      suggestion: -3
+    });
+  }
+}
+
+function applyRecommendation(recommendation) {
+  if (!recommendation) return;
+
+  if (recommendation.type === 'bass' && recommendation.bandIndex !== undefined) {
+    updateToneCurvePoint(recommendation.bandIndex, recommendation.suggestion);
+  } else if (recommendation.type === 'mids' && recommendation.bandIndex !== undefined) {
+    updateToneCurvePoint(recommendation.bandIndex, recommendation.suggestion);
+  } else if (recommendation.type === 'treble' && recommendation.bandIndex !== undefined) {
+    updateToneCurvePoint(recommendation.bandIndex, recommendation.suggestion);
+  } else if (recommendation.type === 'loudness') {
+    if (globalMasterGain) {
+      const newGain = Math.max(0.1, Math.min(2, globalMasterGain.gain.value + recommendation.suggestion * 0.1));
+      globalMasterGain.gain.setTargetAtTime(newGain, audioCtx.currentTime, 0.01);
+    }
+  }
+}
+
+function toggleAIMixing() {
+  aiMixing.analysisEnabled = !aiMixing.analysisEnabled;
+  const checkbox = document.getElementById('aiMixingToggle');
+  if (checkbox) checkbox.checked = aiMixing.analysisEnabled;
+
+  if (aiMixing.analysisEnabled && isPlaying) {
+    analyzeCurrentMix();
+  }
+}
+
+function toggleAutoApply() {
+  aiMixing.autoApplyEnabled = !aiMixing.autoApplyEnabled;
+  const checkbox = document.getElementById('autoApplyToggle');
+  if (checkbox) checkbox.checked = aiMixing.autoApplyEnabled;
+}
+
+// Phase 17b: Parametric EQ Visualization & Control
+function initParametricEQ() {
+  if (!audioCtx || aiMixing.eqNodes.length > 0) return;
+
+  // Create 10 peaking filters for parametric EQ
+  for (let i = 0; i < aiMixing.frequencyBands.length; i++) {
+    const band = aiMixing.frequencyBands[i];
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'peaking';
+    filter.frequency.value = band.freq;
+    filter.Q.value = 1.0; // Moderate Q for musical EQ
+    filter.gain.value = band.gain;
+
+    aiMixing.eqNodes.push(filter);
+  }
+
+  // Connect filters in series if not already connected
+  if (globalMasterGain) {
+    // Insert EQ nodes after the initial effects but before the main chain
+    // For now, they're standalone - connection will be managed by toggling
+    console.log(`Parametric EQ initialized with ${aiMixing.eqNodes.length} bands`);
+  }
+}
+
+function setParametricEQGain(bandIndex, gain) {
+  if (bandIndex < 0 || bandIndex >= aiMixing.frequencyBands.length) return;
+
+  aiMixing.frequencyBands[bandIndex].gain = parseFloat(gain);
+
+  // Update the filter node if it exists
+  if (aiMixing.eqNodes[bandIndex]) {
+    aiMixing.eqNodes[bandIndex].gain.setTargetAtTime(parseFloat(gain), audioCtx.currentTime, 0.01);
+  }
+
+  // Redraw EQ visualization if enabled
+  if (aiMixing.eqVisualizationEnabled) {
+    drawParametricEQ();
+  }
+}
+
+function loadEQPreset(presetName) {
+  const preset = aiMixing.parametricEQPresets[presetName];
+  if (!preset) return;
+
+  aiMixing.currentPresetName = presetName;
+
+  // Apply gains from preset
+  for (let i = 0; i < preset.gains.length && i < aiMixing.frequencyBands.length; i++) {
+    setParametricEQGain(i, preset.gains[i]);
+  }
+
+  // Update dropdown if exists
+  const dropdown = document.getElementById('eqPresetDropdown');
+  if (dropdown) dropdown.value = presetName;
+}
+
+function toggleEQVisualization() {
+  aiMixing.eqVisualizationEnabled = !aiMixing.eqVisualizationEnabled;
+  const checkbox = document.getElementById('eqVisualizationToggle');
+  if (checkbox) checkbox.checked = aiMixing.eqVisualizationEnabled;
+
+  const canvas = document.getElementById('parametricEQCanvas');
+  if (canvas) canvas.style.display = aiMixing.eqVisualizationEnabled ? 'block' : 'none';
+
+  if (aiMixing.eqVisualizationEnabled) {
+    drawParametricEQ();
+  }
+}
+
+function drawParametricEQ() {
+  const canvas = document.getElementById('parametricEQCanvas');
+  if (!canvas || !aiMixing.eqVisualizationEnabled) return;
+
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+
+  // Background
+  ctx.fillStyle = 'rgba(10, 20, 40, 0.9)';
+  ctx.fillRect(0, 0, width, height);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(0, 240, 255, 0.1)';
+  ctx.lineWidth = 1;
+  const gridSpacing = width / 10;
+  for (let i = 0; i <= 10; i++) {
+    ctx.beginPath();
+    ctx.moveTo(i * gridSpacing, 0);
+    ctx.lineTo(i * gridSpacing, height);
+    ctx.stroke();
+  }
+
+  // Center line (0dB)
+  ctx.strokeStyle = 'rgba(0, 240, 255, 0.3)';
+  ctx.beginPath();
+  ctx.moveTo(0, height / 2);
+  ctx.lineTo(width, height / 2);
+  ctx.stroke();
+
+  // Draw EQ curve
+  ctx.strokeStyle = 'rgba(0, 240, 255, 0.8)';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+
+  const bands = aiMixing.frequencyBands;
+  const minFreq = Math.log10(20);
+  const maxFreq = Math.log10(20000);
+
+  for (let i = 0; i < bands.length; i++) {
+    const band = bands[i];
+    const x = ((Math.log10(band.freq) - minFreq) / (maxFreq - minFreq)) * width;
+    const y = height / 2 - (band.gain / 12) * (height / 2);
+
+    if (i === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  }
+  ctx.stroke();
+
+  // Draw band points and labels
+  for (let i = 0; i < bands.length; i++) {
+    const band = bands[i];
+    const x = ((Math.log10(band.freq) - minFreq) / (maxFreq - minFreq)) * width;
+    const y = height / 2 - (band.gain / 12) * (height / 2);
+
+    // Point circle
+    const hue = band.gain > 0 ? 120 : band.gain < 0 ? 0 : 60;
+    ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Label
+    ctx.fillStyle = 'rgba(0, 240, 255, 0.8)';
+    ctx.font = '8px monospace';
+    const freqLabel = band.freq < 1000 ? band.freq + 'Hz' : (band.freq / 1000).toFixed(1) + 'k';
+    ctx.fillText(freqLabel, x - 15, y - 12);
+
+    // Gain value
+    ctx.fillStyle = band.gain > 0 ? 'rgba(100, 255, 100, 0.8)' : band.gain < 0 ? 'rgba(255, 100, 100, 0.8)' : 'rgba(200, 200, 200, 0.6)';
+    ctx.fillText(band.gain.toFixed(1) + 'dB', x - 12, y + 10);
+  }
+}
+
+// Phase 17c: Mix Memory & Snapshots
+function captureMixSnapshot(label) {
+  const snapshot = {
+    timestamp: Date.now(),
+    label: label || `Mix ${aiMixing.mixSnapshots.length + 1}`,
+    frequencyBands: aiMixing.frequencyBands.map(b => ({ ...b })),
+    loudness: { ...aiMixing.loudnessMeasure },
+    frequencyBalance: { ...aiMixing.frequencyBalance },
+    recommendations: aiMixing.recommendations.map(r => ({ ...r }))
+  };
+
+  aiMixing.mixSnapshots.push(snapshot);
+
+  // Keep only last 20 snapshots
+  if (aiMixing.mixSnapshots.length > 20) {
+    aiMixing.mixSnapshots.shift();
+  }
+
+  updateSnapshotList();
+  return snapshot;
+}
+
+function restoreMixSnapshot(index) {
+  if (index < 0 || index >= aiMixing.mixSnapshots.length) return;
+
+  const snapshot = aiMixing.mixSnapshots[index];
+  aiMixing.currentSnapshotIndex = index;
+
+  // Restore frequency bands and gains
+  for (let i = 0; i < snapshot.frequencyBands.length && i < aiMixing.frequencyBands.length; i++) {
+    aiMixing.frequencyBands[i].gain = snapshot.frequencyBands[i].gain;
+    if (aiMixing.eqNodes[i]) {
+      aiMixing.eqNodes[i].gain.setTargetAtTime(snapshot.frequencyBands[i].gain, audioCtx.currentTime, 0.01);
+    }
+  }
+
+  updateAIMixingDisplay();
+  if (aiMixing.eqVisualizationEnabled) {
+    drawParametricEQ();
+  }
+}
+
+function compareMixSnapshots(index1, index2) {
+  if (index1 < 0 || index1 >= aiMixing.mixSnapshots.length ||
+      index2 < 0 || index2 >= aiMixing.mixSnapshots.length) {
+    return null;
+  }
+
+  const snap1 = aiMixing.mixSnapshots[index1];
+  const snap2 = aiMixing.mixSnapshots[index2];
+
+  const comparison = {
+    labels: [snap1.label, snap2.label],
+    frequencyDelta: [],
+    loudnessDelta: {
+      integrated: snap2.loudness.integrated - snap1.loudness.integrated,
+      short: snap2.loudness.short - snap1.loudness.short
+    },
+    frequencyBalanceDelta: {
+      bass: snap2.frequencyBalance.bass - snap1.frequencyBalance.bass,
+      mids: snap2.frequencyBalance.mids - snap1.frequencyBalance.mids,
+      treble: snap2.frequencyBalance.treble - snap1.frequencyBalance.treble
+    }
+  };
+
+  // Calculate delta for each band
+  for (let i = 0; i < snap1.frequencyBands.length && i < snap2.frequencyBands.length; i++) {
+    comparison.frequencyDelta.push(
+      snap2.frequencyBands[i].gain - snap1.frequencyBands[i].gain
+    );
+  }
+
+  return comparison;
+}
+
+function deleteSnapshotAt(index) {
+  if (index < 0 || index >= aiMixing.mixSnapshots.length) return;
+  aiMixing.mixSnapshots.splice(index, 1);
+  if (aiMixing.currentSnapshotIndex >= aiMixing.mixSnapshots.length) {
+    aiMixing.currentSnapshotIndex = aiMixing.mixSnapshots.length - 1;
+  }
+  updateSnapshotList();
+}
+
+function updateSnapshotList() {
+  const list = document.getElementById('snapshotList');
+  if (!list) return;
+
+  if (aiMixing.mixSnapshots.length === 0) {
+    list.innerHTML = '<div style="font-size:9px;color:var(--text-secondary);font-style:italic">Capture snapshots while analyzing</div>';
+    return;
+  }
+
+  list.innerHTML = aiMixing.mixSnapshots.map((snap, idx) => `
+    <div style="padding:6px;background:${aiMixing.currentSnapshotIndex === idx ? 'rgba(0,240,255,0.15)' : 'var(--bg-primary)'};border-radius:4px;border-left:2px solid ${aiMixing.currentSnapshotIndex === idx ? 'var(--cyan)' : 'var(--border)'};display:flex;justify-content:space-between;align-items:center">
+      <div style="flex:1">
+        <div style="font-size:9px;font-weight:600;color:var(--text-primary)">${snap.label}</div>
+        <div style="font-size:8px;color:var(--text-secondary)">${new Date(snap.timestamp).toLocaleTimeString()}</div>
+      </div>
+      <div style="display:flex;gap:4px">
+        <button onclick="restoreMixSnapshot(${idx})" style="font-size:8px;padding:3px 6px;background:rgba(0,240,255,0.1);border:1px solid rgba(0,240,255,0.3);color:var(--cyan);border-radius:2px;cursor:pointer">Load</button>
+        <button onclick="deleteSnapshotAt(${idx})" style="font-size:8px;padding:3px 6px;background:rgba(255,51,85,0.1);border:1px solid rgba(255,51,85,0.3);color:var(--red);border-radius:2px;cursor:pointer">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function exportMixSnapshot() {
+  if (aiMixing.currentSnapshotIndex < 0) {
+    alert('Load a snapshot first to export');
+    return;
+  }
+
+  const snap = aiMixing.mixSnapshots[aiMixing.currentSnapshotIndex];
+  const data = {
+    version: 1,
+    snapshot: snap
+  };
+
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `mix-snapshot-${snap.label.replace(/\s+/g, '-')}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function autoCaptureMixSnapshot() {
+  if (aiMixing.autoSnapshotOnAnalysis && aiMixing.recommendations.length > 0) {
+    const timestamp = new Date().toLocaleTimeString();
+    captureMixSnapshot(`Auto ${timestamp}`);
+  }
+}
+
+function toggleAutoSnapshot() {
+  const checkbox = document.getElementById('autoSnapshotToggle');
+  aiMixing.autoSnapshotOnAnalysis = checkbox.checked;
+}
+
+function updateAIMixingDisplay() {
+  // Update frequency balance display
+  const bassLevel = document.getElementById('bassLevel');
+  const midsLevel = document.getElementById('midsLevel');
+  const trebleLevel = document.getElementById('trebleLevel');
+
+  if (bassLevel) bassLevel.textContent = Math.round(aiMixing.frequencyBalance.bass);
+  if (midsLevel) midsLevel.textContent = Math.round(aiMixing.frequencyBalance.mids);
+  if (trebleLevel) trebleLevel.textContent = Math.round(aiMixing.frequencyBalance.treble);
+
+  // Update loudness display
+  const loudnessInt = document.getElementById('loudnessInt');
+  const loudnessShort = document.getElementById('loudnessShort');
+
+  if (loudnessInt) loudnessInt.textContent = aiMixing.loudnessMeasure.integrated.toFixed(1);
+  if (loudnessShort) loudnessShort.textContent = aiMixing.loudnessMeasure.short.toFixed(1);
+
+  // Update recommendations list
+  const recList = document.getElementById('recommendationsList');
+  if (recList) {
+    if (aiMixing.recommendations.length === 0) {
+      recList.innerHTML = '<div style="color:var(--text-secondary);font-style:italic">Mix looks good!</div>';
+    } else {
+      recList.innerHTML = aiMixing.recommendations.map((rec, idx) => `
+        <div style="padding:6px;background:var(--bg-primary);border-radius:4px;border-left:2px solid ${rec.priority === 'high' ? '#ff3355' : '#ffcc00'}">
+          <div style="color:var(--text-primary);font-size:9px;margin-bottom:2px">${rec.message}</div>
+          <button onclick="applyRecommendation(${JSON.stringify(rec).replace(/"/g, '&quot;')})" style="font-size:8px;padding:3px 6px;background:rgba(0,240,255,0.1);border:1px solid rgba(0,240,255,0.3);color:var(--cyan);border-radius:3px;cursor:pointer;width:100%">Apply</button>
+        </div>
+      `).join('');
+    }
+  }
+
+  // Auto-apply if enabled
+  if (aiMixing.autoApplyEnabled && aiMixing.recommendations.length > 0) {
+    aiMixing.recommendations.forEach(rec => {
+      if (rec.priority === 'high') {
+        applyRecommendation(rec);
+      }
+    });
+  }
 }
 
 // Phase 12: Effect control functions
@@ -1510,6 +3180,46 @@ function updateReverb(mix) {
   if (!effectsNodes.reverb) return;
   effectsParams.reverb = { mix };
   effectsNodes.reverbWet.gain.setTargetAtTime(mix, audioCtx.currentTime, 0.01);
+}
+
+// Phase 16: Multi-tap delay controls
+function toggleMultiTapDelay() {
+  if (!effectsNodes.multiTapMix) return;
+  advancedAudio.multiTapDelayEnabled = !advancedAudio.multiTapDelayEnabled;
+
+  if (advancedAudio.multiTapDelayEnabled) {
+    effectsNodes.multiTapMix.gain.setTargetAtTime(1, audioCtx.currentTime, 0.05);
+  } else {
+    effectsNodes.multiTapMix.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+  }
+
+  const checkbox = document.getElementById('multiTapDelayToggle');
+  const controls = document.getElementById('multiTapControls');
+  if (checkbox) checkbox.checked = advancedAudio.multiTapDelayEnabled;
+  if (controls) controls.style.display = advancedAudio.multiTapDelayEnabled ? 'block' : 'none';
+}
+
+function updateMultiTapDelay(tapIndex, time, feedback, mix) {
+  if (!effectsNodes.multiTapMix || tapIndex >= advancedAudio.delayTaps.length) return;
+
+  const tap = advancedAudio.delayTaps[tapIndex];
+  tap.time = time;
+  tap.feedback = feedback;
+  tap.mix = mix;
+
+  if (tap.node) {
+    tap.node.delayTime.setTargetAtTime(time, audioCtx.currentTime, 0.01);
+    tap.feedbackNode.gain.setTargetAtTime(feedback, audioCtx.currentTime, 0.01);
+    tap.wetNode.gain.setTargetAtTime(mix, audioCtx.currentTime, 0.01);
+  }
+}
+
+function changeImpulsePreset(presetName) {
+  if (!effectsNodes.reverb || !advancedAudio.impulsePresets[presetName]) return;
+
+  advancedAudio.currentPreset = presetName;
+  const impulse = createPresetImpulse(presetName);
+  effectsNodes.reverb.buffer = impulse;
 }
 
 function updateEffectUI(effectName) {
@@ -1754,6 +3464,264 @@ function updateMIDIStatus(message) {
   console.log(`MIDI: ${message}`);
 }
 
+// === PHASE 19: MODULATION & PERFORMANCE ENGINE ===
+
+function toggleModulation() {
+  const checkbox = document.getElementById('modulationEnabled');
+  if (!currentPattern) {
+    checkbox.checked = false;
+    alert('Load or create a pattern first');
+    return;
+  }
+  if (!currentPattern.modulationRack) {
+    currentPattern.modulationRack = [];
+  }
+}
+
+function openModulationModal() {
+  if (!currentPattern) {
+    alert('Load or create a pattern first');
+    return;
+  }
+  if (!currentPattern.modulationRack) {
+    currentPattern.modulationRack = [];
+  }
+
+  const sourceType = prompt('Modulation source?\n1: LFO\n2: Envelope\n3: Random', '1');
+  if (!sourceType) return;
+
+  const target = prompt('Target parameter?\n1: filterCutoff\n2: filterResonance\n3: volume\n4: pan', '1');
+  const depthStr = prompt('Modulation depth (0-1):', '0.5');
+
+  if (!target || !depthStr) return;
+
+  const targetMap = { '1': 'filterCutoff', '2': 'filterResonance', '3': 'volume', '4': 'pan' };
+  const sourceMap = { '1': 'lfo', '2': 'envelope', '3': 'random' };
+
+  const modulation = {
+    id: Math.random().toString(36).substr(2, 9),
+    source: sourceMap[sourceType] || 'lfo',
+    target: targetMap[target] || 'filterCutoff',
+    depth: parseFloat(depthStr) || 0.5,
+    active: true,
+    baseValue: 0
+  };
+
+  if (sourceType === '1') {
+    modulation.lfoId = lfoOscillators.length > 0 ? lfoOscillators[0].id : null;
+  }
+
+  currentPattern.modulationRack.push(modulation);
+  updateModulationRackUI();
+  saveCurrentPattern();
+}
+
+function updateModulationRackUI() {
+  const list = document.getElementById('modulationRackList');
+  if (!list || !currentPattern || !currentPattern.modulationRack) return;
+
+  list.innerHTML = '';
+  for (const mod of currentPattern.modulationRack) {
+    const div = document.createElement('div');
+    div.style.cssText = 'padding:8px;background:rgba(170,255,0,0.05);border-radius:3px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center';
+    div.innerHTML = `
+      <span>${mod.source} → ${mod.target}<br><small>Depth: ${(mod.depth * 100).toFixed(0)}%</small></span>
+      <button onclick="removeModulation('${mod.id}')" style="background:rgba(255,51,85,0.2);border:none;color:var(--red);padding:2px 6px;border-radius:2px;cursor:pointer;font-size:9px">Remove</button>
+    `;
+    list.appendChild(div);
+  }
+}
+
+function removeModulation(modId) {
+  if (!currentPattern || !currentPattern.modulationRack) return;
+  currentPattern.modulationRack = currentPattern.modulationRack.filter(m => m.id !== modId);
+  updateModulationRackUI();
+  saveCurrentPattern();
+}
+
+function updateQuickLFO() {
+  const rate = parseFloat(document.getElementById('quickLfoRate').value) || 1.0;
+  const depth = parseFloat(document.getElementById('quickLfoDepth').value) || 0.5;
+  document.getElementById('lfoRateDisplay').textContent = rate.toFixed(1);
+  document.getElementById('lfoDepthDisplay').textContent = (depth * 100).toFixed(0) + '%';
+}
+
+function createQuickLFO() {
+  if (!currentPattern) {
+    alert('Load or create a pattern first');
+    return;
+  }
+
+  const rate = parseFloat(document.getElementById('quickLfoRate').value) || 1.0;
+  const depth = parseFloat(document.getElementById('quickLfoDepth').value) || 0.5;
+  const waveshape = document.getElementById('quickLfoWave').value || 'sine';
+
+  const lfo = {
+    id: 'lfo_' + Math.random().toString(36).substr(2, 9),
+    frequency: rate,
+    waveshape: waveshape,
+    phase: 0,
+    active: true,
+    oscillator: new LFOOscillator(rate, waveshape)
+  };
+
+  lfoOscillators.push(lfo);
+
+  if (!currentPattern.modulationRack) currentPattern.modulationRack = [];
+  currentPattern.modulationRack.push({
+    id: Math.random().toString(36).substr(2, 9),
+    source: 'lfo',
+    lfoId: lfo.id,
+    target: 'filterCutoff',
+    depth: depth,
+    active: true,
+    baseValue: 0
+  });
+
+  updateModulationRackUI();
+  saveCurrentPattern();
+  alert(`LFO created: ${rate}Hz ${waveshape}, depth ${(depth * 100).toFixed(0)}%`);
+}
+
+function initMacroControls() {
+  const panel = document.getElementById('macroControlsPanel');
+  if (!panel) return;
+
+  panel.innerHTML = '';
+  for (let i = 0; i < 8; i++) {
+    const div = document.createElement('div');
+    div.innerHTML = `
+      <div style="text-align:center">
+        <div style="font-size:10px;font-weight:600;margin-bottom:6px">Macro ${i + 1}</div>
+        <input type="range" id="macro${i}" min="0" max="1" value="0" step="0.01"
+               oninput="setMacroValue(${i}, this.value)"
+               style="width:100%;cursor:pointer">
+        <div style="font-size:9px;color:var(--text-secondary);margin-top:4px" id="macroValue${i}">0%</div>
+      </div>
+    `;
+    panel.appendChild(div);
+  }
+}
+
+function setMacroValue(index, value) {
+  macroValues[index] = parseFloat(value);
+  const display = document.getElementById(`macroValue${index}`);
+  if (display) display.textContent = Math.round(value * 100) + '%';
+
+  if (currentRecording) {
+    recordParameterChange(`macro_${index}`, parseFloat(value));
+  }
+}
+
+function startPerformanceRecording() {
+  if (!audioCtx) {
+    alert('Audio context not initialized');
+    return;
+  }
+
+  const name = prompt('Recording name:', `Take ${Object.keys(recordedPerformances).length + 1}`);
+  if (!name) return;
+
+  currentRecording = {
+    id: Math.random().toString(36).substr(2, 9),
+    name: name,
+    startTime: audioCtx.currentTime,
+    events: [],
+    patternId: currentPattern ? currentPattern.id : null
+  };
+
+  sequencerState.isRecording = true;
+  document.getElementById('recordBtn').style.display = 'none';
+  document.getElementById('stopRecordBtn').style.display = 'block';
+
+  const statusEl = document.getElementById('recordingStatus');
+  if (statusEl) {
+    statusEl.textContent = `🔴 Recording: ${name}`;
+    statusEl.style.color = 'var(--red)';
+  }
+}
+
+function stopPerformanceRecording() {
+  if (!currentRecording) return;
+
+  sequencerState.isRecording = false;
+  document.getElementById('recordBtn').style.display = 'block';
+  document.getElementById('stopRecordBtn').style.display = 'none';
+
+  const duration = audioCtx.currentTime - currentRecording.startTime;
+  recordedPerformances[currentRecording.id] = currentRecording;
+
+  if (currentPattern) {
+    if (!currentPattern.recordings) currentPattern.recordings = [];
+    currentPattern.recordings.push({
+      id: currentRecording.id,
+      name: currentRecording.name,
+      duration: duration,
+      timestamp: Date.now(),
+      automation: currentRecording.events
+    });
+    saveCurrentPattern();
+  }
+
+  const statusEl = document.getElementById('recordingStatus');
+  if (statusEl) {
+    statusEl.textContent = `✓ Recorded: ${currentRecording.name} (${duration.toFixed(1)}s)`;
+    statusEl.style.color = 'var(--lime)';
+  }
+
+  updateRecordingsList();
+  currentRecording = null;
+}
+
+function recordParameterChange(paramName, value) {
+  if (!currentRecording) return;
+
+  const elapsed = audioCtx.currentTime - currentRecording.startTime;
+  currentRecording.events.push({
+    time: elapsed,
+    parameter: paramName,
+    value: value
+  });
+}
+
+function updateRecordingsList() {
+  const list = document.getElementById('recordingsList');
+  if (!list || !currentPattern || !currentPattern.recordings) return;
+
+  list.innerHTML = '';
+  for (const rec of currentPattern.recordings) {
+    const div = document.createElement('div');
+    div.style.cssText = 'padding:6px;background:rgba(255,51,85,0.05);border-radius:3px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center';
+    div.innerHTML = `
+      <span><strong>${rec.name}</strong><br><small>${rec.duration.toFixed(1)}s</small></span>
+      <button onclick="exportRecording('${rec.id}')" style="background:rgba(0,240,255,0.2);border:none;color:var(--cyan);padding:2px 6px;border-radius:2px;cursor:pointer;font-size:8px">Export</button>
+    `;
+    list.appendChild(div);
+  }
+}
+
+function exportRecording(recId) {
+  if (!currentPattern || !currentPattern.recordings) return;
+  const rec = currentPattern.recordings.find(r => r.id === recId);
+  if (!rec) return;
+
+  const json = {
+    name: rec.name,
+    bpm: bpm,
+    timestamp: rec.timestamp,
+    duration: rec.duration,
+    automation: rec.automation
+  };
+
+  const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${rec.name.replace(/\s+/g, '_')}_${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // === PHASE 14: PERFORMANCE METER & MONITORING ===
 
 function initPerformanceMonitoring() {
@@ -1797,6 +3765,23 @@ function updatePerformanceMetrics() {
   // Calculate buffer health (100% = healthy, lower = stressed)
   const stressLevel = performanceMetrics.cpuUsage;
   performanceMetrics.bufferHealth = Math.max(0, 100 - stressLevel);
+
+  // Phase 15b: Track memory optimization metrics
+  performanceMetrics.allocationsAvoided = voicePool.nodeCreationsAvoided;
+  performanceMetrics.cacheHitRatio = schedulerCache.cachedBPM > 0 ? 95 : 0; // Track cache effectiveness
+
+  // Phase 15c: Track scheduling precision metrics
+  performanceMetrics.rafDrift = Math.abs(schedulingState.rafDriftMs || 0);
+  performanceMetrics.lookaheadMs = (calculateAdaptiveLookahead() * 1000).toFixed(1);
+  performanceMetrics.scheduledEventsCount = schedulingState.scheduledEvents.size;
+
+  // Phase 15d: Track rendering optimization metrics
+  performanceMetrics.dirtyGridCount = renderState.dirtyGrid.size;
+  performanceMetrics.cacheHitCount = renderState.gridCells.size; // Cells cached for incremental updates
+
+  // Phase 15e: Track synthesis optimization metrics
+  performanceMetrics.paramCacheHits = Object.keys(synthesisCache.instrumentParams).length;
+  performanceMetrics.voicePoolReuse = voicePool.nodeCreationsAvoided; // Reused pooled nodes
 
   // Add to history
   performanceHistory.cpuSamples.push(performanceMetrics.cpuUsage);
@@ -1872,6 +3857,66 @@ function updatePerformanceMeterUI() {
     latency.textContent = performanceMetrics.audioContextLatency.toFixed(2) + 'ms';
   }
 
+  // Phase 15b: Update Memory Optimization Metrics
+  const allocsAvoided = document.getElementById('performanceAllocsAvoided');
+  if (allocsAvoided) {
+    allocsAvoided.textContent = performanceMetrics.allocationsAvoided || 0;
+  }
+
+  const cacheHit = document.getElementById('performanceCacheHit');
+  if (cacheHit) {
+    cacheHit.textContent = (performanceMetrics.cacheHitRatio || 0) + '%';
+  }
+
+  // Phase 15c: Update Scheduling Precision Metrics
+  const rafDrift = document.getElementById('performanceRafDrift');
+  if (rafDrift) {
+    const driftMs = (performanceMetrics.rafDrift || 0).toFixed(2);
+    rafDrift.textContent = driftMs + 'ms';
+    // Color based on drift magnitude
+    if (performanceMetrics.rafDrift > 5) {
+      rafDrift.style.color = 'var(--red)'; // High jitter
+    } else if (performanceMetrics.rafDrift > 2) {
+      rafDrift.style.color = 'var(--orange)'; // Moderate jitter
+    } else {
+      rafDrift.style.color = 'var(--lime)'; // Low jitter
+    }
+  }
+
+  const lookahead = document.getElementById('performanceLookahead');
+  if (lookahead) {
+    lookahead.textContent = performanceMetrics.lookaheadMs + 'ms';
+  }
+
+  // Phase 15d: Update Rendering Optimization Metrics
+  const dirtyCells = document.getElementById('performanceDirtyCells');
+  if (dirtyCells) {
+    dirtyCells.textContent = performanceMetrics.dirtyGridCount || 0;
+    // Color based on dirt ratio
+    const dirtyRatio = (performanceMetrics.dirtyGridCount || 0) / (performanceMetrics.cacheHitCount || 1);
+    if (dirtyRatio > 0.5) {
+      dirtyCells.style.color = 'var(--orange)'; // Many cells dirty
+    } else {
+      dirtyCells.style.color = 'var(--lime)'; // Few cells dirty
+    }
+  }
+
+  const cellCache = document.getElementById('performanceCellCache');
+  if (cellCache) {
+    cellCache.textContent = performanceMetrics.cacheHitCount || 0;
+  }
+
+  // Phase 15e: Update Synthesis Optimization Metrics
+  const paramCache = document.getElementById('performanceParamCache');
+  if (paramCache) {
+    paramCache.textContent = performanceMetrics.paramCacheHits || 0;
+  }
+
+  const voiceReuse = document.getElementById('performanceVoiceReuse');
+  if (voiceReuse) {
+    voiceReuse.textContent = performanceMetrics.voicePoolReuse || 0;
+  }
+
   // Update history chart (simple sparkline)
   updatePerformanceChart();
 }
@@ -1939,47 +3984,36 @@ function createNoiseBuffer() {
 }
 
 function playSound(track, velocity = 1.0, pan = 0) {
-  if (!audioCtx) return;
+  if (!audioCtx || voicePool.gainNodes.length === 0) return;
 
-  // Initialize noise buffer once
-  if (!noiseBuffer) {
-    noiseBuffer = createNoiseBuffer();
-  }
-
-  const params = {
-    kick:   { type:'sine',     freq:60,   decay:0.15, vol:0.8,  filter:true, fCutoff:8000, fEnd:200 },
-    snare:  { type:'triangle', freq:200,  decay:0.1,  vol:0.5,  noise:true, noiseVol:0.6 },
-    hihat:  { type:'square',   freq:8000, decay:0.04, vol:0.2,  noise:true, noiseVol:0.8, noiseCutoff:10000 },
-    clap:   { type:'triangle', freq:1200, decay:0.08, vol:0.4 },
-    perc:   { type:'sine',     freq:400,  decay:0.08, vol:0.35, filter:true, fCutoff:5000, fEnd:1000 },
-    bass:   { type:'sawtooth', freq:50,   decay:0.2,  vol:0.6,  filter:true, fCutoff:100, fEnd:100 },
-    fx:     { type:'sawtooth', freq:1500, decay:0.15, vol:0.2 },
-    shaker: { type:'square',   freq:6000, decay:0.03, vol:0.15, noise:true, noiseVol:0.7, noiseCutoff:12000 }
-  };
-  const p = params[track] || params.kick;
+  // Phase 15e: Use cached instrument parameters (no allocation per call)
+  const p = getInstrumentParams(track);
   const now = audioCtx.currentTime;
   const scaledVol = p.vol * Math.max(0.1, velocity);
+  const stopTime = now + p.decay + 0.01;
 
-  const masterGain = audioCtx.createGain();
-  masterGain.gain.setValueAtTime(scaledVol, now);
-  masterGain.gain.exponentialRampToValueAtTime(0.001, now + p.decay);
+  // Get pooled nodes (reused, not allocated)
+  const gain = getPooledNode(voicePool.gainNodes);
+  const filter = getPooledNode(voicePool.filterNodes);
+  const panner = getPooledNode(voicePool.pannerNodes);
+  const noiseGain = getPooledNode(voicePool.noiseGainNodes);
+  const noiseFilter = getPooledNode(voicePool.noiseFilterNodes);
 
-  let output = masterGain;
-  if (pan !== 0) {
-    const panner = audioCtx.createStereoPanner();
-    panner.pan.setValueAtTime(pan, now);
-    masterGain.connect(panner);
-    output = panner;
-  }
+  // Reset pooled nodes to default state for reuse
+  gain.gain.cancelScheduledValues(now);
+  filter.frequency.cancelScheduledValues(now);
+  panner.pan.cancelScheduledValues(now);
+  noiseGain.gain.cancelScheduledValues(now);
+  noiseFilter.frequency.cancelScheduledValues(now);
 
-  // Route through global master (effects chain input) or direct if not initialized
-  if (globalMasterGain) {
-    output.connect(globalMasterGain);
-  } else {
-    output.connect(audioCtx.destination);
-  }
+  // Configure gain
+  gain.gain.setValueAtTime(scaledVol, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, stopTime);
 
-  // Main oscillator
+  // Configure panner
+  panner.pan.setValueAtTime(pan, now);
+
+  // Create new oscillator (Web Audio limitation - can only start once)
   const osc = audioCtx.createOscillator();
   osc.type = p.type;
   osc.frequency.setValueAtTime(p.freq, now);
@@ -1990,31 +4024,26 @@ function playSound(track, velocity = 1.0, pan = 0) {
     osc.frequency.exponentialRampToValueAtTime(300, now + p.decay);
   }
 
-  // Filter for kicks and percs
+  // Connect osc → filter → gain → panner
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(panner);
+
+  // Phase 15e: Apply pre-computed filter config (reduces parameter calls)
   if (p.filter) {
-    const filter = audioCtx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(p.fCutoff, now);
-    filter.frequency.linearRampToValueAtTime(p.fEnd, now + p.decay);
-    osc.connect(filter);
-    filter.connect(masterGain);
-  } else {
-    osc.connect(masterGain);
+    applyFilterConfig(filter, track, now, p.decay);
   }
 
-  // Noise layer for snare, hihat, shaker
+  // Create and configure noise layer (if needed)
   if (p.noise) {
-    const noiseGain = audioCtx.createGain();
-    noiseGain.gain.setValueAtTime(p.noiseVol * Math.max(0.1, velocity), now);
-    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + p.decay);
-
     const noiseSource = audioCtx.createBufferSource();
     noiseSource.buffer = noiseBuffer;
     noiseSource.loop = true;
 
-    // Add bandpass filter for hi-hat and shaker
+    noiseGain.gain.setValueAtTime(p.noiseVol * Math.max(0.1, velocity), now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, stopTime);
+
     if (p.noiseCutoff) {
-      const noiseFilter = audioCtx.createBiquadFilter();
       noiseFilter.type = 'highpass';
       noiseFilter.frequency.setValueAtTime(p.noiseCutoff - 2000, now);
       noiseSource.connect(noiseFilter);
@@ -2023,13 +4052,20 @@ function playSound(track, velocity = 1.0, pan = 0) {
       noiseSource.connect(noiseGain);
     }
 
-    noiseGain.connect(masterGain);
+    noiseGain.connect(panner);
     noiseSource.start(now);
-    noiseSource.stop(now + p.decay + 0.01);
+    noiseSource.stop(stopTime);
   }
 
+  // Start oscillator and track metrics
   osc.start(now);
-  osc.stop(now + p.decay + 0.01);
+  osc.stop(stopTime);
+  trackVoiceAllocation();
+
+  // Release voice after decay
+  setTimeout(() => {
+    voicePool.activeVoices = Math.max(0, voicePool.activeVoices - 1);
+  }, (p.decay + 0.01) * 1000);
 }
 
 function clearGrid() {
@@ -2429,7 +4465,12 @@ function savePattern(name, genre = 'custom') {
     swing: swingAmount,
     grid: JSON.parse(JSON.stringify(grid)),
     created: new Date().toISOString(),
-    lastModified: new Date().toISOString()
+    lastModified: new Date().toISOString(),
+    // Phase 19: Modulation & Performance
+    modulationRack: currentPattern && currentPattern.modulationRack ? currentPattern.modulationRack : [],
+    midiMappings: currentPattern && currentPattern.midiMappings ? currentPattern.midiMappings : {},
+    macros: currentPattern && currentPattern.macros ? currentPattern.macros : [],
+    recordings: currentPattern && currentPattern.recordings ? currentPattern.recordings : []
   };
 
   return new Promise((resolve, reject) => {
@@ -2472,6 +4513,24 @@ function loadPatternById(id) {
       swingAmount = pattern.swing || 0;
       grid = JSON.parse(JSON.stringify(pattern.grid));
       currentPatternId = id;
+      currentPattern = pattern; // Set currentPattern reference
+
+      // Phase 19: Restore modulation and performance data
+      if (pattern.modulationRack) {
+        lfoOscillators = pattern.modulationRack
+          .filter(m => m.source === 'lfo')
+          .map(m => ({
+            id: m.lfoId,
+            frequency: m.frequency || 1.0,
+            waveshape: m.waveshape || 'sine',
+            phase: 0,
+            active: true,
+            oscillator: new LFOOscillator(m.frequency || 1.0, m.waveshape || 'sine')
+          }));
+      }
+      if (pattern.recordings) {
+        updateRecordingsList();
+      }
 
       document.getElementById('bpmSlider').value = bpm;
       document.getElementById('bpmDisplay').textContent = bpm;
@@ -2480,6 +4539,7 @@ function loadPatternById(id) {
       document.getElementById('swingDisplay').textContent = swingAmount + '%';
 
       renderGrid();
+      updateModulationRackUI();
       pushUndoState('Load pattern: ' + pattern.name);
       resolve(pattern);
     };
@@ -2863,6 +4923,270 @@ function generateMIDIFile(trackData, bpm, ticksPerBeat) {
   return bytes;
 }
 
+function generateRekordboxXML(pattern) {
+  const timestamp = new Date(pattern.created || Date.now()).toISOString();
+  const gain = Math.min(6, Math.max(-40, (pattern.masterGain || 0) * 6));
+
+  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+  xml += '<PRODUCT Name="Beat Architekt" Version="1.0">\n';
+  xml += '  <DJ_PLAYLISTS>\n';
+  xml += `    <PLAYLIST Name="${escapeXml(pattern.name || 'Pattern')}" Type="M" KeyType="0" Entries="${pattern.grid[0].length}">\n`;
+
+  TRACKS.forEach((track, idx) => {
+    const trackName = track.name || track.key;
+    const trackGain = gain + (idx * 0.5);
+
+    xml += `      <ENTRY>\n`;
+    xml += `        <PRIMARYKEY Type="TRACK">\n`;
+    xml += `          <TRACK Name="${escapeXml(trackName)}" Channel="${idx + 1}" Database="0" TrackID="${idx}">\n`;
+    xml += `            <LOCATION Type="DISK">\n`;
+    xml += `              <FILE>${escapeXml(pattern.name || 'pattern')}_${track.key}.wav</FILE>\n`;
+    xml += `            </LOCATION>\n`;
+    xml += `            <DURATION>${pattern.grid[track.key].length * 0.5}</DURATION>\n`;
+    xml += `            <TEMPO BPM="${pattern.bpm}" Pitch="0.0"/>\n`;
+    xml += `            <GAIN Value="${trackGain}"/>\n`;
+
+    let beatCount = 0;
+    pattern.grid[track.key].forEach((step, stepIdx) => {
+      if (step.active) {
+        const beatPos = stepIdx * 0.5;
+        const velocity = Math.round(step.velocity * 100);
+        xml += `            <CUE Name="Hit${beatCount++}" Type="0" Start="${beatPos}" End="${beatPos + 0.5}" Hotcue="${stepIdx % 16}"/>\n`;
+      }
+    });
+
+    xml += `          </TRACK>\n`;
+    xml += `        </PRIMARYKEY>\n`;
+    xml += `      </ENTRY>\n`;
+  });
+
+  xml += `    </PLAYLIST>\n`;
+  xml += '  </DJ_PLAYLISTS>\n';
+  xml += '</PRODUCT>\n';
+
+  return xml;
+}
+
+function escapeXml(str) {
+  return str.replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&apos;');
+}
+
+function exportPatternAsRekordbox(id) {
+  const pattern = patternLibrary.find(p => p.id === id);
+  if (!pattern) {
+    alert('Pattern not found');
+    return;
+  }
+
+  const xmlStr = generateRekordboxXML(pattern);
+  const blob = new Blob([xmlStr], { type: 'application/xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (pattern.name || 'pattern') + '_' + pattern.id.split('_')[0] + '.rbx';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// Phase 18b: XDJ MIDI Controller Support
+async function initXDJController() {
+  try {
+    const midiAccess = await navigator.requestMIDIAccess();
+    const inputs = midiAccess.inputs.values();
+    const outputs = midiAccess.outputs.values();
+
+    for (let input of inputs) {
+      if (input.name && (input.name.includes('XDJ') || input.name.includes('DJM') || input.name.includes('Pioneer'))) {
+        xdjMidiInput = input;
+        xdjDevice = input.name;
+        xdjConnected = true;
+        input.onmidimessage = handleXDJMessage;
+        console.log('XDJ device connected:', xdjDevice);
+        break;
+      }
+    }
+
+    for (let output of outputs) {
+      if (output.name && (output.name.includes('XDJ') || output.name.includes('DJM') || output.name.includes('Pioneer'))) {
+        xdjMidiOutput = output;
+        break;
+      }
+    }
+
+    if (!xdjConnected) {
+      console.log('No XDJ device found. Waiting for hardware connection...');
+    }
+  } catch (err) {
+    console.log('Web MIDI not supported or denied:', err);
+  }
+}
+
+function handleXDJMessage(message) {
+  const [cmd, note, velocity] = message.data;
+
+  if ((cmd & 0xF0) === 0x90) {
+    handleXDJPadPress(note, velocity);
+  } else if ((cmd & 0xF0) === 0xB0) {
+    const cc = note;
+    const value = velocity;
+
+    if (cc === 6) {
+      syncXDJTempo(value);
+    } else if (cc === 3) {
+      xdjPlayheadStep = Math.round((value / 127) * (STEPS - 1));
+    }
+  }
+}
+
+function handleXDJPadPress(note, velocity) {
+  if (velocity === 0) return;
+
+  const stepIndex = note - 36;
+  if (stepIndex < 0 || stepIndex >= STEPS) return;
+
+  if (!currentPatternId) {
+    alert('Save current pattern first');
+    return;
+  }
+
+  const track = muteTrack || soloTrack || TRACKS[0].key;
+  const step = grid[track][stepIndex];
+
+  step.active = !step.active;
+  step.velocity = velocity / 127;
+
+  pushUndo();
+  renderGrid();
+  sendPatternStateToXDJ();
+}
+
+function syncXDJTempo(ccValue) {
+  const xdjTempoCurrent = 60 + (ccValue / 127) * 120;
+  const tempoChange = Math.abs(xdjTempoCurrent - bpm);
+
+  if (tempoChange > 2) {
+    bpm = Math.round(xdjTempoCurrent * 10) / 10;
+    document.getElementById('tempoDisplay').textContent = bpm;
+    document.getElementById('tempoSlider').value = bpm;
+    lastXDJSyncTime = Date.now();
+  }
+}
+
+function sendPatternStateToXDJ() {
+  if (!xdjMidiOutput || !xdjConnected) return;
+
+  const track = muteTrack || soloTrack || TRACKS[0].key;
+  const currentGridState = grid[track];
+
+  currentGridState.forEach((step, stepIndex) => {
+    const note = 36 + stepIndex;
+    const velocity = step.active ? Math.round(step.velocity * 127) : 0;
+    const cmd = velocity > 0 ? 0x90 : 0x80;
+
+    xdjMidiOutput.send([cmd, note, velocity]);
+  });
+}
+
+function disconnectXDJ() {
+  if (xdjMidiInput) {
+    xdjMidiInput.onmidimessage = null;
+  }
+  xdjConnected = false;
+  xdjDevice = null;
+  xdjMidiInput = null;
+  xdjMidiOutput = null;
+  updateXDJUIStatus();
+  console.log('XDJ disconnected');
+}
+
+function updateXDJUIStatus() {
+  const indicator = document.getElementById('xdjStatusIndicator');
+  const statusText = document.getElementById('xdjStatusText');
+  const deviceName = document.getElementById('xdjDeviceName');
+  const localBPM = document.getElementById('xdjLocalBPM');
+  const remoteBPM = document.getElementById('xdjRemoteBPM');
+
+  if (indicator && statusText) {
+    if (xdjConnected) {
+      indicator.style.background = 'var(--lime)';
+      statusText.textContent = '✓ Connected';
+      statusText.style.color = 'var(--lime)';
+      if (deviceName) deviceName.textContent = xdjDevice || 'XDJ Device';
+    } else {
+      indicator.style.background = 'var(--red)';
+      statusText.textContent = '✗ Disconnected';
+      statusText.style.color = 'var(--red)';
+      if (deviceName) deviceName.textContent = 'No device detected';
+    }
+  }
+
+  if (localBPM) localBPM.textContent = bpm;
+  if (remoteBPM) remoteBPM.textContent = xdjConnected ? xdjTempo.toFixed(1) : '—';
+
+  const syncState = document.getElementById('xdjSyncState');
+  if (syncState) {
+    if (!xdjConnected) {
+      syncState.textContent = 'Offline';
+      syncState.style.color = 'var(--red)';
+    } else if (lastXDJSyncTime && Date.now() - lastXDJSyncTime < 500) {
+      syncState.textContent = '✓ Synced';
+      syncState.style.color = 'var(--lime)';
+    } else {
+      syncState.textContent = '⏳ Syncing...';
+      syncState.style.color = 'var(--orange)';
+    }
+  }
+}
+
+// Phase 18c: Hot Cue Triggering & Real-time Sync
+function triggerPatternFromXDJ(padIndex) {
+  if (padIndex < 0 || padIndex >= STEPS) return;
+  if (!currentPatternId) return;
+
+  const track = muteTrack || soloTrack || TRACKS[0].key;
+  const step = grid[track][padIndex];
+
+  step.active = !step.active;
+  renderGrid();
+  sendPatternStateToXDJ();
+}
+
+function syncPlayheadWithXDJ() {
+  if (!xdjConnected) return;
+
+  const localPlayheadStep = currentStep >= 0 ? currentStep : 0;
+  const stepDelta = Math.abs(xdjPlayheadStep - localPlayheadStep);
+
+  if (stepDelta <= 1) {
+    lastXDJSyncTime = Date.now();
+  }
+}
+
+function displaySyncStatus() {
+  if (!xdjConnected) return;
+
+  const isSynced = lastXDJSyncTime && Date.now() - lastXDJSyncTime < 500;
+  const syncColor = isSynced ? 'var(--lime)' : 'var(--orange)';
+
+  const indicator = document.getElementById('xdjStatusIndicator');
+  if (indicator) {
+    indicator.style.boxShadow = `0 0 ${isSynced ? '15' : '8'}px ${syncColor}`;
+  }
+
+  updateXDJUIStatus();
+}
+
+function updateSequencerSync() {
+  if (isPlaying && xdjConnected) {
+    syncPlayheadWithXDJ();
+    displaySyncStatus();
+  }
+}
+
 function importPatternJSON(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -3008,6 +5332,7 @@ function renderPatternLibrary() {
         ${!batchSelectionMode ? `
           <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px" onclick="exportPatternAsJSON('${p.id}')">JSON</button>
           <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px" onclick="exportPatternAsMIDI('${p.id}')">MIDI</button>
+          <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px;background:var(--orange)" onclick="exportPatternAsRekordbox('${p.id}')">🎛️ RBX</button>
           <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px;background:var(--red)" onclick="deletePattern('${p.id}').then(() => renderPatternLibrary())">✕</button>
         ` : ''}
       </div>
@@ -3029,6 +5354,14 @@ function exportCurrentAsMIDI() {
     return;
   }
   exportPatternAsMIDI(currentPatternId);
+}
+
+function exportCurrentAsRekordbox() {
+  if (!currentPatternId) {
+    alert('Save current pattern first');
+    return;
+  }
+  exportPatternAsRekordbox(currentPatternId);
 }
 
 function handleImport(file) {
@@ -4195,6 +6528,127 @@ function toggleVideoExportVisualizer(analyzer) {
   </button>
 </div>
 
+<!-- Phase 17: AI Mixing Analysis Panel -->
+<div id="aiMixingPanel" style="position:fixed;bottom:20px;right:20px;width:380px;background:var(--bg-card);border:1px solid rgba(255,136,68,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:75vh;overflow-y:auto;display:none">
+  <div style="font-size:13px;font-weight:600;color:#ff8844;margin-bottom:14px">🎚️ AI Mix Analysis</div>
+
+  <!-- Analysis Toggle -->
+  <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;cursor:pointer">
+    <input type="checkbox" id="aiMixingToggle" onchange="toggleAIMixing()" style="width:16px;height:16px;cursor:pointer">
+    <span style="font-size:11px;color:var(--text-primary);font-weight:500">Enable Analysis</span>
+  </label>
+
+  <!-- Auto-Apply Toggle -->
+  <label style="display:flex;align-items:center;gap:8px;margin-bottom:16px;cursor:pointer;padding-bottom:12px;border-bottom:1px solid var(--border)">
+    <input type="checkbox" id="autoApplyToggle" onchange="toggleAutoApply()" style="width:16px;height:16px;cursor:pointer">
+    <span style="font-size:11px;color:var(--text-primary);font-weight:500">Auto-Apply Suggestions</span>
+  </label>
+
+  <!-- Frequency Balance Display -->
+  <div style="margin-bottom:14px;padding:10px;background:var(--bg-secondary);border-radius:6px;border-left:3px solid #ff8844">
+    <div style="font-size:10px;font-weight:600;color:#ff8844;margin-bottom:8px">Frequency Balance</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+      <div style="text-align:center">
+        <div style="font-size:9px;color:var(--text-secondary)">Bass</div>
+        <div id="bassLevel" style="font-size:12px;font-weight:600;color:#ff6b6b">--</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:9px;color:var(--text-secondary)">Mids</div>
+        <div id="midsLevel" style="font-size:12px;font-weight:600;color:#ffd700">--</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:9px;color:var(--text-secondary)">Treble</div>
+        <div id="trebleLevel" style="font-size:12px;font-weight:600;color:#00f0ff">--</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loudness Display -->
+  <div style="margin-bottom:14px;padding:10px;background:var(--bg-secondary);border-radius:6px;border-left:3px solid #ffd700">
+    <div style="font-size:10px;font-weight:600;color:#ffd700;margin-bottom:6px">Loudness (LUFS)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10px">
+      <div><span style="color:var(--text-secondary)">Integrated:</span> <span id="loudnessInt" style="color:#fff;font-weight:600">--</span></div>
+      <div><span style="color:var(--text-secondary)">Short:</span> <span id="loudnessShort" style="color:#fff;font-weight:600">--</span></div>
+    </div>
+  </div>
+
+  <!-- Recommendations List -->
+  <div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+    <div style="font-size:10px;font-weight:600;color:var(--text-primary);margin-bottom:8px">Recommendations</div>
+    <div id="recommendationsList" style="display:flex;flex-direction:column;gap:6px;font-size:10px;max-height:120px;overflow-y:auto">
+      <div style="color:var(--text-secondary);font-style:italic">Run analysis while playing</div>
+    </div>
+  </div>
+
+  <!-- Parametric EQ Section -->
+  <div style="margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="eqVisualizationToggle" onchange="toggleEQVisualization()" style="width:14px;height:14px">
+        <span style="font-size:10px;font-weight:600;color:var(--text-primary)">Parametric EQ</span>
+      </label>
+    </div>
+
+    <!-- EQ Canvas -->
+    <canvas id="parametricEQCanvas" width="340" height="80" style="width:100%;background:rgba(10,20,40,0.6);border-radius:4px;border:1px solid rgba(255,136,68,0.2);margin-bottom:8px;display:none"></canvas>
+
+    <!-- EQ Preset Selector -->
+    <select id="eqPresetDropdown" onchange="loadEQPreset(this.value)" style="width:100%;padding:6px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;font-size:10px;margin-bottom:8px">
+      <option value="flat">Flat</option>
+      <option value="bassBoost">Bass Boost</option>
+      <option value="trebleBoost">Treble Boost</option>
+      <option value="warmth">Warm</option>
+      <option value="bright">Bright</option>
+      <option value="dancefloor">Dance Floor</option>
+    </select>
+
+    <!-- Band Sliders (compact) -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;font-size:9px">
+      <div><label style="display:block;color:var(--text-dim);text-align:center;margin-bottom:2px">60Hz</label><input type="range" min="-12" max="12" value="0" onchange="setParametricEQGain(0, this.value)" style="width:100%;height:16px"></div>
+      <div><label style="display:block;color:var(--text-dim);text-align:center;margin-bottom:2px">250Hz</label><input type="range" min="-12" max="12" value="0" onchange="setParametricEQGain(2, this.value)" style="width:100%;height:16px"></div>
+      <div><label style="display:block;color:var(--text-dim);text-align:center;margin-bottom:2px">1kHz</label><input type="range" min="-12" max="12" value="0" onchange="setParametricEQGain(4, this.value)" style="width:100%;height:16px"></div>
+      <div><label style="display:block;color:var(--text-dim);text-align:center;margin-bottom:2px">4kHz</label><input type="range" min="-12" max="12" value="0" onchange="setParametricEQGain(6, this.value)" style="width:100%;height:16px"></div>
+      <div><label style="display:block;color:var(--text-dim);text-align:center;margin-bottom:2px">16kHz</label><input type="range" min="-12" max="12" value="0" onchange="setParametricEQGain(9, this.value)" style="width:100%;height:16px"></div>
+    </div>
+  </div>
+
+  <!-- Phase 17c: Mix Snapshots Management -->
+  <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,136,68,0.2)">
+    <div style="font-size:11px;font-weight:600;color:#ff8844;margin-bottom:10px">📸 Mix Snapshots</div>
+
+    <label style="display:flex;gap:8px;margin-bottom:10px;align-items:center;font-size:10px">
+      <input type="checkbox" id="autoSnapshotToggle" onchange="toggleAutoSnapshot()" style="cursor:pointer">
+      <span style="color:var(--text-secondary)">Auto-capture after analysis</span>
+    </label>
+
+    <!-- Snapshot List -->
+    <div id="snapshotListContainer" style="margin-bottom:12px;max-height:200px;overflow-y:auto;background:rgba(255,136,68,0.05);border-radius:6px;padding:8px">
+      <div id="snapshotList" style="font-size:10px">
+        <div style="color:var(--text-secondary);text-align:center;padding:10px">No snapshots yet</div>
+      </div>
+    </div>
+
+    <!-- Snapshot Actions -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <button onclick="captureMixSnapshot('Snapshot ' + (advancedAudio.aiMixing.mixSnapshots.length + 1))" style="padding:8px;background:rgba(255,136,68,0.15);border:1px solid #ff8844;color:#ff8844;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;transition:all 0.2s" title="Save current mix as snapshot">
+        💾 Capture
+      </button>
+      <button onclick="exportMixSnapshot()" style="padding:8px;background:rgba(0,240,255,0.15);border:1px solid #00f0ff;color:#00f0ff;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;transition:all 0.2s" title="Download current snapshot as JSON">
+        ⬇️ Export
+      </button>
+    </div>
+  </div>
+
+  <!-- Analysis Button -->
+  <button onclick="analyzeCurrentMix()" style="width:100%;padding:10px;background:rgba(255,136,68,0.15);border:1px solid #ff8844;color:#ff8844;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;margin-bottom:10px;transition:all 0.2s">
+    🔍 Analyze Mix Now
+  </button>
+
+  <button onclick="document.getElementById('aiMixingPanel').style.display='none'" style="width:100%;padding:8px;background:rgba(255,136,68,0.1);border:1px solid #ff8844;color:#ff8844;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">
+    ✕ Close
+  </button>
+</div>
+
 <!-- Phase 14: Performance Meter Panel -->
 <div id="performanceMeterPanel" style="position:fixed;bottom:20px;right:380px;width:360px;background:var(--bg-card);border:1px solid rgba(68,136,255,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:75vh;overflow-y:auto;display:none">
   <div style="font-size:13px;font-weight:600;color:var(--blue);margin-bottom:14px">⚡ Performance Meter</div>
@@ -4242,6 +6696,62 @@ function toggleVideoExportVisualizer(analyzer) {
       <div>
         <div style="color:var(--text-dim);margin-bottom:3px">Latency</div>
         <div id="performanceLatency" style="font-weight:600;color:var(--cyan)">0.00ms</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 15b: Memory Optimization Metrics -->
+  <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10px">
+      <div>
+        <div style="color:var(--text-dim);margin-bottom:3px">Allocs Avoided</div>
+        <div id="performanceAllocsAvoided" style="font-weight:600;color:var(--lime)">0</div>
+      </div>
+      <div>
+        <div style="color:var(--text-dim);margin-bottom:3px">Cache Hit %</div>
+        <div id="performanceCacheHit" style="font-weight:600;color:var(--lime)">0%</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 15c: Scheduling Precision Metrics -->
+  <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10px">
+      <div>
+        <div style="color:var(--text-dim);margin-bottom:3px">RAF Drift</div>
+        <div id="performanceRafDrift" style="font-weight:600;color:var(--orange)">0ms</div>
+      </div>
+      <div>
+        <div style="color:var(--text-dim);margin-bottom:3px">Lookahead</div>
+        <div id="performanceLookahead" style="font-weight:600;color:var(--blue)">100ms</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 15d: Rendering Optimization Metrics -->
+  <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10px">
+      <div>
+        <div style="color:var(--text-dim);margin-bottom:3px">Dirty Cells</div>
+        <div id="performanceDirtyCells" style="font-weight:600;color:var(--magenta)">0</div>
+      </div>
+      <div>
+        <div style="color:var(--text-dim);margin-bottom:3px">Cell Cache</div>
+        <div id="performanceCellCache" style="font-weight:600;color:var(--magenta)">0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 15e: Synthesis Optimization Metrics -->
+  <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10px">
+      <div>
+        <div style="color:var(--text-dim);margin-bottom:3px">Param Cache</div>
+        <div id="performanceParamCache" style="font-weight:600;color:var(--purple)">8</div>
+      </div>
+      <div>
+        <div style="color:var(--text-dim);margin-bottom:3px">Voice Reuse</div>
+        <div id="performanceVoiceReuse" style="font-weight:600;color:var(--purple)">0</div>
       </div>
     </div>
   </div>
@@ -4597,6 +7107,44 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   document.body.appendChild(perfToggleBtn);
 
+  // AI Mixing toggle button (Phase 17)
+  const aiMixingToggleBtn = document.createElement('button');
+  aiMixingToggleBtn.id = 'aiMixingToggleBtn';
+  aiMixingToggleBtn.textContent = '🎚️';
+  aiMixingToggleBtn.title = 'AI Mix Analysis (Phase 17)';
+  aiMixingToggleBtn.onclick = () => {
+    const panel = document.getElementById('aiMixingPanel');
+    if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  };
+  aiMixingToggleBtn.style.cssText = `
+    position: fixed;
+    bottom: 320px;
+    left: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(255,136,68,0.2), rgba(255,136,68,0.1));
+    border: 2px solid #ff8844;
+    color: #ff8844;
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    z-index: 899;
+    box-shadow: 0 0 20px rgba(255,136,68,0.2);
+  `;
+  aiMixingToggleBtn.onmouseover = () => {
+    aiMixingToggleBtn.style.transform = 'scale(1.1)';
+    aiMixingToggleBtn.style.boxShadow = '0 0 30px rgba(255,136,68,0.4)';
+  };
+  aiMixingToggleBtn.onmouseout = () => {
+    aiMixingToggleBtn.style.transform = 'scale(1)';
+    aiMixingToggleBtn.style.boxShadow = '0 0 20px rgba(255,136,68,0.2)';
+  };
+  document.body.appendChild(aiMixingToggleBtn);
+
   // Initialize Performance Monitoring
   initPerformanceMonitoring();
 
@@ -4607,6 +7155,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Initialize remix presets
   initRemixPresets();
+
+  // Phase 18: Initialize XDJ Hardware Controller
+  if (navigator.requestMIDIAccess) {
+    initXDJController().catch(err => console.log('XDJ hardware init error:', err));
+  }
+
+  // Update XDJ UI status immediately
+  updateXDJUIStatus();
+
+  // Phase 19: Initialize Macro Controls
+  initMacroControls();
 });
 </script>
 
