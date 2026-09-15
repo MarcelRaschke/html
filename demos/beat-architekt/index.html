@@ -768,6 +768,7 @@ body::before {
         <div style="display:flex;gap:8px;margin-bottom:12px">
           <button class="ai-pat-btn" onclick="exportCurrentAsJSON()">↓ Export JSON</button>
           <button class="ai-pat-btn" onclick="exportCurrentAsMIDI()">🎼 Export MIDI</button>
+          <button class="ai-pat-btn" onclick="exportCurrentAsRekordbox()">🎛️ Export RBX</button>
           <button class="ai-pat-btn" onclick="document.getElementById('importFile').click()">↑ Import</button>
           <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImport(this.files[0])">
         </div>
@@ -4359,6 +4360,75 @@ function generateMIDIFile(trackData, bpm, ticksPerBeat) {
   return bytes;
 }
 
+function generateRekordboxXML(pattern) {
+  const timestamp = new Date(pattern.created || Date.now()).toISOString();
+  const gain = Math.min(6, Math.max(-40, (pattern.masterGain || 0) * 6));
+
+  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+  xml += '<PRODUCT Name="Beat Architekt" Version="1.0">\n';
+  xml += '  <DJ_PLAYLISTS>\n';
+  xml += `    <PLAYLIST Name="${escapeXml(pattern.name || 'Pattern')}" Type="M" KeyType="0" Entries="${pattern.grid[0].length}">\n`;
+
+  TRACKS.forEach((track, idx) => {
+    const trackName = track.name || track.key;
+    const trackGain = gain + (idx * 0.5);
+
+    xml += `      <ENTRY>\n`;
+    xml += `        <PRIMARYKEY Type="TRACK">\n`;
+    xml += `          <TRACK Name="${escapeXml(trackName)}" Channel="${idx + 1}" Database="0" TrackID="${idx}">\n`;
+    xml += `            <LOCATION Type="DISK">\n`;
+    xml += `              <FILE>${escapeXml(pattern.name || 'pattern')}_${track.key}.wav</FILE>\n`;
+    xml += `            </LOCATION>\n`;
+    xml += `            <DURATION>${pattern.grid[track.key].length * 0.5}</DURATION>\n`;
+    xml += `            <TEMPO BPM="${pattern.bpm}" Pitch="0.0"/>\n`;
+    xml += `            <GAIN Value="${trackGain}"/>\n`;
+
+    let beatCount = 0;
+    pattern.grid[track.key].forEach((step, stepIdx) => {
+      if (step.active) {
+        const beatPos = stepIdx * 0.5;
+        const velocity = Math.round(step.velocity * 100);
+        xml += `            <CUE Name="Hit${beatCount++}" Type="0" Start="${beatPos}" End="${beatPos + 0.5}" Hotcue="${stepIdx % 16}"/>\n`;
+      }
+    });
+
+    xml += `          </TRACK>\n`;
+    xml += `        </PRIMARYKEY>\n`;
+    xml += `      </ENTRY>\n`;
+  });
+
+  xml += `    </PLAYLIST>\n`;
+  xml += '  </DJ_PLAYLISTS>\n';
+  xml += '</PRODUCT>\n';
+
+  return xml;
+}
+
+function escapeXml(str) {
+  return str.replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&apos;');
+}
+
+function exportPatternAsRekordbox(id) {
+  const pattern = patternLibrary.find(p => p.id === id);
+  if (!pattern) {
+    alert('Pattern not found');
+    return;
+  }
+
+  const xmlStr = generateRekordboxXML(pattern);
+  const blob = new Blob([xmlStr], { type: 'application/xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (pattern.name || 'pattern') + '_' + pattern.id.split('_')[0] + '.rbx';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function importPatternJSON(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -4504,6 +4574,7 @@ function renderPatternLibrary() {
         ${!batchSelectionMode ? `
           <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px" onclick="exportPatternAsJSON('${p.id}')">JSON</button>
           <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px" onclick="exportPatternAsMIDI('${p.id}')">MIDI</button>
+          <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px;background:var(--orange)" onclick="exportPatternAsRekordbox('${p.id}')">🎛️ RBX</button>
           <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px;background:var(--red)" onclick="deletePattern('${p.id}').then(() => renderPatternLibrary())">✕</button>
         ` : ''}
       </div>
@@ -4525,6 +4596,14 @@ function exportCurrentAsMIDI() {
     return;
   }
   exportPatternAsMIDI(currentPatternId);
+}
+
+function exportCurrentAsRekordbox() {
+  if (!currentPatternId) {
+    alert('Save current pattern first');
+    return;
+  }
+  exportPatternAsRekordbox(currentPatternId);
 }
 
 function handleImport(file) {
