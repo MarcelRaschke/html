@@ -1113,6 +1113,23 @@ let remixPresets = [];
 let batchSelectionMode = false;
 let batchSelectedPatterns = new Set();
 
+// Phase 11: Video Export
+let videoExportCanvas = null;
+let videoExportCtx = null;
+let analyser = null;
+let dataArray = null;
+let isRecording = false;
+let mediaRecorder = null;
+let recordedChunks = [];
+let videoExportAnalyzer = {
+  waveform: { enabled: true, smoothing: 0.8 },
+  spectrum: { enabled: true, barCount: 32 },
+  beatIndicator: { enabled: true },
+  pattern: { enabled: true }
+};
+let lastBeatTime = 0;
+let beatThreshold = 0.7;
+
 function setStepLength(len) {
   const newLen = parseInt(len);
   if (newLen === STEPS) return;
@@ -3373,6 +3390,219 @@ function initRemixPresets() {
   }
   populateRemixPresets();
 }
+
+// === Phase 11: Video Export Functions ===
+
+function initVideoExportCanvas() {
+  if (videoExportCanvas) return;
+
+  videoExportCanvas = document.createElement('canvas');
+  videoExportCanvas.width = 1280;
+  videoExportCanvas.height = 720;
+  videoExportCtx = videoExportCanvas.getContext('2d');
+
+  if (!analyser && audioCtx) {
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = videoExportAnalyzer.waveform.smoothing;
+
+    const splitter = audioCtx.createChannelSplitter();
+    masterGain.connect(splitter);
+    splitter.connect(analyser, 0);
+
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
+  }
+}
+
+function drawWaveform() {
+  if (!analyser || !videoExportCtx) return;
+
+  const bufferLength = analyser.frequencyBinCount;
+  const waveData = new Uint8Array(bufferLength);
+  analyser.getByteFrequencyData(waveData);
+
+  videoExportCtx.fillStyle = 'rgba(0, 20, 40, 0.3)';
+  videoExportCtx.fillRect(0, 0, videoExportCanvas.width, videoExportCanvas.height);
+
+  videoExportCtx.lineWidth = 2;
+  videoExportCtx.strokeStyle = '#00f0ff';
+  videoExportCtx.beginPath();
+
+  const sliceWidth = videoExportCanvas.width / bufferLength;
+  let x = 0;
+
+  for (let i = 0; i < bufferLength; i++) {
+    const v = waveData[i] / 128.0;
+    const y = (v * videoExportCanvas.height) / 2;
+
+    if (i === 0) {
+      videoExportCtx.moveTo(x, videoExportCanvas.height - y);
+    } else {
+      videoExportCtx.lineTo(x, videoExportCanvas.height - y);
+    }
+
+    x += sliceWidth;
+  }
+
+  videoExportCtx.stroke();
+}
+
+function drawSpectrum() {
+  if (!analyser || !videoExportCtx) return;
+
+  const bufferLength = analyser.frequencyBinCount;
+  const freqData = new Uint8Array(bufferLength);
+  analyser.getByteFrequencyData(freqData);
+
+  const barWidth = videoExportCanvas.width / videoExportAnalyzer.spectrum.barCount;
+  const barCount = videoExportAnalyzer.spectrum.barCount;
+  const samplesPerBar = Math.floor(bufferLength / barCount);
+
+  for (let i = 0; i < barCount; i++) {
+    let sum = 0;
+    for (let j = 0; j < samplesPerBar; j++) {
+      sum += freqData[i * samplesPerBar + j];
+    }
+    const avg = sum / samplesPerBar;
+    const barHeight = (avg / 255) * (videoExportCanvas.height * 0.4);
+    const x = i * barWidth;
+    const y = videoExportCanvas.height - barHeight;
+
+    const hue = (i / barCount) * 360;
+    videoExportCtx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+    videoExportCtx.fillRect(x, y, barWidth - 2, barHeight);
+  }
+}
+
+function drawBeatIndicator() {
+  if (!analyser || !videoExportCtx) return;
+
+  const bufferLength = analyser.frequencyBinCount;
+  const freqData = new Uint8Array(bufferLength);
+  analyser.getByteFrequencyData(freqData);
+
+  let bassSum = 0;
+  for (let i = 0; i < Math.min(10, bufferLength); i++) {
+    bassSum += freqData[i];
+  }
+  const bassLevel = (bassSum / 10) / 255;
+
+  const beatRadius = 60 + (bassLevel > beatThreshold ? 40 : 0);
+  const beatColor = bassLevel > beatThreshold ? '#ff00aa' : 'rgba(0, 240, 255, 0.3)';
+
+  videoExportCtx.fillStyle = beatColor;
+  videoExportCtx.beginPath();
+  videoExportCtx.arc(videoExportCanvas.width - 100, 100, beatRadius, 0, Math.PI * 2);
+  videoExportCtx.fill();
+
+  if (bassLevel > beatThreshold) {
+    lastBeatTime = audioCtx.currentTime;
+  }
+}
+
+function drawPatternOverlay() {
+  if (!videoExportCtx) return;
+
+  videoExportCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  videoExportCtx.fillRect(20, 20, videoExportCanvas.width - 40, 60);
+
+  videoExportCtx.fillStyle = '#aaff00';
+  videoExportCtx.font = 'bold 24px monospace';
+  videoExportCtx.textBaseline = 'top';
+  videoExportCtx.fillText(`BPM: ${bpm} | Swing: ${swingAmount}%`, 40, 35);
+}
+
+function updateVideoCanvas() {
+  if (!videoExportCtx) return;
+
+  videoExportCtx.fillStyle = 'rgba(6, 8, 13, 0.8)';
+  videoExportCtx.fillRect(0, 0, videoExportCanvas.width, videoExportCanvas.height);
+
+  if (videoExportAnalyzer.waveform.enabled) drawWaveform();
+  if (videoExportAnalyzer.spectrum.enabled) drawSpectrum();
+  if (videoExportAnalyzer.beatIndicator.enabled) drawBeatIndicator();
+  if (videoExportAnalyzer.pattern.enabled) drawPatternOverlay();
+}
+
+function startVideoExport() {
+  if (!audioCtx) {
+    alert('Start playback first');
+    return;
+  }
+
+  initVideoExportCanvas();
+
+  const canvas = videoExportCanvas;
+  const stream = canvas.captureStream(30);
+
+  const audioDestination = audioCtx.createMediaStreamAudioDestination();
+  masterGain.connect(audioDestination);
+
+  stream.addTrack(audioDestination.stream.getAudioTracks()[0]);
+
+  mediaRecorder = new MediaRecorder(stream, {
+    mimeType: 'video/webm;codecs=vp9,opus',
+    videoBitsPerSecond: 5000000,
+    audioBitsPerSecond: 192000
+  });
+
+  recordedChunks = [];
+  mediaRecorder.ondataavailable = (e) => recordedChunks.push(e.data);
+  mediaRecorder.onstop = completeVideoExport;
+
+  mediaRecorder.start();
+  isRecording = true;
+
+  updateVideoExportStatus('Recording video...', 'recording');
+  document.getElementById('videoExportStartBtn').disabled = true;
+  document.getElementById('videoExportStopBtn').disabled = false;
+
+  const renderFrame = () => {
+    if (!isRecording) return;
+    updateVideoCanvas();
+    requestAnimationFrame(renderFrame);
+  };
+  renderFrame();
+}
+
+function stopVideoExport() {
+  if (!mediaRecorder || !isRecording) return;
+
+  isRecording = false;
+  mediaRecorder.stop();
+
+  updateVideoExportStatus('Processing video...', 'processing');
+  document.getElementById('videoExportStartBtn').disabled = false;
+  document.getElementById('videoExportStopBtn').disabled = true;
+}
+
+function completeVideoExport() {
+  const blob = new Blob(recordedChunks, { type: 'video/webm' });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `beat-architekt-${Date.now()}.webm`;
+  link.click();
+
+  URL.revokeObjectURL(url);
+  updateVideoExportStatus('Export complete!', 'success');
+}
+
+function updateVideoExportStatus(message, state) {
+  const el = document.getElementById('videoExportStatus');
+  if (el) {
+    el.textContent = message;
+    el.style.display = 'block';
+    el.style.color = state === 'success' ? 'var(--lime)' : state === 'recording' ? 'var(--cyan)' : 'var(--orange)';
+  }
+}
+
+function toggleVideoExportVisualizer(analyzer) {
+  if (videoExportAnalyzer[analyzer]) {
+    videoExportAnalyzer[analyzer].enabled = !videoExportAnalyzer[analyzer].enabled;
+  }
+}
 </script>
 
 <!-- Cloud Sync Settings Modal -->
@@ -3507,6 +3737,86 @@ function initRemixPresets() {
   </div>
 </div>
 
+<!-- Phase 11: Video Export Panel -->
+<div id="videoExportPanel" style="position:fixed;bottom:20px;left:20px;width:380px;background:var(--bg-card);border:1px solid rgba(255,136,0,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:70vh;overflow-y:auto;display:none">
+  <div style="font-size:13px;font-weight:600;color:var(--orange);margin-bottom:12px">🎬 Video Export</div>
+
+  <!-- Status -->
+  <div id="videoExportStatus" style="display:none;padding:8px;background:rgba(255,136,0,0.08);border-left:3px solid var(--orange);border-radius:4px;font-size:10px;margin-bottom:12px;color:var(--orange)"></div>
+
+  <!-- Recording Controls -->
+  <div style="margin-bottom:12px">
+    <label style="display:block;font-size:10px;color:var(--text-dim);margin-bottom:8px">Recording</label>
+    <div style="display:flex;gap:8px">
+      <button id="videoExportStartBtn" onclick="startVideoExport()" style="flex:1;padding:10px;background:rgba(255,136,0,0.15);border:1px solid var(--orange);color:var(--orange);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;transition:all 0.2s">
+        ⏺️ Start
+      </button>
+      <button id="videoExportStopBtn" onclick="stopVideoExport()" disabled style="flex:1;padding:10px;background:rgba(255,51,85,0.15);border:1px solid var(--red);color:var(--red);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;transition:all 0.2s;opacity:0.5">
+        ⏹️ Stop
+      </button>
+    </div>
+  </div>
+
+  <!-- Visualizer Options -->
+  <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px">
+    <div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">📊 Visualizers</div>
+    <label style="display:flex;gap:8px;margin-bottom:6px;cursor:pointer;user-select:none">
+      <input type="checkbox" checked onchange="toggleVideoExportVisualizer('waveform')">
+      <span style="font-size:10px;color:var(--text-secondary)">Waveform</span>
+    </label>
+    <label style="display:flex;gap:8px;margin-bottom:6px;cursor:pointer;user-select:none">
+      <input type="checkbox" checked onchange="toggleVideoExportVisualizer('spectrum')">
+      <span style="font-size:10px;color:var(--text-secondary)">Spectrum</span>
+    </label>
+    <label style="display:flex;gap:8px;margin-bottom:6px;cursor:pointer;user-select:none">
+      <input type="checkbox" checked onchange="toggleVideoExportVisualizer('beatIndicator')">
+      <span style="font-size:10px;color:var(--text-secondary)">Beat Indicator</span>
+    </label>
+    <label style="display:flex;gap:8px;cursor:pointer;user-select:none">
+      <input type="checkbox" checked onchange="toggleVideoExportVisualizer('pattern')">
+      <span style="font-size:10px;color:var(--text-secondary)">Pattern Info</span>
+    </label>
+  </div>
+
+  <!-- Export Settings -->
+  <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px">
+    <div style="font-size:10px;color:var(--text-dim);margin-bottom:6px">🎥 Format: WebM VP9</div>
+    <div style="font-size:10px;color:var(--text-dim)">📐 Resolution: 1280×720</div>
+    <div style="font-size:10px;color:var(--text-dim)">⚡ Frame Rate: 30fps</div>
+  </div>
+
+  <button onclick="document.getElementById('videoExportPanel').style.display='none'" style="width:100%;margin-top:12px;padding:8px;background:rgba(100,120,140,0.1);border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">
+    ✕ Close
+  </button>
+</div>
+
+<!-- Toggle Video Export Panel Button -->
+<style>
+#videoExportToggleBtn {
+  position: fixed;
+  bottom: 80px;
+  left: 20px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(255,136,0,0.2), rgba(255,51,85,0.2));
+  border: 2px solid var(--orange);
+  color: var(--orange);
+  font-size: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+  z-index: 899;
+  box-shadow: 0 0 20px rgba(255,136,0,0.2);
+}
+#videoExportToggleBtn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 30px rgba(255,136,0,0.4);
+}
+</style>
+
 <!-- Toggle Remix Panel Button (add to Beat Architekt controls) -->
 <style>
 #remixToggleBtn {
@@ -3535,17 +3845,32 @@ function initRemixPresets() {
 </style>
 
 <script>
-// Initialize remix toggle button
+// Initialize toggle buttons
 document.addEventListener('DOMContentLoaded', () => {
-  const toggleBtn = document.createElement('button');
-  toggleBtn.id = 'remixToggleBtn';
-  toggleBtn.textContent = '🎚️';
-  toggleBtn.title = 'AI Remix Generator (Phase 9)';
-  toggleBtn.onclick = () => {
+  // Remix toggle button
+  const remixToggleBtn = document.createElement('button');
+  remixToggleBtn.id = 'remixToggleBtn';
+  remixToggleBtn.textContent = '🎚️';
+  remixToggleBtn.title = 'AI Remix Generator (Phase 9)';
+  remixToggleBtn.onclick = () => {
     const panel = document.getElementById('remixPanel');
     panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
   };
-  document.body.appendChild(toggleBtn);
+  document.body.appendChild(remixToggleBtn);
+
+  // Video Export toggle button (Phase 11)
+  const videoToggleBtn = document.createElement('button');
+  videoToggleBtn.id = 'videoExportToggleBtn';
+  videoToggleBtn.textContent = '🎬';
+  videoToggleBtn.title = 'Video Export (Phase 11)';
+  videoToggleBtn.onclick = () => {
+    const panel = document.getElementById('videoExportPanel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  };
+  document.body.appendChild(videoToggleBtn);
+
+  // Initialize remix presets
+  initRemixPresets();
 });
 </script>
 
