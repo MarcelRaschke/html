@@ -1910,6 +1910,9 @@ function startSequencer() {
       stepCounter++;
     }
 
+    // Phase 18c: Update XDJ sync status on each sequencer tick
+    updateSequencerSync();
+
     sequencerAnimId = requestAnimationFrame(scheduleSteps);
   }
 
@@ -4591,6 +4594,65 @@ function updateXDJUIStatus() {
 
   if (localBPM) localBPM.textContent = bpm;
   if (remoteBPM) remoteBPM.textContent = xdjConnected ? xdjTempo.toFixed(1) : '—';
+
+  const syncState = document.getElementById('xdjSyncState');
+  if (syncState) {
+    if (!xdjConnected) {
+      syncState.textContent = 'Offline';
+      syncState.style.color = 'var(--red)';
+    } else if (lastXDJSyncTime && Date.now() - lastXDJSyncTime < 500) {
+      syncState.textContent = '✓ Synced';
+      syncState.style.color = 'var(--lime)';
+    } else {
+      syncState.textContent = '⏳ Syncing...';
+      syncState.style.color = 'var(--orange)';
+    }
+  }
+}
+
+// Phase 18c: Hot Cue Triggering & Real-time Sync
+function triggerPatternFromXDJ(padIndex) {
+  if (padIndex < 0 || padIndex >= STEPS) return;
+  if (!currentPatternId) return;
+
+  const track = muteTrack || soloTrack || TRACKS[0].key;
+  const step = grid[track][padIndex];
+
+  step.active = !step.active;
+  renderGrid();
+  sendPatternStateToXDJ();
+}
+
+function syncPlayheadWithXDJ() {
+  if (!xdjConnected) return;
+
+  const localPlayheadStep = currentStep >= 0 ? currentStep : 0;
+  const stepDelta = Math.abs(xdjPlayheadStep - localPlayheadStep);
+
+  if (stepDelta <= 1) {
+    lastXDJSyncTime = Date.now();
+  }
+}
+
+function displaySyncStatus() {
+  if (!xdjConnected) return;
+
+  const isSynced = lastXDJSyncTime && Date.now() - lastXDJSyncTime < 500;
+  const syncColor = isSynced ? 'var(--lime)' : 'var(--orange)';
+
+  const indicator = document.getElementById('xdjStatusIndicator');
+  if (indicator) {
+    indicator.style.boxShadow = `0 0 ${isSynced ? '15' : '8'}px ${syncColor}`;
+  }
+
+  updateXDJUIStatus();
+}
+
+function updateSequencerSync() {
+  if (isPlaying && xdjConnected) {
+    syncPlayheadWithXDJ();
+    displaySyncStatus();
+  }
 }
 
 function importPatternJSON(file) {
