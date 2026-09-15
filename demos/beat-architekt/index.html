@@ -1187,6 +1187,70 @@ let performanceState = {
   criticalThreshold: 95  // CPU % that triggers critical warning
 };
 
+// Phase 15a: Voice Pool Architecture (Hybrid Approach)
+// Note: Web Audio API limitation - oscillators/bufferSources are one-time-use
+// So we pool reusable infrastructure nodes and minimize object allocations
+let voicePool = {
+  // Pre-allocated reusable nodes (pooled)
+  gainNodes: [],
+  filterNodes: [],
+  pannerNodes: [],
+  noiseGainNodes: [],
+  noiseFilterNodes: [],
+
+  // Tracking
+  activeVoices: 0,
+  maxVoices: 16,
+  voiceHistory: [], // Track voice allocation times
+
+  // Metrics
+  nodeCreationsAvoided: 0,
+  totalNotesTriggered: 0
+};
+
+let noiseBuffer = null;
+
+function initVoicePool() {
+  if (!audioCtx) return;
+  if (voicePool.gainNodes.length > 0) return; // Already initialized
+
+  // Pre-allocate reusable nodes (these can be reset and reused)
+  for (let i = 0; i < voicePool.maxVoices; i++) {
+    voicePool.gainNodes.push(audioCtx.createGain());
+    voicePool.filterNodes.push(audioCtx.createBiquadFilter());
+    voicePool.pannerNodes.push(audioCtx.createStereoPanner());
+    voicePool.noiseGainNodes.push(audioCtx.createGain());
+    voicePool.noiseFilterNodes.push(audioCtx.createBiquadFilter());
+  }
+
+  // Connect panner nodes to master (panning is decoupled from gain envelope)
+  voicePool.pannerNodes.forEach(panner => {
+    panner.connect(globalMasterGain || audioCtx.destination);
+  });
+}
+
+function getPooledNode(pool) {
+  // Round-robin allocation from pre-allocated pool
+  if (!pool || pool.length === 0) return null;
+  const idx = voicePool.activeVoices % pool.length;
+  return pool[idx];
+}
+
+function trackVoiceAllocation() {
+  voicePool.activeVoices++;
+  voicePool.totalNotesTriggered++;
+  voicePool.nodeCreationsAvoided += 5; // ~5 nodes per voice creation avoided
+
+  // Keep rolling history of last 100 voice allocations
+  voicePool.voiceHistory.push(audioCtx.currentTime);
+  if (voicePool.voiceHistory.length > 100) {
+    voicePool.voiceHistory.shift();
+  }
+
+  // Update Performance Meter voice count
+  performanceMetrics.voiceCount = Math.min(voicePool.activeVoices, voicePool.maxVoices);
+}
+
 function setStepLength(len) {
   const newLen = parseInt(len);
   if (newLen === STEPS) return;
@@ -1316,6 +1380,8 @@ function togglePlay() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     initEffectsChain();
+    if (!noiseBuffer) noiseBuffer = createNoiseBuffer();
+    initVoicePool();
     initBeatViz();
   }
   isPlaying = !isPlaying;
@@ -1939,13 +2005,9 @@ function createNoiseBuffer() {
 }
 
 function playSound(track, velocity = 1.0, pan = 0) {
-  if (!audioCtx) return;
+  if (!audioCtx || voicePool.gainNodes.length === 0) return;
 
-  // Initialize noise buffer once
-  if (!noiseBuffer) {
-    noiseBuffer = createNoiseBuffer();
-  }
-
+  // Track parameters for all instruments
   const params = {
     kick:   { type:'sine',     freq:60,   decay:0.15, vol:0.8,  filter:true, fCutoff:8000, fEnd:200 },
     snare:  { type:'triangle', freq:200,  decay:0.1,  vol:0.5,  noise:true, noiseVol:0.6 },
@@ -1959,27 +2021,30 @@ function playSound(track, velocity = 1.0, pan = 0) {
   const p = params[track] || params.kick;
   const now = audioCtx.currentTime;
   const scaledVol = p.vol * Math.max(0.1, velocity);
+  const stopTime = now + p.decay + 0.01;
 
-  const masterGain = audioCtx.createGain();
-  masterGain.gain.setValueAtTime(scaledVol, now);
-  masterGain.gain.exponentialRampToValueAtTime(0.001, now + p.decay);
+  // Get pooled nodes (reused, not allocated)
+  const gain = getPooledNode(voicePool.gainNodes);
+  const filter = getPooledNode(voicePool.filterNodes);
+  const panner = getPooledNode(voicePool.pannerNodes);
+  const noiseGain = getPooledNode(voicePool.noiseGainNodes);
+  const noiseFilter = getPooledNode(voicePool.noiseFilterNodes);
 
-  let output = masterGain;
-  if (pan !== 0) {
-    const panner = audioCtx.createStereoPanner();
-    panner.pan.setValueAtTime(pan, now);
-    masterGain.connect(panner);
-    output = panner;
-  }
+  // Reset pooled nodes to default state for reuse
+  gain.gain.cancelScheduledValues(now);
+  filter.frequency.cancelScheduledValues(now);
+  panner.pan.cancelScheduledValues(now);
+  noiseGain.gain.cancelScheduledValues(now);
+  noiseFilter.frequency.cancelScheduledValues(now);
 
-  // Route through global master (effects chain input) or direct if not initialized
-  if (globalMasterGain) {
-    output.connect(globalMasterGain);
-  } else {
-    output.connect(audioCtx.destination);
-  }
+  // Configure gain
+  gain.gain.setValueAtTime(scaledVol, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, stopTime);
 
-  // Main oscillator
+  // Configure panner
+  panner.pan.setValueAtTime(pan, now);
+
+  // Create new oscillator (Web Audio limitation - can only start once)
   const osc = audioCtx.createOscillator();
   osc.type = p.type;
   osc.frequency.setValueAtTime(p.freq, now);
@@ -1990,31 +2055,28 @@ function playSound(track, velocity = 1.0, pan = 0) {
     osc.frequency.exponentialRampToValueAtTime(300, now + p.decay);
   }
 
-  // Filter for kicks and percs
+  // Connect osc → filter → gain → panner
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(panner);
+
+  // Configure filter for kicks and percs
   if (p.filter) {
-    const filter = audioCtx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.setValueAtTime(p.fCutoff, now);
     filter.frequency.linearRampToValueAtTime(p.fEnd, now + p.decay);
-    osc.connect(filter);
-    filter.connect(masterGain);
-  } else {
-    osc.connect(masterGain);
   }
 
-  // Noise layer for snare, hihat, shaker
+  // Create and configure noise layer (if needed)
   if (p.noise) {
-    const noiseGain = audioCtx.createGain();
-    noiseGain.gain.setValueAtTime(p.noiseVol * Math.max(0.1, velocity), now);
-    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + p.decay);
-
     const noiseSource = audioCtx.createBufferSource();
     noiseSource.buffer = noiseBuffer;
     noiseSource.loop = true;
 
-    // Add bandpass filter for hi-hat and shaker
+    noiseGain.gain.setValueAtTime(p.noiseVol * Math.max(0.1, velocity), now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, stopTime);
+
     if (p.noiseCutoff) {
-      const noiseFilter = audioCtx.createBiquadFilter();
       noiseFilter.type = 'highpass';
       noiseFilter.frequency.setValueAtTime(p.noiseCutoff - 2000, now);
       noiseSource.connect(noiseFilter);
@@ -2023,13 +2085,20 @@ function playSound(track, velocity = 1.0, pan = 0) {
       noiseSource.connect(noiseGain);
     }
 
-    noiseGain.connect(masterGain);
+    noiseGain.connect(panner);
     noiseSource.start(now);
-    noiseSource.stop(now + p.decay + 0.01);
+    noiseSource.stop(stopTime);
   }
 
+  // Start oscillator and track metrics
   osc.start(now);
-  osc.stop(now + p.decay + 0.01);
+  osc.stop(stopTime);
+  trackVoiceAllocation();
+
+  // Release voice after decay
+  setTimeout(() => {
+    voicePool.activeVoices = Math.max(0, voicePool.activeVoices - 1);
+  }, (p.decay + 0.01) * 1000);
 }
 
 function clearGrid() {
