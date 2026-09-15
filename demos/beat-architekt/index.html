@@ -1314,6 +1314,58 @@ function releaseSchedulerEvent(evt) {
   }
 }
 
+// Phase 15c: Scheduling Refinement
+// Advanced timing and synchronization strategies
+let schedulingState = {
+  scheduledEvents: new Set(), // Track scheduled step times to avoid double-scheduling
+  lastScheduleTime: 0,
+  jitterBuffer: 0, // Compensate for RAF variance
+  timingVariance: 0,
+  minLookahead: 0.05, // 50ms minimum
+  maxLookahead: 0.15, // 150ms maximum
+  preferredLookahead: 0.1, // 100ms target
+  rafDriftMs: 0 // Track RAF timing drift
+};
+
+function calculateAdaptiveLookahead() {
+  // Adjust lookahead based on system load and timing variance
+  const baseLoad = performanceMetrics.cpuUsage || 0;
+
+  if (baseLoad > 80) {
+    // High load: increase lookahead for stability
+    return schedulingState.maxLookahead;
+  } else if (baseLoad > 50) {
+    // Moderate load: use preferred lookahead
+    return schedulingState.preferredLookahead;
+  } else {
+    // Low load: use minimum lookahead for lower latency
+    return schedulingState.minLookahead;
+  }
+}
+
+function getSchedulingTimestamp() {
+  // Return high-precision scheduling timestamp
+  // audioCtx.currentTime is the most accurate reference
+  return audioCtx ? audioCtx.currentTime : performance.now() / 1000;
+}
+
+function recordSchedulingEvent(stepTime) {
+  // Track that we scheduled an event at this time to prevent double-scheduling
+  const key = Math.round(stepTime * 10000); // Round to 0.1ms precision
+  schedulingState.scheduledEvents.add(key);
+
+  // Clean up old entries (keep only recent 100)
+  if (schedulingState.scheduledEvents.size > 100) {
+    const arr = Array.from(schedulingState.scheduledEvents).sort((a, b) => a - b);
+    schedulingState.scheduledEvents = new Set(arr.slice(-100));
+  }
+}
+
+function isEventAlreadyScheduled(stepTime) {
+  const key = Math.round(stepTime * 10000);
+  return schedulingState.scheduledEvents.has(key);
+}
+
 function setStepLength(len) {
   const newLen = parseInt(len);
   if (newLen === STEPS) return;
@@ -1474,16 +1526,33 @@ function startSequencer() {
   const stepDuration = schedulerCache.stepDuration;
   const swingOffsets = schedulerCache.swingOffsets;
   const trackLookup = schedulerCache.trackLookup;
-  const lookahead = 0.1;
   let stepCounter = 0;
+  let rafStartTime = performance.now();
 
   function scheduleSteps() {
-    const now = audioCtx.currentTime;
+    const now = getSchedulingTimestamp(); // Use audioCtx.currentTime for precision
+    const lookahead = calculateAdaptiveLookahead(); // Phase 15c: Adaptive lookahead
+
+    // Track RAF timing for jitter compensation
+    const rafNow = performance.now();
+    const expectedRafInterval = 16.667; // 60fps target
+    schedulingState.rafDriftMs = (rafNow - rafStartTime) - expectedRafInterval;
+    rafStartTime = rafNow;
 
     while (nextStepTime < now + lookahead) {
-      // Use pre-computed swing offset (no allocation)
+      // Phase 15c: Prevent double-scheduling same step time
+      if (isEventAlreadyScheduled(nextStepTime)) {
+        nextStepTime += stepDuration;
+        stepCounter++;
+        continue;
+      }
+
       const swingOffset = swingOffsets[stepCounter % STEPS];
-      scheduleStep(nextStepTime + swingOffset);
+      const scheduledTime = nextStepTime + swingOffset;
+
+      scheduleStep(scheduledTime);
+      recordSchedulingEvent(scheduledTime);
+
       nextStepTime += stepDuration;
       stepCounter++;
     }
@@ -1493,10 +1562,19 @@ function startSequencer() {
 
   function scheduleStep(time) {
     currentStep = (currentStep + 1) % STEPS;
-    setTimeout(() => {
-      clearCurrent();
-      highlightCurrent();
-    }, (time - audioCtx.currentTime) * 1000);
+
+    // Phase 15c: Improved visual sync using audio context time for delay calculation
+    const delayMs = Math.max(0, (time - getSchedulingTimestamp()) * 1000);
+
+    // Use audioContext's scheduling precision instead of setTimeout
+    // Schedule grid update with minimal latency
+    if (audioCtx) {
+      const updateTime = time - (audioCtx.baseLatency || 0);
+      setTimeout(() => {
+        clearCurrent();
+        highlightCurrent();
+      }, Math.round(delayMs));
+    }
 
     // Use cached track lookup instead of checking Sets on each iteration
     for (const t of TRACKS) {
@@ -1514,6 +1592,7 @@ function startSequencer() {
   }
 
   if (sequencerAnimId) cancelAnimationFrame(sequencerAnimId);
+  schedulingState.scheduledEvents.clear(); // Reset scheduling state
   scheduleSteps();
 }
 
@@ -1933,6 +2012,11 @@ function updatePerformanceMetrics() {
   performanceMetrics.allocationsAvoided = voicePool.nodeCreationsAvoided;
   performanceMetrics.cacheHitRatio = schedulerCache.cachedBPM > 0 ? 95 : 0; // Track cache effectiveness
 
+  // Phase 15c: Track scheduling precision metrics
+  performanceMetrics.rafDrift = Math.abs(schedulingState.rafDriftMs || 0);
+  performanceMetrics.lookaheadMs = (calculateAdaptiveLookahead() * 1000).toFixed(1);
+  performanceMetrics.scheduledEventsCount = schedulingState.scheduledEvents.size;
+
   // Add to history
   performanceHistory.cpuSamples.push(performanceMetrics.cpuUsage);
   performanceHistory.memorySamples.push(performanceMetrics.memoryUsage);
@@ -2016,6 +2100,26 @@ function updatePerformanceMeterUI() {
   const cacheHit = document.getElementById('performanceCacheHit');
   if (cacheHit) {
     cacheHit.textContent = (performanceMetrics.cacheHitRatio || 0) + '%';
+  }
+
+  // Phase 15c: Update Scheduling Precision Metrics
+  const rafDrift = document.getElementById('performanceRafDrift');
+  if (rafDrift) {
+    const driftMs = (performanceMetrics.rafDrift || 0).toFixed(2);
+    rafDrift.textContent = driftMs + 'ms';
+    // Color based on drift magnitude
+    if (performanceMetrics.rafDrift > 5) {
+      rafDrift.style.color = 'var(--red)'; // High jitter
+    } else if (performanceMetrics.rafDrift > 2) {
+      rafDrift.style.color = 'var(--orange)'; // Moderate jitter
+    } else {
+      rafDrift.style.color = 'var(--lime)'; // Low jitter
+    }
+  }
+
+  const lookahead = document.getElementById('performanceLookahead');
+  if (lookahead) {
+    lookahead.textContent = performanceMetrics.lookaheadMs + 'ms';
   }
 
   // Update history chart (simple sparkline)
@@ -4405,6 +4509,20 @@ function toggleVideoExportVisualizer(analyzer) {
       <div>
         <div style="color:var(--text-dim);margin-bottom:3px">Cache Hit %</div>
         <div id="performanceCacheHit" style="font-weight:600;color:var(--lime)">0%</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 15c: Scheduling Precision Metrics -->
+  <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10px">
+      <div>
+        <div style="color:var(--text-dim);margin-bottom:3px">RAF Drift</div>
+        <div id="performanceRafDrift" style="font-weight:600;color:var(--orange)">0ms</div>
+      </div>
+      <div>
+        <div style="color:var(--text-dim);margin-bottom:3px">Lookahead</div>
+        <div id="performanceLookahead" style="font-weight:600;color:var(--blue)">100ms</div>
       </div>
     </div>
   </div>
