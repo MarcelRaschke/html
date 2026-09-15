@@ -873,6 +873,41 @@ body::before {
           </div>
         </div>
 
+        <!-- Phase 16c: LFO Modulation -->
+        <div style="margin-bottom:12px;padding:10px;background:rgba(0,240,255,0.05);border-radius:4px">
+          <label style="display:flex;gap:8px;align-items:center;margin-bottom:8px;cursor:pointer">
+            <input type="checkbox" id="lfoToggle" onchange="toggleLFO()">
+            <span style="font-size:11px;font-weight:600">〰️ LFO Modulation</span>
+          </label>
+          <div id="lfoControls" style="display:none;font-size:9px">
+            <div style="margin-bottom:6px">
+              <label>Target:</label>
+              <select id="lfoTarget" onchange="setLFOTarget(this.value)" style="font-size:9px;width:100%;padding:2px">
+                <option value="delayTime">Delay Time</option>
+                <option value="reverbMix">Reverb Mix</option>
+                <option value="tapTime">Tap 1 Time</option>
+              </select>
+            </div>
+            <div style="margin-bottom:6px">
+              <label>Waveform:</label>
+              <select id="lfoWaveform" onchange="setLFOWaveform(this.value)" style="font-size:9px;width:100%;padding:2px">
+                <option value="sine">Sine</option>
+                <option value="triangle">Triangle</option>
+                <option value="square">Square</option>
+                <option value="saw">Sawtooth</option>
+              </select>
+            </div>
+            <div style="margin-bottom:6px">
+              <label>Rate (Hz): <span id="lfoRateDisplay">1.0</span></label>
+              <input type="range" id="lfoRate" min="0.1" max="10" value="1.0" step="0.1" oninput="setLFORate(this.value); document.getElementById('lfoRateDisplay').textContent = parseFloat(this.value).toFixed(1)" style="width:100%">
+            </div>
+            <div>
+              <label>Depth: <span id="lfoDepthDisplay">20%</span></label>
+              <input type="range" id="lfoDepth" min="0" max="1" value="0.2" step="0.05" oninput="setLFODepth(this.value); document.getElementById('lfoDepthDisplay').textContent = Math.round(this.value * 100) + '%'" style="width:100%">
+            </div>
+          </div>
+        </div>
+
       <!-- MIDI Controller Panel -->
       <div id="midiPanel" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
         <div style="font-size:12px;color:var(--cyan);font-weight:600;margin-bottom:12px">🎛️ MIDI Controller</div>
@@ -1167,7 +1202,15 @@ let advancedAudio = {
   analyser: null,
   frequencyData: null,
   peakFrequencies: [],
-  spectrumUpdateRate: 30 // Hz
+  spectrumUpdateRate: 30, // Hz
+  // Phase 16c: LFO Modulation
+  lfoEnabled: false,
+  lfoTarget: 'delayTime', // Can be: delayTime, reverbMix, tapTime
+  lfoRate: 1.0, // Hz
+  lfoDepth: 0.2, // 0-1 normalized
+  lfoWaveform: 'sine', // sine, triangle, square, saw
+  lfoPhase: 0,
+  lfoBaseValues: {}
 };
 
 let midiAccess = null;
@@ -1742,7 +1785,11 @@ function startSequencer() {
     const rafNow = performance.now();
     const expectedRafInterval = 16.667; // 60fps target
     schedulingState.rafDriftMs = (rafNow - rafStartTime) - expectedRafInterval;
+    const deltaTime = Math.min(0.1, rafNow - rafStartTime) / 1000; // Phase 16c: LFO update
     rafStartTime = rafNow;
+
+    // Phase 16c: Update LFO modulation
+    updateLFO(deltaTime);
 
     while (nextStepTime < now + lookahead) {
       // Phase 15c: Prevent double-scheduling same step time
@@ -2020,6 +2067,95 @@ function updateSpectrumDisplay() {
   }
 
   requestAnimationFrame(updateSpectrumDisplay);
+}
+
+// Phase 16c: LFO Modulation
+function generateLFOValue(phase, waveform) {
+  const normalizedPhase = phase % (Math.PI * 2);
+
+  switch (waveform) {
+    case 'sine':
+      return Math.sin(normalizedPhase) * 0.5 + 0.5;
+    case 'triangle':
+      const tri = (normalizedPhase / Math.PI) % 2;
+      return tri < 1 ? tri : 2 - tri;
+    case 'square':
+      return normalizedPhase < Math.PI ? 1 : 0;
+    case 'saw':
+      return normalizedPhase / (Math.PI * 2);
+    default:
+      return 0.5;
+  }
+}
+
+function updateLFO(deltaTime) {
+  if (!advancedAudio.lfoEnabled) return;
+
+  advancedAudio.lfoPhase += (advancedAudio.lfoRate * 2 * Math.PI * deltaTime);
+  const lfoValue = generateLFOValue(advancedAudio.lfoPhase, advancedAudio.lfoWaveform);
+  const modulationAmount = (lfoValue - 0.5) * 2 * advancedAudio.lfoDepth;
+
+  const target = advancedAudio.lfoTarget;
+
+  if (target === 'delayTime') {
+    const baseTime = advancedAudio.lfoBaseValues.delayTime || 0.5;
+    const modulatedTime = baseTime * (1 + modulationAmount);
+    updateDelay(modulatedTime, effectsParams.delay.feedback, effectsParams.delay.mix);
+  } else if (target === 'reverbMix') {
+    const baseMix = advancedAudio.lfoBaseValues.reverbMix || 0.2;
+    const modulatedMix = Math.max(0, Math.min(1, baseMix * (1 + modulationAmount)));
+    updateReverb(modulatedMix);
+  } else if (target === 'tapTime') {
+    const tapIdx = advancedAudio.lfoBaseValues.tapIndex || 0;
+    const baseTime = advancedAudio.lfoBaseValues.tapTime || advancedAudio.delayTaps[tapIdx].time;
+    const modulatedTime = baseTime * (1 + modulationAmount * 0.5);
+    updateMultiTapDelay(tapIdx, modulatedTime, advancedAudio.delayTaps[tapIdx].feedback, advancedAudio.delayTaps[tapIdx].mix);
+  }
+}
+
+function toggleLFO() {
+  advancedAudio.lfoEnabled = !advancedAudio.lfoEnabled;
+
+  if (advancedAudio.lfoEnabled) {
+    const target = advancedAudio.lfoTarget;
+    if (target === 'delayTime') {
+      advancedAudio.lfoBaseValues.delayTime = effectsNodes.delay.delayTime.value;
+    } else if (target === 'reverbMix') {
+      advancedAudio.lfoBaseValues.reverbMix = effectsNodes.reverbWet.gain.value;
+    } else if (target === 'tapTime') {
+      advancedAudio.lfoBaseValues.tapIndex = 0;
+      advancedAudio.lfoBaseValues.tapTime = advancedAudio.delayTaps[0].time;
+    }
+  }
+
+  const checkbox = document.getElementById('lfoToggle');
+  const controls = document.getElementById('lfoControls');
+  if (checkbox) checkbox.checked = advancedAudio.lfoEnabled;
+  if (controls) controls.style.display = advancedAudio.lfoEnabled ? 'block' : 'none';
+}
+
+function setLFOTarget(target) {
+  advancedAudio.lfoTarget = target;
+  if (advancedAudio.lfoEnabled) {
+    // Update base value when target changes
+    if (target === 'delayTime') {
+      advancedAudio.lfoBaseValues.delayTime = effectsNodes.delay.delayTime.value;
+    } else if (target === 'reverbMix') {
+      advancedAudio.lfoBaseValues.reverbMix = effectsNodes.reverbWet.gain.value;
+    }
+  }
+}
+
+function setLFORate(rate) {
+  advancedAudio.lfoRate = parseFloat(rate);
+}
+
+function setLFODepth(depth) {
+  advancedAudio.lfoDepth = parseFloat(depth);
+}
+
+function setLFOWaveform(waveform) {
+  advancedAudio.lfoWaveform = waveform;
 }
 
 // Phase 12: Effect control functions
