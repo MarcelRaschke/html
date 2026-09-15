@@ -776,6 +776,24 @@ body::before {
         <div style="margin-top:8px;text-align:right;font-size:9px;color:var(--text-dim)">Undo: Ctrl+Z | Redo: Ctrl+Shift+Z</div>
       </div>
 
+      <!-- XDJ Hardware Controller Panel (Phase 18) -->
+      <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--cyan);font-weight:600;margin-bottom:12px">🎛️ XDJ Hardware</div>
+        <div style="padding:10px;background:rgba(0,240,255,0.05);border-radius:4px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <div id="xdjStatusIndicator" style="width:10px;height:10px;background:var(--red);border-radius:50%;transition:all 0.3s"></div>
+            <span id="xdjStatusText" style="font-size:11px;color:var(--text-secondary)">Disconnected</span>
+          </div>
+          <div id="xdjDeviceName" style="font-size:10px;color:var(--text-dim);margin-bottom:8px">No device detected</div>
+          <button class="ai-pat-btn" style="width:100%;margin-bottom:8px;font-size:10px" onclick="initXDJController()">🔌 Connect XDJ</button>
+          <div id="xdjTempoSync" style="font-size:10px;color:var(--text-dim);padding-top:8px;border-top:1px solid var(--border)">
+            <div style="margin-top:6px">Local BPM: <span id="xdjLocalBPM" style="color:var(--cyan);font-weight:600">125</span></div>
+            <div>XDJ BPM: <span id="xdjRemoteBPM" style="color:var(--magenta);font-weight:600">—</span></div>
+            <div>Sync State: <span id="xdjSyncState" style="color:var(--text-secondary);font-size:9px">Waiting...</span></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Effects Panel -->
       <div id="effectsPanel" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
         <div style="font-size:12px;color:var(--cyan);font-weight:600;margin-bottom:12px">🎛️ Master Effects</div>
@@ -1287,6 +1305,16 @@ let aiMixing = {
 
 let midiAccess = null;
 let midiEnabled = false;
+
+// Phase 18: Hardware Integration (XDJ/Rekordbox)
+let xdjConnected = false;
+let xdjDevice = null;
+let xdjMidiInput = null;
+let xdjMidiOutput = null;
+let xdjTempo = 120;
+let xdjPlayheadStep = 0;
+let lastXDJSyncTime = null;
+let xdjPadMap = {};
 
 // Phase 9: AI Remix Generator
 let remixHistory = [];
@@ -4429,6 +4457,142 @@ function exportPatternAsRekordbox(id) {
   URL.revokeObjectURL(url);
 }
 
+// Phase 18b: XDJ MIDI Controller Support
+async function initXDJController() {
+  try {
+    const midiAccess = await navigator.requestMIDIAccess();
+    const inputs = midiAccess.inputs.values();
+    const outputs = midiAccess.outputs.values();
+
+    for (let input of inputs) {
+      if (input.name && (input.name.includes('XDJ') || input.name.includes('DJM') || input.name.includes('Pioneer'))) {
+        xdjMidiInput = input;
+        xdjDevice = input.name;
+        xdjConnected = true;
+        input.onmidimessage = handleXDJMessage;
+        console.log('XDJ device connected:', xdjDevice);
+        break;
+      }
+    }
+
+    for (let output of outputs) {
+      if (output.name && (output.name.includes('XDJ') || output.name.includes('DJM') || output.name.includes('Pioneer'))) {
+        xdjMidiOutput = output;
+        break;
+      }
+    }
+
+    if (!xdjConnected) {
+      console.log('No XDJ device found. Waiting for hardware connection...');
+    }
+  } catch (err) {
+    console.log('Web MIDI not supported or denied:', err);
+  }
+}
+
+function handleXDJMessage(message) {
+  const [cmd, note, velocity] = message.data;
+
+  if ((cmd & 0xF0) === 0x90) {
+    handleXDJPadPress(note, velocity);
+  } else if ((cmd & 0xF0) === 0xB0) {
+    const cc = note;
+    const value = velocity;
+
+    if (cc === 6) {
+      syncXDJTempo(value);
+    } else if (cc === 3) {
+      xdjPlayheadStep = Math.round((value / 127) * (STEPS - 1));
+    }
+  }
+}
+
+function handleXDJPadPress(note, velocity) {
+  if (velocity === 0) return;
+
+  const stepIndex = note - 36;
+  if (stepIndex < 0 || stepIndex >= STEPS) return;
+
+  if (!currentPatternId) {
+    alert('Save current pattern first');
+    return;
+  }
+
+  const track = muteTrack || soloTrack || TRACKS[0].key;
+  const step = grid[track][stepIndex];
+
+  step.active = !step.active;
+  step.velocity = velocity / 127;
+
+  pushUndo();
+  renderGrid();
+  sendPatternStateToXDJ();
+}
+
+function syncXDJTempo(ccValue) {
+  const xdjTempoCurrent = 60 + (ccValue / 127) * 120;
+  const tempoChange = Math.abs(xdjTempoCurrent - bpm);
+
+  if (tempoChange > 2) {
+    bpm = Math.round(xdjTempoCurrent * 10) / 10;
+    document.getElementById('tempoDisplay').textContent = bpm;
+    document.getElementById('tempoSlider').value = bpm;
+    lastXDJSyncTime = Date.now();
+  }
+}
+
+function sendPatternStateToXDJ() {
+  if (!xdjMidiOutput || !xdjConnected) return;
+
+  const track = muteTrack || soloTrack || TRACKS[0].key;
+  const currentGridState = grid[track];
+
+  currentGridState.forEach((step, stepIndex) => {
+    const note = 36 + stepIndex;
+    const velocity = step.active ? Math.round(step.velocity * 127) : 0;
+    const cmd = velocity > 0 ? 0x90 : 0x80;
+
+    xdjMidiOutput.send([cmd, note, velocity]);
+  });
+}
+
+function disconnectXDJ() {
+  if (xdjMidiInput) {
+    xdjMidiInput.onmidimessage = null;
+  }
+  xdjConnected = false;
+  xdjDevice = null;
+  xdjMidiInput = null;
+  xdjMidiOutput = null;
+  updateXDJUIStatus();
+  console.log('XDJ disconnected');
+}
+
+function updateXDJUIStatus() {
+  const indicator = document.getElementById('xdjStatusIndicator');
+  const statusText = document.getElementById('xdjStatusText');
+  const deviceName = document.getElementById('xdjDeviceName');
+  const localBPM = document.getElementById('xdjLocalBPM');
+  const remoteBPM = document.getElementById('xdjRemoteBPM');
+
+  if (indicator && statusText) {
+    if (xdjConnected) {
+      indicator.style.background = 'var(--lime)';
+      statusText.textContent = '✓ Connected';
+      statusText.style.color = 'var(--lime)';
+      if (deviceName) deviceName.textContent = xdjDevice || 'XDJ Device';
+    } else {
+      indicator.style.background = 'var(--red)';
+      statusText.textContent = '✗ Disconnected';
+      statusText.style.color = 'var(--red)';
+      if (deviceName) deviceName.textContent = 'No device detected';
+    }
+  }
+
+  if (localBPM) localBPM.textContent = bpm;
+  if (remoteBPM) remoteBPM.textContent = xdjConnected ? xdjTempo.toFixed(1) : '—';
+}
+
 function importPatternJSON(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -6397,6 +6561,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Initialize remix presets
   initRemixPresets();
+
+  // Phase 18: Initialize XDJ Hardware Controller
+  if (navigator.requestMIDIAccess) {
+    initXDJController().catch(err => console.log('XDJ hardware init error:', err));
+  }
+
+  // Update XDJ UI status immediately
+  updateXDJUIStatus();
 });
 </script>
 
