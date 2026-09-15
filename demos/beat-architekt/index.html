@@ -2289,6 +2289,88 @@ class GranularSamplePlayer {
   }
 }
 
+// === PHASE 21f: WAVEFORM RENDERER & VISUALIZATION ===
+
+class WaveformRenderer {
+  constructor(canvas, audioBuffer) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.buffer = audioBuffer;
+    this.width = canvas.width;
+    this.height = canvas.height;
+    this.waveformData = null;
+    this.renderWaveform();
+  }
+
+  renderWaveform() {
+    if (!this.buffer) return;
+
+    const data = this.buffer.getChannelData(0);
+    const step = Math.ceil(data.length / this.width);
+    const amp = this.height / 2;
+
+    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+    this.ctx.fillRect(0, 0, this.width, this.height);
+
+    this.ctx.strokeStyle = 'var(--cyan)';
+    this.ctx.lineWidth = 1;
+    this.ctx.beginPath();
+    this.ctx.moveTo(0, amp);
+
+    for (let i = 0; i < this.width; i++) {
+      let min = 1.0;
+      let max = -1.0;
+      for (let j = 0; j < step; j++) {
+        const idx = i * step + j;
+        if (idx < data.length) {
+          const v = data[idx];
+          if (v < min) min = v;
+          if (v > max) max = v;
+        }
+      }
+      const y1 = (1 + min) * amp;
+      const y2 = (1 + max) * amp;
+      this.ctx.lineTo(i, (y1 + y2) / 2);
+    }
+    this.ctx.stroke();
+  }
+
+  drawPlayhead(position) {
+    const x = position * this.width;
+    this.ctx.strokeStyle = 'var(--lime)';
+    this.ctx.lineWidth = 2;
+    this.ctx.beginPath();
+    this.ctx.moveTo(x, 0);
+    this.ctx.lineTo(x, this.height);
+    this.ctx.stroke();
+  }
+
+  drawLoopPoints(start, end) {
+    const startX = start * this.width;
+    const endX = end * this.width;
+
+    this.ctx.strokeStyle = 'var(--orange)';
+    this.ctx.lineWidth = 2;
+    this.ctx.setLineDash([5, 5]);
+
+    this.ctx.beginPath();
+    this.ctx.moveTo(startX, 0);
+    this.ctx.lineTo(startX, this.height);
+    this.ctx.stroke();
+
+    this.ctx.beginPath();
+    this.ctx.moveTo(endX, 0);
+    this.ctx.lineTo(endX, this.height);
+    this.ctx.stroke();
+
+    this.ctx.setLineDash([]);
+  }
+
+  clear() {
+    this.ctx.clearRect(0, 0, this.width, this.height);
+  }
+}
+
 // === PHASE 21d: GRAIN CLOUD MICROSOUND ENGINE ===
 
 class GrainCloud {
@@ -8158,26 +8240,8 @@ async function handleSampleImport(file) {
 }
 
 function updateSampleList() {
-  const listDiv = document.getElementById('sampleList');
-  const samples = sampleLibrary.listSamples();
-
-  if (samples.length === 0) {
-    listDiv.innerHTML = '<div style="font-size:10px;color:var(--text-dim);text-align:center;padding:20px">No samples imported yet</div>';
-    return;
-  }
-
-  listDiv.innerHTML = samples.map((sample, idx) => `
-    <div style="display:flex;gap:8px;padding:8px;background:rgba(0,0,0,0.3);border-radius:6px;margin-bottom:6px;align-items:center;justify-content:space-between">
-      <div style="flex:1;min-width:0">
-        <div style="font-size:10px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sample.name}</div>
-        <div style="font-size:9px;color:var(--text-dim)">${sample.duration.toFixed(2)}s @ ${sample.sampleRate/1000}kHz</div>
-        <div style="font-size:9px;color:var(--cyan)">BPM: ${sample.bpm}</div>
-      </div>
-      <button onclick="deleteSample('${sample.id}')" style="padding:6px 10px;background:rgba(255,51,85,0.15);border:1px solid var(--red);color:var(--red);border-radius:4px;cursor:pointer;font-size:10px;white-space:nowrap">
-        🗑️ Delete
-      </button>
-    </div>
-  `).join('');
+  if (!sampleLibrary) return;
+  updateSampleListWithWaveforms();
 }
 
 async function deleteSample(sampleId) {
@@ -8454,6 +8518,273 @@ function triggerGrainCloud(sampleId, duration = 2) {
 function toggleGrainCloudPanel() {
   const panel = document.getElementById('grainCloudPanel');
   panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+// === PHASE 21e: SAMPLE SEQUENCING & TRIGGERING ===
+
+// Store sample assignments per pattern step
+let sampleSequences = {};
+
+function setSampleForStep(trackId, stepIndex, sampleId) {
+  const patternId = currentPattern.id;
+  if (!sampleSequences[patternId]) {
+    sampleSequences[patternId] = {};
+  }
+  if (!sampleSequences[patternId][trackId]) {
+    sampleSequences[patternId][trackId] = {};
+  }
+  sampleSequences[patternId][trackId][stepIndex] = sampleId;
+}
+
+function getSampleForStep(trackId, stepIndex) {
+  const patternId = currentPattern.id;
+  if (!sampleSequences[patternId]) return null;
+  if (!sampleSequences[patternId][trackId]) return null;
+  return sampleSequences[patternId][trackId][stepIndex];
+}
+
+function clearSampleForStep(trackId, stepIndex) {
+  const patternId = currentPattern.id;
+  if (!sampleSequences[patternId]) return;
+  if (!sampleSequences[patternId][trackId]) return;
+  delete sampleSequences[patternId][trackId][stepIndex];
+}
+
+// Trigger samples from sequencer playhead
+function triggerStepSamples(stepIndex, stepDuration) {
+  for (let trackId = 0; trackId < 8; trackId++) {
+    const sampleId = getSampleForStep(trackId, stepIndex);
+    if (sampleId) {
+      triggerSample(sampleId, 0, 1);
+    }
+  }
+}
+
+// UI: Show sample selector in step context menu
+function showStepSampleSelector(trackId, stepIndex) {
+  if (!sampleLibrary) return;
+
+  const samples = sampleLibrary.listSamples();
+  if (samples.length === 0) {
+    showToast('❌ No samples imported');
+    return;
+  }
+
+  const currentSample = getSampleForStep(trackId, stepIndex);
+  const menu = document.createElement('div');
+  menu.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    max-height: 400px;
+    overflow-y: auto;
+    z-index: 2000;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+    min-width: 250px;
+  `;
+
+  const title = document.createElement('div');
+  title.style.cssText = 'font-size:12px;font-weight:600;color:var(--cyan);margin-bottom:8px';
+  title.textContent = `Select Sample (Track ${trackId+1}, Step ${stepIndex+1})`;
+  menu.appendChild(title);
+
+  const clearBtn = document.createElement('button');
+  clearBtn.textContent = '✕ Clear Sample';
+  clearBtn.style.cssText = `
+    width: 100%;
+    padding: 8px;
+    background: rgba(255,51,85,0.1);
+    border: 1px solid var(--red);
+    color: var(--red);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  `;
+  clearBtn.onclick = () => {
+    clearSampleForStep(trackId, stepIndex);
+    updateStepDisplay();
+    document.body.removeChild(menu);
+  };
+  menu.appendChild(clearBtn);
+
+  samples.forEach((sample, idx) => {
+    const btn = document.createElement('button');
+    btn.textContent = `${sample.name} (${sample.duration.toFixed(2)}s)`;
+    btn.style.cssText = `
+      width: 100%;
+      padding: 8px;
+      background: ${currentSample === sample.id ? 'rgba(0,240,255,0.2)' : 'rgba(0,240,255,0.05)'};
+      border: 1px solid ${currentSample === sample.id ? 'var(--cyan)' : 'rgba(0,240,255,0.2)'};
+      color: var(--cyan);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: ${currentSample === sample.id ? '600' : '400'};
+      margin-bottom: 4px;
+      transition: all 0.2s;
+    `;
+    btn.onmouseover = (e) => {
+      e.target.style.background = 'rgba(0,240,255,0.15)';
+    };
+    btn.onmouseout = (e) => {
+      e.target.style.background = currentSample === sample.id ? 'rgba(0,240,255,0.2)' : 'rgba(0,240,255,0.05)';
+    };
+    btn.onclick = () => {
+      setSampleForStep(trackId, stepIndex, sample.id);
+      updateStepDisplay();
+      document.body.removeChild(menu);
+    };
+    menu.appendChild(btn);
+  });
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕ Close';
+  closeBtn.style.cssText = `
+    width: 100%;
+    padding: 8px;
+    background: rgba(100,120,140,0.1);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 600;
+    margin-top: 8px;
+  `;
+  closeBtn.onclick = () => document.body.removeChild(menu);
+  menu.appendChild(closeBtn);
+
+  document.body.appendChild(menu);
+}
+
+// Helper to update step visual indicators
+function updateStepDisplay() {
+  if (!currentPattern) return;
+  // This would integrate with the existing sequencer grid rendering
+  // to show which steps have samples assigned
+}
+
+// Save sample sequences to pattern data
+function saveSampleSequences() {
+  if (!currentPattern) return;
+  const patternId = currentPattern.id;
+  if (sampleSequences[patternId]) {
+    currentPattern.sampleSequences = sampleSequences[patternId];
+  }
+}
+
+// Load sample sequences from pattern data
+function loadSampleSequences() {
+  if (!currentPattern) return;
+  const patternId = currentPattern.id;
+  if (currentPattern.sampleSequences) {
+    sampleSequences[patternId] = currentPattern.sampleSequences;
+  }
+}
+
+// Clear all samples for current pattern
+function clearAllSamples() {
+  const patternId = currentPattern.id;
+  if (sampleSequences[patternId]) {
+    sampleSequences[patternId] = {};
+  }
+  updateStepDisplay();
+  showToast('✅ All samples cleared from pattern');
+}
+
+// === PHASE 21f: WAVEFORM VISUALIZATION FUNCTIONS ===
+
+function renderSampleWaveform(sampleId, width = 160, height = 40) {
+  if (!sampleLibrary) return null;
+
+  const sample = sampleLibrary.getSample(sampleId);
+  if (!sample || !sample.buffer) return null;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  canvas.style.cssText = 'border-radius:4px;background:rgba(0,0,0,0.3)';
+
+  const renderer = new WaveformRenderer(canvas, sample.buffer);
+  return canvas;
+}
+
+function updateSampleListWithWaveforms() {
+  if (!sampleLibrary) return;
+
+  const listDiv = document.getElementById('sampleList');
+  const samples = sampleLibrary.listSamples();
+
+  if (samples.length === 0) {
+    listDiv.innerHTML = '<div style="font-size:10px;color:var(--text-dim);text-align:center;padding:20px">No samples imported yet</div>';
+    return;
+  }
+
+  const sampleElements = samples.map((sample, idx) => {
+    const container = document.createElement('div');
+    container.style.cssText = 'padding:8px;background:rgba(0,0,0,0.3);border-radius:6px;margin-bottom:6px';
+
+    const header = document.createElement('div');
+    header.style.cssText = 'font-size:10px;font-weight:600;color:var(--text-primary);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    header.textContent = sample.name;
+    container.appendChild(header);
+
+    const waveform = renderSampleWaveform(sample.id, 160, 30);
+    if (waveform) {
+      container.appendChild(waveform);
+    }
+
+    const footer = document.createElement('div');
+    footer.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:9px;color:var(--text-dim)';
+    footer.innerHTML = `
+      <span>${sample.duration.toFixed(2)}s @ ${sample.sampleRate/1000}kHz</span>
+      <button onclick="deleteSample('${sample.id}')" style="padding:4px 8px;background:rgba(255,51,85,0.15);border:1px solid var(--red);color:var(--red);border-radius:3px;cursor:pointer;font-size:9px">
+        🗑️
+      </button>
+    `;
+    container.appendChild(footer);
+
+    return container;
+  });
+
+  listDiv.innerHTML = '';
+  sampleElements.forEach(el => listDiv.appendChild(el));
+}
+
+function updateRecordingVisualization(audioBuffer) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 160;
+  canvas.height = 30;
+  canvas.style.cssText = 'border-radius:4px;background:rgba(0,0,0,0.3);margin-top:8px';
+
+  if (audioBuffer) {
+    const renderer = new WaveformRenderer(canvas, audioBuffer);
+  }
+  return canvas;
+}
+
+// Animation for live recording level visualization
+function startRecordingLevelAnimation() {
+  const levelMeter = document.getElementById('recordingLevelMeter');
+  if (!levelMeter || !loopRecorder) return;
+
+  let animId;
+  const animate = () => {
+    if (loopRecordingStarted && loopRecorder) {
+      const level = loopRecorder.getRecordingLevel();
+      levelMeter.style.width = (level * 100) + '%';
+      animId = requestAnimationFrame(animate);
+    }
+  };
+  animate();
+  return animId;
 }
 </script>
 
