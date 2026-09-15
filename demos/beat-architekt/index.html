@@ -2194,6 +2194,101 @@ class LoopRecorder {
   }
 }
 
+// === PHASE 21c: GRANULAR SAMPLE PLAYER (TIME-STRETCH & PITCH CONTROL) ===
+
+class GranularSamplePlayer {
+  constructor(audioBuffer, grainSize = 50) {
+    this.buffer = audioBuffer;
+    this.grainSize = grainSize;
+    this.playbackRate = 1;
+    this.pitch = 0;
+    this.playing = false;
+    this.currentTime = 0;
+    this.duration = audioBuffer.duration;
+    this.destination = audioCtx.destination;
+    this.grainGainNodes = [];
+    this.maxGrains = 20;
+    this.grainIndex = 0;
+  }
+
+  play(time = 0, duration = this.duration) {
+    this.playing = true;
+    this.currentTime = Math.max(0, Math.min(time, this.duration - 0.1));
+    this.playbackTime = audioCtx.currentTime;
+    this.scheduledUntil = audioCtx.currentTime;
+    this.scheduleGrains();
+  }
+
+  stop() {
+    this.playing = false;
+    this.grainGainNodes.forEach(g => g.gain.setValueAtTime(0, audioCtx.currentTime));
+  }
+
+  setPitch(semitones) {
+    this.pitch = Math.max(-24, Math.min(24, semitones));
+  }
+
+  setPlaybackRate(rate) {
+    this.playbackRate = Math.max(0.25, Math.min(4, rate));
+  }
+
+  scheduleGrains() {
+    const lookahead = 0.1;
+    while (this.scheduledUntil < audioCtx.currentTime + lookahead && this.playing) {
+      this.createGrain();
+      const grainDuration = (this.grainSize / 1000) / this.playbackRate;
+      const grainSpacing = grainDuration * 0.5;
+      this.scheduledUntil += grainSpacing;
+    }
+    if (this.playing) {
+      setTimeout(() => this.scheduleGrains(), 25);
+    }
+  }
+
+  createGrain() {
+    if (this.currentTime >= this.duration) {
+      this.playing = false;
+      return;
+    }
+
+    const grainDuration = this.grainSize / 1000;
+    const grainStart = Math.max(0, Math.min(this.currentTime, this.duration - grainDuration));
+
+    const source = audioCtx.createBufferSource();
+    source.buffer = this.buffer;
+    source.playbackRate.value = Math.pow(2, this.pitch / 12);
+
+    const grainGain = audioCtx.createGain();
+    const envDuration = grainDuration * 0.9;
+    const attackTime = audioCtx.currentTime;
+
+    grainGain.gain.setValueAtTime(0, attackTime);
+    grainGain.gain.linearRampToValueAtTime(1, attackTime + envDuration * 0.2);
+    grainGain.gain.linearRampToValueAtTime(0, attackTime + envDuration);
+
+    source.connect(grainGain);
+    grainGain.connect(this.destination);
+
+    source.start(audioCtx.currentTime, grainStart, grainDuration);
+    source.stop(audioCtx.currentTime + grainDuration);
+
+    this.grainGainNodes.push(grainGain);
+    if (this.grainGainNodes.length > this.maxGrains) {
+      this.grainGainNodes.shift();
+    }
+
+    this.currentTime += (grainDuration * this.playbackRate);
+  }
+
+  setDestination(node) {
+    this.destination = node;
+  }
+
+  getPlaybackProgress() {
+    return this.playing ? this.currentTime / this.duration : 0;
+  }
+}
+
 // === PHASE 20c: AUTOMATION VISUALIZATION & PERFORMANCE DASHBOARD ===
 
 class AutomationCurveVisualizer {
@@ -8100,6 +8195,51 @@ function toggleLoopRecordingPanel() {
   if (panel.style.display === 'block' && !loopRecorder) {
     initLoopRecording();
   }
+}
+
+// === PHASE 21c: SAMPLE PLAYBACK FUNCTIONS ===
+
+let activeSamplePlayers = new Map();
+let samplePlaybackGain = audioCtx.createGain();
+samplePlaybackGain.connect(audioCtx.destination);
+samplePlaybackGain.gain.value = 0.8;
+
+function triggerSample(sampleId, pitch = 0, playbackRate = 1) {
+  if (!sampleLibrary) return;
+
+  const sample = sampleLibrary.getSample(sampleId);
+  if (!sample || !sample.buffer) {
+    console.error('Sample not found:', sampleId);
+    return;
+  }
+
+  try {
+    const player = new GranularSamplePlayer(sample.buffer, 50);
+    player.setPitch(pitch);
+    player.setPlaybackRate(playbackRate);
+    player.setDestination(samplePlaybackGain);
+    player.play();
+
+    activeSamplePlayers.set(sampleId + '_' + Date.now(), player);
+  } catch (err) {
+    console.error('Sample playback error:', err);
+  }
+}
+
+function setSampleVolume(db) {
+  const gain = Math.pow(10, db / 20);
+  samplePlaybackGain.gain.setTargetAtTime(gain, audioCtx.currentTime, 0.01);
+}
+
+function stopAllSamples() {
+  activeSamplePlayers.forEach(player => player.stop());
+  activeSamplePlayers.clear();
+}
+
+// Sample playback from grid steps
+function triggerSampleFromStep(trackId, stepIndex, sample) {
+  if (!sample) return;
+  triggerSample(sample.id, sample.pitch || 0, sample.playbackRate || 1);
 }
 </script>
 
