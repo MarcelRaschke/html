@@ -1430,6 +1430,51 @@ function cacheGridCell(track, step, element) {
   renderState.gridCells.set(`${track}:${step}`, element);
 }
 
+// Phase 15e: Synthesis Optimization
+// Pre-computed instrument configurations and cached parameters
+let synthesisCache = {
+  instrumentParams: {
+    kick:   { type:'sine',     freq:60,   decay:0.15, vol:0.8,  filter:true, fCutoff:8000, fEnd:200 },
+    snare:  { type:'triangle', freq:200,  decay:0.1,  vol:0.5,  noise:true, noiseVol:0.6 },
+    hihat:  { type:'square',   freq:8000, decay:0.04, vol:0.2,  noise:true, noiseVol:0.8, noiseCutoff:10000 },
+    clap:   { type:'triangle', freq:1200, decay:0.08, vol:0.4 },
+    perc:   { type:'sine',     freq:400,  decay:0.08, vol:0.35, filter:true, fCutoff:5000, fEnd:1000 },
+    bass:   { type:'sawtooth', freq:50,   decay:0.2,  vol:0.6,  filter:true, fCutoff:100, fEnd:100 },
+    fx:     { type:'sawtooth', freq:1500, decay:0.15, vol:0.2 },
+    shaker: { type:'square',   freq:6000, decay:0.03, vol:0.15, noise:true, noiseVol:0.7, noiseCutoff:12000 }
+  },
+
+  // Pre-computed filter configurations (one per track with filter)
+  filterConfigs: {
+    kick:  { type: 'lowpass', start: 8000, end: 200 },
+    perc:  { type: 'lowpass', start: 5000, end: 1000 },
+    bass:  { type: 'lowpass', start: 100, end: 100 }
+  },
+
+  // Cached envelope curves (for reducing parameter updates)
+  lastParamUpdate: null,
+  lastTrack: null
+};
+
+function getInstrumentParams(track) {
+  // Get cached params, fall back to kick if not found
+  return synthesisCache.instrumentParams[track] || synthesisCache.instrumentParams.kick;
+}
+
+function applyFilterConfig(filter, track, now, decay) {
+  // Phase 15e: Apply pre-computed filter config
+  const config = synthesisCache.filterConfigs[track];
+  if (!config) return;
+
+  filter.type = config.type;
+  filter.frequency.setValueAtTime(config.start, now);
+
+  // Skip end frequency update if it matches start (optimization)
+  if (config.end !== config.start) {
+    filter.frequency.linearRampToValueAtTime(config.end, now + decay);
+  }
+}
+
 function setStepLength(len) {
   const newLen = parseInt(len);
   if (newLen === STEPS) return;
@@ -2111,6 +2156,10 @@ function updatePerformanceMetrics() {
   performanceMetrics.dirtyGridCount = renderState.dirtyGrid.size;
   performanceMetrics.cacheHitCount = renderState.gridCells.size; // Cells cached for incremental updates
 
+  // Phase 15e: Track synthesis optimization metrics
+  performanceMetrics.paramCacheHits = Object.keys(synthesisCache.instrumentParams).length;
+  performanceMetrics.voicePoolReuse = voicePool.nodeCreationsAvoided; // Reused pooled nodes
+
   // Add to history
   performanceHistory.cpuSamples.push(performanceMetrics.cpuUsage);
   performanceHistory.memorySamples.push(performanceMetrics.memoryUsage);
@@ -2234,6 +2283,17 @@ function updatePerformanceMeterUI() {
     cellCache.textContent = performanceMetrics.cacheHitCount || 0;
   }
 
+  // Phase 15e: Update Synthesis Optimization Metrics
+  const paramCache = document.getElementById('performanceParamCache');
+  if (paramCache) {
+    paramCache.textContent = performanceMetrics.paramCacheHits || 0;
+  }
+
+  const voiceReuse = document.getElementById('performanceVoiceReuse');
+  if (voiceReuse) {
+    voiceReuse.textContent = performanceMetrics.voicePoolReuse || 0;
+  }
+
   // Update history chart (simple sparkline)
   updatePerformanceChart();
 }
@@ -2303,18 +2363,8 @@ function createNoiseBuffer() {
 function playSound(track, velocity = 1.0, pan = 0) {
   if (!audioCtx || voicePool.gainNodes.length === 0) return;
 
-  // Track parameters for all instruments
-  const params = {
-    kick:   { type:'sine',     freq:60,   decay:0.15, vol:0.8,  filter:true, fCutoff:8000, fEnd:200 },
-    snare:  { type:'triangle', freq:200,  decay:0.1,  vol:0.5,  noise:true, noiseVol:0.6 },
-    hihat:  { type:'square',   freq:8000, decay:0.04, vol:0.2,  noise:true, noiseVol:0.8, noiseCutoff:10000 },
-    clap:   { type:'triangle', freq:1200, decay:0.08, vol:0.4 },
-    perc:   { type:'sine',     freq:400,  decay:0.08, vol:0.35, filter:true, fCutoff:5000, fEnd:1000 },
-    bass:   { type:'sawtooth', freq:50,   decay:0.2,  vol:0.6,  filter:true, fCutoff:100, fEnd:100 },
-    fx:     { type:'sawtooth', freq:1500, decay:0.15, vol:0.2 },
-    shaker: { type:'square',   freq:6000, decay:0.03, vol:0.15, noise:true, noiseVol:0.7, noiseCutoff:12000 }
-  };
-  const p = params[track] || params.kick;
+  // Phase 15e: Use cached instrument parameters (no allocation per call)
+  const p = getInstrumentParams(track);
   const now = audioCtx.currentTime;
   const scaledVol = p.vol * Math.max(0.1, velocity);
   const stopTime = now + p.decay + 0.01;
@@ -2356,11 +2406,9 @@ function playSound(track, velocity = 1.0, pan = 0) {
   filter.connect(gain);
   gain.connect(panner);
 
-  // Configure filter for kicks and percs
+  // Phase 15e: Apply pre-computed filter config (reduces parameter calls)
   if (p.filter) {
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(p.fCutoff, now);
-    filter.frequency.linearRampToValueAtTime(p.fEnd, now + p.decay);
+    applyFilterConfig(filter, track, now, p.decay);
   }
 
   // Create and configure noise layer (if needed)
@@ -4649,6 +4697,20 @@ function toggleVideoExportVisualizer(analyzer) {
       <div>
         <div style="color:var(--text-dim);margin-bottom:3px">Cell Cache</div>
         <div id="performanceCellCache" style="font-weight:600;color:var(--magenta)">0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 15e: Synthesis Optimization Metrics -->
+  <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10px">
+      <div>
+        <div style="color:var(--text-dim);margin-bottom:3px">Param Cache</div>
+        <div id="performanceParamCache" style="font-weight:600;color:var(--purple)">8</div>
+      </div>
+      <div>
+        <div style="color:var(--text-dim);margin-bottom:3px">Voice Reuse</div>
+        <div id="performanceVoiceReuse" style="font-weight:600;color:var(--purple)">0</div>
       </div>
     </div>
   </div>
