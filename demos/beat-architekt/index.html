@@ -2099,6 +2099,101 @@ class SampleLibrary {
   }
 }
 
+// === PHASE 21b: LOOP RECORDING ENGINE ===
+
+class LoopRecorder {
+  constructor(barCount = 8, bpm = 120) {
+    this.barCount = barCount;
+    this.bpm = bpm;
+    this.samplesPerBar = (audioCtx.sampleRate * 60 * 4) / bpm;
+    this.totalSamples = Math.floor(this.samplesPerBar * barCount);
+    this.circularBuffer = new Float32Array(this.totalSamples);
+    this.writePosition = 0;
+    this.isRecording = false;
+    this.recordingStartTime = 0;
+    this.microphone = null;
+    this.processorNode = null;
+    this.recordingLevel = 0;
+    this.feedback = 0.5;
+    this.overdubBuffer = new Float32Array(this.totalSamples);
+  }
+
+  async initMicrophone() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const source = audioCtx.createMediaStreamAudioSource(stream);
+
+      const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+      source.connect(processor);
+      processor.connect(audioCtx.destination);
+
+      processor.onaudioprocess = (e) => {
+        const inputData = e.inputBuffer.getChannelData(0);
+        if (this.isRecording) {
+          this.writeToBuffer(inputData);
+        }
+        this.updateRecordingLevel(inputData);
+      };
+
+      this.microphone = source;
+      this.processorNode = processor;
+    } catch (err) {
+      console.error('Microphone init error:', err);
+      throw err;
+    }
+  }
+
+  startRecording(delayMs = 0) {
+    if (delayMs > 0) {
+      setTimeout(() => {
+        this.startRecording(0);
+      }, delayMs);
+      return;
+    }
+
+    this.isRecording = true;
+    this.writePosition = 0;
+    this.recordingStartTime = audioCtx.currentTime;
+    this.circularBuffer.fill(0);
+  }
+
+  stopRecording() {
+    this.isRecording = false;
+    const recordedBuffer = audioCtx.createBuffer(1, this.totalSamples, audioCtx.sampleRate);
+    recordedBuffer.getChannelData(0).set(this.circularBuffer);
+    return recordedBuffer;
+  }
+
+  writeToBuffer(inputData) {
+    for (let i = 0; i < inputData.length; i++) {
+      const idx = (this.writePosition + i) % this.totalSamples;
+      const sample = inputData[i];
+      this.circularBuffer[idx] = sample + (this.circularBuffer[idx] * this.feedback);
+    }
+    this.writePosition = (this.writePosition + inputData.length) % this.totalSamples;
+  }
+
+  updateRecordingLevel(inputData) {
+    let sum = 0;
+    for (let i = 0; i < inputData.length; i++) {
+      sum += inputData[i] * inputData[i];
+    }
+    this.recordingLevel = Math.sqrt(sum / inputData.length);
+  }
+
+  getRecordingLevel() {
+    return Math.min(this.recordingLevel * 3, 1);
+  }
+
+  setFeedback(value) {
+    this.feedback = Math.max(0, Math.min(1, value));
+  }
+
+  getRecordingProgress() {
+    return this.isRecording ? this.writePosition / this.totalSamples : 0;
+  }
+}
+
 // === PHASE 20c: AUTOMATION VISUALIZATION & PERFORMANCE DASHBOARD ===
 
 class AutomationCurveVisualizer {
@@ -7878,6 +7973,134 @@ function toggleSampleLibraryPanel() {
   const panel = document.getElementById('sampleLibraryPanel');
   panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
 }
+
+// === PHASE 21b: LOOP RECORDING FUNCTIONS ===
+
+let loopRecorder = null;
+let loopRecordingAnimId = null;
+let loopRecordingStarted = false;
+
+async function initLoopRecording() {
+  try {
+    loopRecorder = new LoopRecorder(8, bpm || 120);
+    await loopRecorder.initMicrophone();
+    setupLoopRecordingUI();
+    startLoopRecordingAnimation();
+  } catch (err) {
+    console.error('Loop Recording init error:', err);
+    showToast('❌ Microphone access denied');
+  }
+}
+
+function setupLoopRecordingUI() {
+  const feedbackSlider = document.getElementById('loopFeedbackSlider');
+  feedbackSlider.oninput = (e) => {
+    updateLoopFeedback(e.target.value);
+  };
+}
+
+function updateLoopFeedback(value) {
+  const feedback = parseFloat(value);
+  if (loopRecorder) {
+    loopRecorder.setFeedback(feedback);
+  }
+  document.getElementById('loopFeedbackValue').textContent = Math.round(feedback * 100) + '%';
+}
+
+function startLoopRecording() {
+  if (!loopRecorder) {
+    showToast('❌ Loop recorder not initialized');
+    return;
+  }
+
+  const recordBtn = document.getElementById('loopRecordStartBtn');
+  const stopBtn = document.getElementById('loopRecordStopBtn');
+  const metronomeSync = document.getElementById('loopMetronomeSync').checked;
+  const countdownDiv = document.getElementById('recordingCountdown');
+
+  loopRecordingStarted = true;
+  recordBtn.disabled = true;
+  recordBtn.style.opacity = '0.5';
+  stopBtn.disabled = false;
+  stopBtn.style.opacity = '1';
+
+  if (metronomeSync) {
+    const barsToWait = 1;
+    const delayMs = barsToWait * (60000 * 4 / (bpm || 120));
+    countdownDiv.style.display = 'block';
+    countdownDiv.textContent = `Recording in ${barsToWait} bar...`;
+    loopRecorder.startRecording(delayMs);
+    setTimeout(() => {
+      countdownDiv.style.display = 'none';
+    }, delayMs);
+  } else {
+    loopRecorder.startRecording();
+  }
+
+  showToast('🎙️ Recording started');
+}
+
+function stopLoopRecording() {
+  if (!loopRecorder || !loopRecordingStarted) return;
+
+  loopRecordingStarted = false;
+  const recordedBuffer = loopRecorder.stopRecording();
+
+  const recordBtn = document.getElementById('loopRecordStartBtn');
+  const stopBtn = document.getElementById('loopRecordStopBtn');
+  recordBtn.disabled = false;
+  recordBtn.style.opacity = '1';
+  stopBtn.disabled = true;
+  stopBtn.style.opacity = '0.5';
+
+  const sample = {
+    id: 'loop_' + Date.now(),
+    name: `Loop ${new Date().toLocaleTimeString()}`,
+    buffer: recordedBuffer,
+    duration: recordedBuffer.duration,
+    sampleRate: recordedBuffer.sampleRate,
+    channels: recordedBuffer.numberOfChannels,
+    timestamp: Date.now(),
+    bpm: bpm || 120,
+    isLoop: true
+  };
+
+  if (sampleLibrary) {
+    sampleLibrary.samples.set(sample.id, sample);
+    updateSampleList();
+  }
+
+  document.getElementById('recordingTimer').textContent = '00:00';
+  showToast(`✅ Loop recorded: ${recordedBuffer.duration.toFixed(2)}s`);
+}
+
+function startLoopRecordingAnimation() {
+  function animate() {
+    if (loopRecordingStarted && loopRecorder) {
+      const level = loopRecorder.getRecordingLevel();
+      document.getElementById('recordingLevelMeter').style.width = (level * 100) + '%';
+
+      const duration = loopRecorder.recordingStartTime > 0
+        ? audioCtx.currentTime - loopRecorder.recordingStartTime
+        : 0;
+      const minutes = Math.floor(duration / 60);
+      const seconds = Math.floor(duration % 60);
+      document.getElementById('recordingTimer').textContent =
+        String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+    }
+    loopRecordingAnimId = requestAnimationFrame(animate);
+  }
+  animate();
+}
+
+function toggleLoopRecordingPanel() {
+  const panel = document.getElementById('loopRecordingPanel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+
+  if (panel.style.display === 'block' && !loopRecorder) {
+    initLoopRecording();
+  }
+}
 </script>
 
 <!-- Cloud Sync Settings Modal -->
@@ -8447,6 +8670,57 @@ function toggleSampleLibraryPanel() {
   </button>
 </div>
 
+<!-- Phase 21b: Loop Recording Panel -->
+<div id="loopRecordingPanel" style="position:fixed;bottom:20px;right:800px;width:360px;background:var(--bg-card);border:1px solid rgba(200,100,255,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:70vh;overflow-y:auto;display:none">
+  <div style="font-size:13px;font-weight:600;color:var(--purple);margin-bottom:12px">🎙️ Loop Recording</div>
+
+  <!-- Recording Level Meter -->
+  <div style="margin-bottom:12px">
+    <div style="font-size:10px;color:var(--text-secondary);margin-bottom:4px">Input Level</div>
+    <div style="height:8px;background:rgba(0,0,0,0.3);border-radius:4px;overflow:hidden">
+      <div id="recordingLevelMeter" style="height:100%;background:linear-gradient(90deg, var(--lime), var(--yellow), var(--red));width:0%;transition:width 0.1s"></div>
+    </div>
+  </div>
+
+  <!-- Recording Controls -->
+  <div style="display:flex;gap:8px;margin-bottom:12px">
+    <button id="loopRecordStartBtn" onclick="startLoopRecording()" style="flex:1;padding:12px;background:rgba(100,200,255,0.15);border:1px solid var(--cyan);color:var(--cyan);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;transition:all 0.2s">
+      ⏺️ Record
+    </button>
+    <button id="loopRecordStopBtn" onclick="stopLoopRecording()" disabled style="flex:1;padding:12px;background:rgba(255,51,85,0.15);border:1px solid var(--red);color:var(--red);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;transition:all 0.2s;opacity:0.5">
+      ⏹️ Stop
+    </button>
+  </div>
+
+  <!-- Recording Timer -->
+  <div style="text-align:center;margin-bottom:12px">
+    <div id="recordingTimer" style="font-size:24px;font-weight:600;color:var(--cyan);font-family:monospace">00:00</div>
+    <div style="font-size:9px;color:var(--text-dim)">Max: 8 bars @ 120 BPM</div>
+  </div>
+
+  <!-- Feedback Control (Overdub) -->
+  <div style="margin-bottom:12px">
+    <label style="display:block;font-size:10px;color:var(--text-secondary);margin-bottom:6px">Overdub Feedback</label>
+    <input type="range" id="loopFeedbackSlider" min="0" max="1" step="0.05" value="0.5" oninput="updateLoopFeedback(this.value)" style="width:100%">
+    <div style="font-size:9px;color:var(--text-dim);text-align:center" id="loopFeedbackValue">50%</div>
+  </div>
+
+  <!-- Metronome Sync -->
+  <label style="display:flex;gap:8px;margin-bottom:12px;cursor:pointer;user-select:none">
+    <input type="checkbox" id="loopMetronomeSync" checked>
+    <span style="font-size:10px;color:var(--text-secondary)">Sync to Beat</span>
+  </label>
+
+  <!-- Recording Countdown -->
+  <div id="recordingCountdown" style="display:none;padding:8px;background:rgba(100,200,255,0.1);border-left:3px solid var(--cyan);border-radius:4px;font-size:11px;color:var(--cyan);margin-bottom:12px;text-align:center;font-weight:600">
+    Recording in 2 bars...
+  </div>
+
+  <button onclick="document.getElementById('loopRecordingPanel').style.display='none'" style="width:100%;padding:8px;background:rgba(100,120,140,0.1);border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">
+    ✕ Close
+  </button>
+</div>
+
 <!-- Phase 21a: Sample Library Panel -->
 <div id="sampleLibraryPanel" style="position:fixed;bottom:20px;right:420px;width:380px;background:var(--bg-card);border:1px solid rgba(100,200,255,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:70vh;overflow-y:auto;display:none">
   <div style="font-size:13px;font-weight:600;color:var(--cyan);margin-bottom:12px">📁 Sample Library</div>
@@ -8725,6 +8999,41 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   document.body.appendChild(aiMixingToggleBtn);
 
+  // Phase 21b: Loop Recording toggle button
+  const loopRecordingToggleBtn = document.createElement('button');
+  loopRecordingToggleBtn.id = 'loopRecordingToggleBtn';
+  loopRecordingToggleBtn.textContent = '🎙️';
+  loopRecordingToggleBtn.title = 'Loop Recording (Phase 21)';
+  loopRecordingToggleBtn.onclick = toggleLoopRecordingPanel;
+  loopRecordingToggleBtn.onmouseover = () => {
+    loopRecordingToggleBtn.style.transform = 'scale(1.1)';
+    loopRecordingToggleBtn.style.boxShadow = '0 0 30px rgba(200,100,255,0.4)';
+  };
+  loopRecordingToggleBtn.onmouseout = () => {
+    loopRecordingToggleBtn.style.transform = 'scale(1)';
+    loopRecordingToggleBtn.style.boxShadow = '0 0 20px rgba(200,100,255,0.2)';
+  };
+  loopRecordingToggleBtn.style.cssText = `
+    position: fixed;
+    bottom: 140px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(200,100,255,0.2), rgba(100,200,255,0.2));
+    border: 2px solid var(--purple);
+    color: var(--purple);
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    z-index: 899;
+    box-shadow: 0 0 20px rgba(200,100,255,0.2);
+  `;
+  document.body.appendChild(loopRecordingToggleBtn);
+
   // Phase 21a: Sample Library toggle button
   const sampleLibraryToggleBtn = document.createElement('button');
   sampleLibraryToggleBtn.id = 'sampleLibraryToggleBtn';
@@ -8739,6 +9048,25 @@ document.addEventListener('DOMContentLoaded', () => {
     sampleLibraryToggleBtn.style.transform = 'scale(1)';
     sampleLibraryToggleBtn.style.boxShadow = '0 0 20px rgba(100,200,255,0.2)';
   };
+  sampleLibraryToggleBtn.style.cssText = `
+    position: fixed;
+    bottom: 200px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(100,200,255,0.2), rgba(200,100,255,0.2));
+    border: 2px solid var(--cyan);
+    color: var(--cyan);
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    z-index: 899;
+    box-shadow: 0 0 20px rgba(100,200,255,0.2);
+  `;
   document.body.appendChild(sampleLibraryToggleBtn);
 
   // Initialize Performance Monitoring
