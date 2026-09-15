@@ -743,6 +743,87 @@ body::before {
         <button class="ai-pat-btn" onclick="loadPattern('random')">🎲 Random</button>
       </div>
 
+      <!-- Phase 20b: AI Pattern Generation & Music Theory -->
+      <div style="margin-top:12px;padding:8px;background:rgba(0,240,255,0.05);border-radius:4px;border:1px solid rgba(0,240,255,0.2)">
+        <div style="font-size:11px;color:var(--cyan);font-weight:600;margin-bottom:8px">🤖 Generative AI</div>
+
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <button class="ai-pat-btn" id="sketchToggle" onclick="toggleSketchMode()" style="flex:1;font-size:10px">✎ Sketch Mode</button>
+          <button class="ai-pat-btn" onclick="generateFromSketch()" style="flex:1;font-size:10px">🧬 Generate</button>
+        </div>
+
+        <div style="font-size:10px;margin-bottom:8px">
+          <div style="margin-bottom:4px">Scale: <select id="scaleSelector" style="width:120px;font-size:10px;padding:2px">
+            <option>Major</option>
+            <option>Minor</option>
+            <option>Dorian</option>
+            <option>Phrygian</option>
+            <option>Pentatonic</option>
+            <option>Chromatic</option>
+          </select></div>
+
+          <div style="margin-bottom:4px">Key: <select id="keySelector" style="width:100px;font-size:10px;padding:2px">
+            <option>C</option><option>C#</option><option>D</option><option>D#</option>
+            <option>E</option><option>F</option><option>F#</option><option>G</option>
+            <option>G#</option><option>A</option><option>A#</option><option>B</option>
+          </select></div>
+
+          <div style="margin-bottom:8px">
+            <label style="display:flex;align-items:center;gap:4px;font-size:10px">
+              <input type="checkbox" id="enforceScaleCheck" checked>
+              Enforce Scale
+            </label>
+            <label style="display:flex;align-items:center;gap:4px;font-size:10px">
+              <input type="checkbox" id="enforceHarmonyCheck">
+              Enforce Harmony
+            </label>
+          </div>
+
+          <button class="ai-pat-btn" onclick="quantizeCurrentPattern()" style="width:100%;font-size:10px;padding:4px;margin-bottom:8px">🎵 Quantize</button>
+        </div>
+
+        <div id="generationStatus" style="font-size:9px;color:var(--text-dim);padding:4px;border-radius:2px">
+          Ready for generation
+        </div>
+      </div>
+
+      <!-- Phase 20d: Probabilistic Sequencing & Music Theory Engine -->
+      <div style="margin-top:12px;padding:8px;background:rgba(255,136,68,0.05);border-radius:4px;border:1px solid rgba(255,136,68,0.2)">
+        <div style="font-size:11px;color:var(--orange);font-weight:600;margin-bottom:8px">🎲 Probabilistic Mode</div>
+
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <button class="ai-pat-btn" id="probabilityToggle" onclick="toggleProbabilityMode()" style="flex:1;font-size:10px">📊 Probability Mode</button>
+          <button class="ai-pat-btn" onclick="randomizeWithConstraints()" style="flex:1;font-size:10px">🔀 Randomize</button>
+        </div>
+
+        <div style="font-size:10px;margin-bottom:6px">
+          <label style="display:flex;align-items:center;gap:4px;font-size:10px;margin-bottom:4px">
+            <input type="checkbox" id="applyMusicTheory" checked>
+            Apply Music Theory Rules
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:10px">
+            <input type="checkbox" id="useChordBias">
+            Chord-Based Bias
+          </label>
+        </div>
+
+        <div style="font-size:9px;margin-bottom:6px">
+          <div style="margin-bottom:2px">Probability Density:</div>
+          <input type="range" id="densitySlider" min="0" max="100" value="50" style="width:100%;height:6px" oninput="updateDensityDisplay()">
+          <div style="display:flex;justify-content:space-between;font-size:8px;color:var(--text-dim);margin-top:2px">
+            <span>Sparse</span>
+            <span id="densityValue">50%</span>
+            <span>Dense</span>
+          </div>
+        </div>
+
+        <button class="ai-pat-btn" onclick="applyMusicTheoryRules()" style="width:100%;font-size:10px;padding:4px;margin-bottom:6px">🎼 Apply Rules</button>
+
+        <div id="probabilityStatus" style="font-size:9px;color:var(--text-dim);padding:4px;border-radius:2px">
+          Ready for probabilistic generation
+        </div>
+      </div>
+
       <!-- AI Generate Panel -->
       <div id="aiGeneratePanel" style="margin-top:16px;padding:12px;background:rgba(0,240,255,0.05);border:1px solid rgba(0,240,255,0.2);border-radius:8px">
         <div style="font-size:11px;font-weight:600;color:var(--cyan);margin-bottom:8px">🤖 Generate from Prompt</div>
@@ -773,6 +854,7 @@ body::before {
           <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImport(this.files[0])">
         </div>
         <div id="patternLibraryList" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);font-size:10px"></div>
+        <div id="patternQueueDisplay" style="margin-top:8px;border:1px solid rgba(0,240,255,0.2);border-radius:4px;background:rgba(0,240,255,0.02)"></div>
         <div style="margin-top:8px;text-align:right;font-size:9px;color:var(--text-dim)">Undo: Ctrl+Z | Redo: Ctrl+Shift+Z</div>
       </div>
 
@@ -971,6 +1053,123 @@ body::before {
         </div>
 
         <button class="ai-pat-btn" onclick="initMIDI()" style="width:100%;padding:6px;font-size:10px">Detect Controller</button>
+      </div>
+
+      <!-- Phase 19a: Modulation Rack Panel -->
+      <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--lime);font-weight:600;margin-bottom:12px">⚙️ Modulation</div>
+
+        <label style="display:flex;gap:8px;align-items:center;margin-bottom:10px;cursor:pointer">
+          <input type="checkbox" id="modulationEnabled" onchange="toggleModulation()">
+          <span style="font-size:11px">Enable Modulation</span>
+        </label>
+
+        <div id="modulationRackList" style="font-size:10px;max-height:150px;overflow-y:auto;margin-bottom:12px">
+          <!-- Modulations will be listed here -->
+        </div>
+
+        <button class="ai-pat-btn" onclick="openModulationModal()" style="width:100%;padding:6px;font-size:10px;margin-bottom:12px">+ Add Modulation</button>
+
+        <!-- LFO Preset Section -->
+        <div style="margin-top:12px;padding:10px;background:rgba(170,255,0,0.05);border-radius:4px">
+          <label style="font-size:10px;font-weight:600;margin-bottom:8px;display:block">Quick LFO</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:9px">
+            <div>
+              <label>Rate (Hz): <span id="lfoRateDisplay">1.0</span></label>
+              <input type="range" id="quickLfoRate" min="0.1" max="20" value="1.0" step="0.1" oninput="updateQuickLFO()" style="width:100%">
+            </div>
+            <div>
+              <label>Depth: <span id="lfoDepthDisplay">0.5</span></label>
+              <input type="range" id="quickLfoDepth" min="0" max="1" value="0.5" step="0.05" oninput="updateQuickLFO()" style="width:100%">
+            </div>
+          </div>
+          <div style="margin-top:8px">
+            <label>Waveform:</label>
+            <select id="quickLfoWave" onchange="updateQuickLFO()" style="width:100%;font-size:9px;padding:2px">
+              <option value="sine">Sine</option>
+              <option value="saw">Sawtooth</option>
+              <option value="square">Square</option>
+              <option value="triangle">Triangle</option>
+            </select>
+          </div>
+          <button class="ai-pat-btn" onclick="createQuickLFO()" style="width:100%;padding:4px;font-size:9px;margin-top:8px">Create LFO</button>
+        </div>
+      </div>
+
+      <!-- Phase 19b: Macro Controls Panel -->
+      <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:12px">🎚️ Macros</div>
+
+        <div id="macroControlsPanel" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <!-- 8 macro knobs will be generated here -->
+        </div>
+      </div>
+
+      <!-- Phase 19d: Performance Recording Panel -->
+      <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--red);font-weight:600;margin-bottom:12px">🎙️ Recording</div>
+
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button class="ai-pat-btn" id="recordBtn" onclick="startPerformanceRecording()" style="flex:1;padding:6px;font-size:10px">● Record</button>
+          <button class="ai-pat-btn" id="stopRecordBtn" onclick="stopPerformanceRecording()" style="flex:1;padding:6px;font-size:10px;display:none">■ Stop</button>
+        </div>
+
+        <div id="recordingStatus" style="font-size:10px;padding:8px;background:rgba(255,51,85,0.05);border-radius:4px;margin-bottom:12px;color:var(--text-secondary)">
+          Ready
+        </div>
+
+        <div id="recordingsList" style="font-size:9px;max-height:100px;overflow-y:auto">
+          <!-- Saved recordings listed here -->
+        </div>
+      </div>
+
+      <!-- Phase 20a: Real-Time Spectral & Waveform Visualization -->
+      <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--cyan);font-weight:600;margin-bottom:12px">📊 Visual Performance</div>
+
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button class="ai-pat-btn" id="specToggle" onclick="toggleSpectralDisplay()" style="flex:1;padding:6px;font-size:10px">👁️ Spectrum</button>
+          <button class="ai-pat-btn" id="waveToggle" onclick="toggleWaveformDisplay()" style="flex:1;padding:6px;font-size:10px">〰️ Waveform</button>
+        </div>
+
+        <div id="visualizationPanel" style="display:none;background:rgba(0,240,255,0.02);border:1px solid rgba(0,240,255,0.2);border-radius:4px;padding:8px;margin-bottom:12px">
+          <canvas id="spectralCanvas" width="280" height="120" style="display:none;width:100%;height:120px;background:#000;border-radius:2px;margin-bottom:8px;border:1px solid rgba(0,240,255,0.1)"></canvas>
+          <canvas id="waveformCanvas" width="280" height="80" style="display:none;width:100%;height:80px;background:#000;border-radius:2px;border:1px solid rgba(0,240,255,0.1)"></canvas>
+        </div>
+
+        <div id="performanceMetricsPanel" style="font-size:9px;padding:8px;background:rgba(0,240,255,0.05);border-radius:4px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span>CPU:</span>
+            <span id="metricsCPU" style="color:var(--lime)">—%</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span>Voices:</span>
+            <span id="metricsVoices" style="color:var(--cyan)">0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span>Modulations:</span>
+            <span id="metricsModulation" style="color:var(--magenta)">0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+            <span>Latency:</span>
+            <span id="metricsLatency" style="color:var(--text-dim)">—ms</span>
+          </div>
+
+          <!-- Phase 20c: Automation Visualization Displays -->
+          <div style="margin-top:8px;border-top:1px solid rgba(0,240,255,0.1);padding-top:6px">
+            <div style="font-size:8px;color:var(--cyan);font-weight:600;margin-bottom:4px">Automation Curve</div>
+            <canvas id="automationCurveCanvas" width="280" height="120" style="width:100%;height:120px;background:rgba(0,0,0,0.3);border-radius:2px;border:1px solid rgba(0,240,255,0.1)"></canvas>
+
+            <div style="font-size:8px;color:var(--orange);font-weight:600;margin-top:6px;margin-bottom:4px">LFO Waveform</div>
+            <canvas id="lfoPreviewCanvas" width="280" height="80" style="width:100%;height:80px;background:rgba(0,0,0,0.3);border-radius:2px;border:1px solid rgba(255,136,68,0.1)"></canvas>
+
+            <div style="font-size:8px;color:var(--orange);font-weight:600;margin-top:6px;margin-bottom:4px">Envelope (ADSR)</div>
+            <canvas id="envelopeCanvas" width="280" height="100" style="width:100%;height:100px;background:rgba(0,0,0,0.3);border-radius:2px;border:1px solid rgba(255,136,68,0.1)"></canvas>
+
+            <div style="font-size:8px;color:var(--lime);font-weight:600;margin-top:6px;margin-bottom:4px">Performance Timeline</div>
+            <canvas id="timelineCanvas" width="280" height="60" style="width:100%;height:60px;background:rgba(0,0,0,0.3);border-radius:2px;border:1px solid rgba(0,200,100,0.1)"></canvas>
+          </div>
+        </div>
       </div>
       </div>
     </div>
@@ -1316,6 +1515,32 @@ let xdjPlayheadStep = 0;
 let lastXDJSyncTime = null;
 let xdjPadMap = {};
 
+// Phase 19: Live Performance Engine & Advanced Modulation
+let lfoOscillators = [];
+let envelopeGenerators = [];
+let midiLearnActive = null;
+let currentRecording = null;
+let recordedPerformances = {};
+let macroValues = new Array(8).fill(0);
+let patternQueue = [];
+let sequencerState = {
+  isRecording: false,
+  playbackMode: 'live',
+  crossfade: { active: false, startBar: 0, duration: 4, sourcePattern: null, targetPattern: null }
+};
+
+// === PHASE 20: GENERATIVE AI & VISUAL SUITE ===
+let spectralAnalyzer = null;
+let spectralCanvas = null;
+let waveformCanvas = null;
+let spectralCtx = null;
+let waveformCtx = null;
+let spectralAnimId = null;
+let automationHistory = [];
+let generationRules = {};
+let probabilityMode = false;
+let probabilityMap = new Array(STEPS).fill(1.0);
+
 // Phase 9: AI Remix Generator
 let remixHistory = [];
 let currentRemixPair = null;
@@ -1399,6 +1624,544 @@ let performanceState = {
   warningThreshold: 80,  // CPU % that triggers warning
   criticalThreshold: 95  // CPU % that triggers critical warning
 };
+
+// Phase 19a: LFO Oscillator Class
+class LFOOscillator {
+  constructor(frequency = 1.0, waveshape = 'sine') {
+    this.frequency = frequency;
+    this.waveshape = waveshape;
+    this.phase = 0;
+    this.active = true;
+  }
+
+  tick(deltaTime) {
+    const cyclesPerSecond = this.frequency;
+    this.phase = (this.phase + cyclesPerSecond * deltaTime * 2 * Math.PI) % (2 * Math.PI);
+  }
+
+  getValue() {
+    const p = this.phase / (2 * Math.PI);
+    switch (this.waveshape) {
+      case 'sine':
+        return Math.sin(this.phase);
+      case 'saw':
+        return 2 * p - 1;
+      case 'square':
+        return p < 0.5 ? 1 : -1;
+      case 'triangle':
+        return p < 0.5 ? 4 * p - 1 : 3 - 4 * p;
+      default:
+        return Math.sin(this.phase);
+    }
+  }
+}
+
+// Phase 19a: Envelope Generator Class
+class EnvelopeGenerator {
+  constructor(attackTime = 0.01, decayTime = 0.1, sustainLevel = 0.7, releaseTime = 0.5) {
+    this.attackTime = Math.max(0.001, attackTime);
+    this.decayTime = Math.max(0.001, decayTime);
+    this.sustainLevel = Math.max(0, Math.min(1, sustainLevel));
+    this.releaseTime = Math.max(0.001, releaseTime);
+    this.state = 'idle';
+    this.stateStartTime = 0;
+    this.currentLevel = 0;
+  }
+
+  trigger(currentTime = 0) {
+    this.state = 'attack';
+    this.stateStartTime = currentTime;
+    this.currentLevel = 0;
+  }
+
+  release(currentTime = 0) {
+    if (this.state !== 'idle') {
+      this.state = 'release';
+      this.stateStartTime = currentTime;
+    }
+  }
+
+  getValue(currentTime = 0) {
+    if (this.state === 'idle') return 0;
+    const elapsed = currentTime - this.stateStartTime;
+    switch (this.state) {
+      case 'attack':
+        if (elapsed >= this.attackTime) {
+          this.state = 'decay';
+          this.stateStartTime = currentTime;
+          return 1;
+        }
+        return elapsed / this.attackTime;
+      case 'decay':
+        if (elapsed >= this.decayTime) {
+          this.state = 'sustain';
+          return this.sustainLevel;
+        }
+        return 1 - (elapsed / this.decayTime) * (1 - this.sustainLevel);
+      case 'sustain':
+        return this.sustainLevel;
+      case 'release':
+        if (elapsed >= this.releaseTime) {
+          this.state = 'idle';
+          return 0;
+        }
+        return this.sustainLevel * (1 - elapsed / this.releaseTime);
+      default:
+        return 0;
+    }
+  }
+}
+
+// === PHASE 20b: PATTERN GENERATION ENGINE ===
+
+class MusicalScale {
+  constructor(notes, name) {
+    this.notes = notes;
+    this.name = name;
+  }
+
+  isInScale(midiNote) {
+    const noteClass = midiNote % 12;
+    return this.notes.includes(noteClass);
+  }
+
+  nearestInScale(midiNote) {
+    const noteClass = midiNote % 12;
+    const octave = Math.floor(midiNote / 12);
+
+    if (this.isInScale(midiNote)) return midiNote;
+
+    let nearest = this.notes[0] + octave * 12;
+    let minDist = Math.abs(midiNote - nearest);
+
+    for (const note of this.notes) {
+      const candidate = note + octave * 12;
+      const dist = Math.abs(midiNote - candidate);
+      if (dist < minDist) {
+        minDist = dist;
+        nearest = candidate;
+      }
+
+      if (midiNote < candidate && note > noteClass) break;
+    }
+
+    return nearest;
+  }
+
+  static Major = new MusicalScale([0, 2, 4, 5, 7, 9, 11], 'Major');
+  static Minor = new MusicalScale([0, 2, 3, 5, 7, 8, 10], 'Minor');
+  static Dorian = new MusicalScale([0, 2, 3, 5, 7, 9, 10], 'Dorian');
+  static Phrygian = new MusicalScale([0, 1, 3, 5, 7, 8, 10], 'Phrygian');
+  static Pentatonic = new MusicalScale([0, 2, 4, 7, 9], 'Pentatonic');
+  static Chromatic = new MusicalScale([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 'Chromatic');
+}
+
+class ChordProgression {
+  constructor(chords) {
+    this.chords = chords;
+    this.currentIndex = 0;
+  }
+
+  getChordAtBeat(beatNumber) {
+    let totalBeats = 0;
+    for (const chord of this.chords) {
+      totalBeats += chord.duration || 4;
+      if (beatNumber < totalBeats) return chord;
+    }
+    return this.chords[this.chords.length - 1];
+  }
+
+  getNextChord() {
+    const current = this.chords[this.currentIndex];
+    this.currentIndex = (this.currentIndex + 1) % this.chords.length;
+    return current;
+  }
+
+  static IMajor = new ChordProgression([
+    {root: 0, type: 'major', duration: 4},
+    {root: 5, type: 'major', duration: 4},
+    {root: 7, type: 'major', duration: 4},
+    {root: 0, type: 'major', duration: 4}
+  ]);
+
+  static iiVI = new ChordProgression([
+    {root: 2, type: 'minor', duration: 4},
+    {root: 7, type: 'major', duration: 4},
+    {root: 0, type: 'major', duration: 4},
+  ]);
+}
+
+function generatePatternFromSketch(sketchGrid, scale, rules = {}) {
+  const generated = sketchGrid.map(row => [...row]);
+  const sketchDensity = sketchGrid.flat().filter(s => s.active).length / sketchGrid.flat().length;
+
+  for (let i = 0; i < generated.length; i++) {
+    for (let j = 0; j < generated[i].length; j++) {
+      if (!generated[i][j].active && Math.random() < sketchDensity) {
+        const octave = Math.floor(Math.random() * 3) + 3;
+        let note = scale.notes[Math.floor(Math.random() * scale.notes.length)];
+
+        if (rules.enforceHarmony && rules.chord) {
+          const chordTones = rules.chord.type === 'major' ? [0, 4, 7] : [0, 3, 7];
+          note = (rules.chord.root + chordTones[Math.floor(Math.random() * chordTones.length)]) % 12;
+        }
+
+        generated[i][j].active = true;
+        generated[i][j].note = note + octave * 12;
+        generated[i][j].velocity = 0.5 + Math.random() * 0.5;
+      }
+    }
+  }
+
+  return generated;
+}
+
+function quantizeToScale(grid, scale) {
+  for (let i = 0; i < grid.length; i++) {
+    for (let j = 0; j < grid[i].length; j++) {
+      if (grid[i][j].active && grid[i][j].note !== undefined) {
+        grid[i][j].note = scale.nearestInScale(grid[i][j].note);
+      }
+    }
+  }
+  return grid;
+}
+
+function applyChordHarmony(grid, chordProgression, stepsPerChord = 4) {
+  let stepCounter = 0;
+
+  for (let i = 0; i < grid.length; i++) {
+    for (let j = 0; j < grid[i].length; j++) {
+      if (grid[i][j].active && grid[i][j].note !== undefined) {
+        const chord = chordProgression.getChordAtBeat(stepCounter);
+        const chordTones = chord.type === 'major' ? [0, 4, 7] : [0, 3, 7];
+
+        if (Math.random() < 0.7) {
+          const tone = chordTones[Math.floor(Math.random() * chordTones.length)];
+          const noteClass = (chord.root + tone) % 12;
+          const octave = Math.floor(grid[i][j].note / 12);
+          grid[i][j].note = noteClass + octave * 12;
+        }
+      }
+
+      stepCounter++;
+      if (stepCounter >= stepsPerChord) {
+        stepCounter = 0;
+        chordProgression.currentIndex = (chordProgression.currentIndex + 1) % chordProgression.chords.length;
+      }
+    }
+  }
+
+  return grid;
+}
+
+function generateProbabilisticPattern(baseGrid, probabilityMap) {
+  const generated = baseGrid.map(row => [...row]);
+
+  for (let i = 0; i < generated.length; i++) {
+    for (let j = 0; j < generated[i].length; j++) {
+      const prob = probabilityMap[j] || 1.0;
+      if (Math.random() > prob) {
+        generated[i][j].active = false;
+      }
+    }
+  }
+
+  return generated;
+}
+
+// === PHASE 20a: SPECTRAL ANALYZER ===
+class SpectralAnalyzer {
+  constructor(analyserNode, bands = 64) {
+    this.analyser = analyserNode;
+    this.bands = bands;
+    this.fftSize = 2048;
+    this.analyser.fftSize = this.fftSize;
+    this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+    this.frequencyData = new Array(bands).fill(0);
+    this.smoothingFactor = 0.85;
+    this.peaks = [];
+  }
+
+  getFrequencyData() {
+    this.analyser.getByteFrequencyData(this.dataArray);
+    const binWidth = this.dataArray.length / this.bands;
+
+    for (let i = 0; i < this.bands; i++) {
+      let sum = 0;
+      for (let j = 0; j < binWidth; j++) {
+        const idx = Math.floor(i * binWidth + j);
+        if (idx < this.dataArray.length) sum += this.dataArray[idx];
+      }
+      const avg = (sum / binWidth) / 255;
+      this.frequencyData[i] = this.frequencyData[i] * this.smoothingFactor + avg * (1 - this.smoothingFactor);
+    }
+
+    return this.frequencyData;
+  }
+
+  getPeaks(count = 3) {
+    const data = this.frequencyData;
+    const peaks = [];
+
+    for (let i = 0; i < data.length; i++) {
+      if (data[i] > 0.3) {
+        peaks.push({index: i, value: data[i]});
+      }
+    }
+
+    peaks.sort((a, b) => b.value - a.value);
+    return peaks.slice(0, count);
+  }
+
+  indexToFrequency(index) {
+    const nyquist = 20000;
+    return (index / this.bands) * nyquist;
+  }
+}
+
+// === PHASE 20c: AUTOMATION VISUALIZATION & PERFORMANCE DASHBOARD ===
+
+class AutomationCurveVisualizer {
+  constructor(width = 280, height = 120) {
+    this.width = width;
+    this.height = height;
+    this.points = [];
+    this.min = 0;
+    this.max = 1;
+    this.lineWidth = 2;
+  }
+
+  addPoint(time, value) {
+    this.points.push({time, value});
+    this.points.sort((a, b) => a.time - b.time);
+    if (this.points.length > 100) this.points.shift();
+  }
+
+  clear() {
+    this.points = [];
+  }
+
+  draw(ctx) {
+    ctx.fillStyle = 'rgba(20, 20, 30, 0.6)';
+    ctx.fillRect(0, 0, this.width, this.height);
+
+    if (this.points.length === 0) return;
+
+    const range = this.max - this.min;
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.8)';
+    ctx.lineWidth = this.lineWidth;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    if (this.points.length > 0) {
+      const tMin = Math.min(...this.points.map(p => p.time));
+      const tMax = Math.max(...this.points.map(p => p.time));
+      const tRange = tMax - tMin || 1;
+
+      ctx.beginPath();
+      for (let i = 0; i < this.points.length; i++) {
+        const {time, value} = this.points[i];
+        const x = ((time - tMin) / tRange) * this.width;
+        const y = this.height - ((value - this.min) / range) * this.height;
+
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(0, 240, 255, 0.4)';
+      for (const {time, value} of this.points) {
+        const x = ((time - tMin) / tRange) * this.width;
+        const y = this.height - ((value - this.min) / range) * this.height;
+        ctx.fillRect(x - 2, y - 2, 4, 4);
+      }
+    }
+  }
+}
+
+class LFOWaveformPreview {
+  constructor(width = 280, height = 80) {
+    this.width = width;
+    this.height = height;
+  }
+
+  draw(ctx, frequency, waveshape = 'sine', amplitude = 0.5, samples = 64) {
+    ctx.fillStyle = 'rgba(20, 20, 30, 0.6)';
+    ctx.fillRect(0, 0, this.width, this.height);
+
+    const period = 1 / frequency;
+    const sampleRate = samples / period;
+    const centerY = this.height / 2;
+
+    ctx.strokeStyle = 'rgba(255, 136, 68, 0.9)';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    ctx.beginPath();
+    for (let i = 0; i < samples; i++) {
+      const t = (i / samples) * period;
+      const phase = (t * frequency * 2 * Math.PI) % (2 * Math.PI);
+
+      let value = 0;
+      if (waveshape === 'sine') value = Math.sin(phase);
+      else if (waveshape === 'saw') value = 2 * (phase / (2 * Math.PI)) - 1;
+      else if (waveshape === 'square') value = phase < Math.PI ? 1 : -1;
+      else if (waveshape === 'triangle') value = Math.abs((4 * (phase / (2 * Math.PI) - 0.25)) % 2 - 1) - 0.5;
+
+      const x = (i / samples) * this.width;
+      const y = centerY - value * amplitude * (this.height / 2);
+
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(200, 200, 200, 0.3)';
+    ctx.beginPath();
+    ctx.moveTo(0, centerY);
+    ctx.lineTo(this.width, centerY);
+    ctx.stroke();
+  }
+}
+
+class EnvelopeVisualizer {
+  constructor(width = 280, height = 100) {
+    this.width = width;
+    this.height = height;
+    this.attack = 0.2;
+    this.decay = 0.3;
+    this.sustain = 0.6;
+    this.release = 0.3;
+  }
+
+  draw(ctx, isActive = false) {
+    ctx.fillStyle = 'rgba(20, 20, 30, 0.6)';
+    ctx.fillRect(0, 0, this.width, this.height);
+
+    const total = this.attack + this.decay + this.release + 0.5;
+    const attackX = (this.attack / total) * this.width;
+    const decayX = attackX + (this.decay / total) * this.width;
+    const sustainX = decayX + (0.5 / total) * this.width;
+
+    const bottomY = this.height - 10;
+    const attackY = this.height - 10;
+    const decayY = bottomY - (this.sustain * (this.height - 20));
+    const releaseY = bottomY;
+
+    ctx.strokeStyle = isActive ? 'rgba(0, 240, 255, 0.9)' : 'rgba(255, 136, 68, 0.7)';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    ctx.beginPath();
+    ctx.moveTo(10, bottomY);
+    ctx.lineTo(attackX, attackY);
+    ctx.lineTo(decayX, decayY);
+    ctx.lineTo(sustainX, decayY);
+    ctx.lineTo(sustainX + (this.release / total) * this.width, releaseY);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(200, 200, 200, 0.2)';
+    ctx.font = '9px monospace';
+    ctx.fillText(`A:${(this.attack*1000|0)}ms D:${(this.decay*1000|0)}ms S:${(this.sustain*100|0)}% R:${(this.release*1000|0)}ms`, 5, 10);
+  }
+
+  setADSR(a, d, s, r) {
+    this.attack = Math.max(0, Math.min(1, a));
+    this.decay = Math.max(0, Math.min(1, d));
+    this.sustain = Math.max(0, Math.min(1, s));
+    this.release = Math.max(0, Math.min(1, r));
+  }
+}
+
+class PerformanceTimeline {
+  constructor(width = 280, height = 60) {
+    this.width = width;
+    this.height = height;
+    this.events = [];
+    this.playheadTime = 0;
+  }
+
+  addEvent(time, type, value) {
+    this.events.push({time, type, value});
+    if (this.events.length > 50) this.events.shift();
+  }
+
+  clear() {
+    this.events = [];
+  }
+
+  setPlayheadTime(time) {
+    this.playheadTime = time;
+  }
+
+  draw(ctx, minTime = 0, maxTime = 10) {
+    ctx.fillStyle = 'rgba(20, 20, 30, 0.6)';
+    ctx.fillRect(0, 0, this.width, this.height);
+
+    const range = maxTime - minTime || 1;
+    const playheadX = ((this.playheadTime - minTime) / range) * this.width;
+
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
+    ctx.beginPath();
+    ctx.moveTo(playheadX, 0);
+    ctx.lineTo(playheadX, this.height);
+    ctx.stroke();
+
+    for (const event of this.events) {
+      const x = ((event.time - minTime) / range) * this.width;
+      if (x >= 0 && x <= this.width) {
+        ctx.fillStyle = event.type === 'note' ? 'rgba(100, 200, 255, 0.7)' : 'rgba(255, 136, 68, 0.7)';
+        ctx.fillRect(x - 1, 0, 2, this.height);
+      }
+    }
+  }
+}
+
+// Phase 20c: Initialize automation visualizers
+let automationVisualizers = {};
+let lfoPreview = null;
+let envelopeViz = null;
+let performanceTimeline = null;
+
+function initAutomationVisualizers() {
+  const container = document.getElementById('performanceMetricsPanel');
+  if (!container) return;
+
+  lfoPreview = new LFOWaveformPreview(280, 80);
+  envelopeViz = new EnvelopeVisualizer(280, 100);
+  performanceTimeline = new PerformanceTimeline(280, 60);
+
+  automationVisualizers = {
+    automation: new AutomationCurveVisualizer(280, 120),
+    lfo: lfoPreview,
+    envelope: envelopeViz,
+    timeline: performanceTimeline
+  };
+}
+
+function updateAutomationVisualization() {
+  if (!automationVisualizers.automation || !currentRecording) return;
+
+  const recording = currentRecording;
+  automationVisualizers.automation.clear();
+
+  for (const event of recording.events || []) {
+    if (event.parameter) {
+      automationVisualizers.automation.addPoint(event.time, event.value || 0.5);
+    }
+  }
+}
+
+function drawAutomationDisplays(canvasId, vizKey) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !automationVisualizers[vizKey]) return;
+
+  const ctx = canvas.getContext('2d');
+  if (ctx) automationVisualizers[vizKey].draw(ctx);
+}
 
 // Phase 15a: Voice Pool Architecture (Hybrid Approach)
 // Note: Web Audio API limitation - oscillators/bufferSources are one-time-use
@@ -1870,6 +2633,84 @@ function togglePlay() {
   }
 }
 
+// Phase 19a: Apply Modulation to Synth Parameters
+function applyModulation(currentTime = audioCtx.currentTime) {
+  if (!currentPattern || !currentPattern.modulationRack || currentPattern.modulationRack.length === 0) {
+    return;
+  }
+
+  for (const modulation of currentPattern.modulationRack) {
+    if (!modulation.active) continue;
+
+    let modValue = 0;
+
+    if (modulation.source === 'lfo') {
+      const lfo = lfoOscillators.find(l => l.id === modulation.lfoId);
+      if (lfo) {
+        lfo.tick(1 / 60); // Assuming 60 FPS update
+        modValue = lfo.oscillator.getValue();
+      }
+    } else if (modulation.source === 'envelope') {
+      const env = envelopeGenerators.find(e => e.id === modulation.envId);
+      if (env) {
+        modValue = env.getValue(currentTime);
+      }
+    } else if (modulation.source === 'random') {
+      modValue = Math.random() * 2 - 1;
+    }
+
+    // Scale modulation by depth
+    const scaledValue = modValue * modulation.depth;
+
+    // Apply to target parameter
+    applyModulationToParameter(modulation.target, scaledValue, modulation.baseValue);
+  }
+}
+
+function applyModulationToParameter(target, modValue, baseValue = 0) {
+  if (!audioCtx) return;
+
+  const scaledMod = modValue; // -1 to 1 range
+
+  switch (target) {
+    case 'filterCutoff':
+      if (voicePool.filterNodes.length > 0) {
+        const minFreq = 20;
+        const maxFreq = 20000;
+        const range = maxFreq - minFreq;
+        const frequency = minFreq + (range * (0.5 + scaledMod * 0.5));
+        voicePool.filterNodes.forEach(f => {
+          if (f && f.frequency) f.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+        });
+      }
+      break;
+    case 'filterResonance':
+      if (voicePool.filterNodes.length > 0) {
+        const q = Math.max(0.1, Math.min(40, 20 + scaledMod * 20));
+        voicePool.filterNodes.forEach(f => {
+          if (f && f.Q) f.Q.setValueAtTime(q, audioCtx.currentTime);
+        });
+      }
+      break;
+    case 'volume':
+      if (voicePool.gainNodes.length > 0) {
+        const gain = Math.max(0, Math.min(1, 0.5 + scaledMod * 0.5));
+        voicePool.gainNodes.forEach(g => {
+          if (g && g.gain) g.gain.setValueAtTime(gain, audioCtx.currentTime);
+        });
+      }
+      break;
+    case 'pan':
+      if (voicePool.pannerNodes.length > 0) {
+        const panValue = Math.max(-1, Math.min(1, scaledMod));
+        voicePool.pannerNodes.forEach(p => {
+          if (p && p.pan) p.pan.setValueAtTime(panValue, audioCtx.currentTime);
+        });
+      }
+      break;
+  }
+}
+
 function startSequencer() {
   updateSchedulerCache(); // Ensure cache is fresh before scheduling
   const stepDuration = schedulerCache.stepDuration;
@@ -1891,6 +2732,14 @@ function startSequencer() {
 
     // Phase 16c: Update LFO modulation
     updateLFO(deltaTime);
+
+    // Phase 19a: Update modulation engine
+    applyModulation(now);
+
+    // Phase 19c: Update pattern crossfade
+    if (sequencerState.crossfade.active) {
+      performCrossfade(now);
+    }
 
     while (nextStepTime < now + lookahead) {
       // Phase 15c: Prevent double-scheduling same step time
@@ -3214,6 +4063,912 @@ function updateMIDIStatus(message) {
   console.log(`MIDI: ${message}`);
 }
 
+// === PHASE 19: MODULATION & PERFORMANCE ENGINE ===
+
+function toggleModulation() {
+  const checkbox = document.getElementById('modulationEnabled');
+  if (!currentPattern) {
+    checkbox.checked = false;
+    alert('Load or create a pattern first');
+    return;
+  }
+  if (!currentPattern.modulationRack) {
+    currentPattern.modulationRack = [];
+  }
+}
+
+function openModulationModal() {
+  if (!currentPattern) {
+    alert('Load or create a pattern first');
+    return;
+  }
+  if (!currentPattern.modulationRack) {
+    currentPattern.modulationRack = [];
+  }
+
+  const sourceType = prompt('Modulation source?\n1: LFO\n2: Envelope\n3: Random', '1');
+  if (!sourceType) return;
+
+  const target = prompt('Target parameter?\n1: filterCutoff\n2: filterResonance\n3: volume\n4: pan', '1');
+  const depthStr = prompt('Modulation depth (0-1):', '0.5');
+
+  if (!target || !depthStr) return;
+
+  const targetMap = { '1': 'filterCutoff', '2': 'filterResonance', '3': 'volume', '4': 'pan' };
+  const sourceMap = { '1': 'lfo', '2': 'envelope', '3': 'random' };
+
+  const modulation = {
+    id: Math.random().toString(36).substr(2, 9),
+    source: sourceMap[sourceType] || 'lfo',
+    target: targetMap[target] || 'filterCutoff',
+    depth: parseFloat(depthStr) || 0.5,
+    active: true,
+    baseValue: 0
+  };
+
+  if (sourceType === '1') {
+    modulation.lfoId = lfoOscillators.length > 0 ? lfoOscillators[0].id : null;
+  }
+
+  currentPattern.modulationRack.push(modulation);
+  updateModulationRackUI();
+  saveCurrentPattern();
+}
+
+function updateModulationRackUI() {
+  const list = document.getElementById('modulationRackList');
+  if (!list || !currentPattern || !currentPattern.modulationRack) return;
+
+  list.innerHTML = '';
+  for (const mod of currentPattern.modulationRack) {
+    const div = document.createElement('div');
+    div.style.cssText = 'padding:8px;background:rgba(170,255,0,0.05);border-radius:3px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center';
+    div.innerHTML = `
+      <span>${mod.source} → ${mod.target}<br><small>Depth: ${(mod.depth * 100).toFixed(0)}%</small></span>
+      <button onclick="removeModulation('${mod.id}')" style="background:rgba(255,51,85,0.2);border:none;color:var(--red);padding:2px 6px;border-radius:2px;cursor:pointer;font-size:9px">Remove</button>
+    `;
+    list.appendChild(div);
+  }
+}
+
+function removeModulation(modId) {
+  if (!currentPattern || !currentPattern.modulationRack) return;
+  currentPattern.modulationRack = currentPattern.modulationRack.filter(m => m.id !== modId);
+  updateModulationRackUI();
+  saveCurrentPattern();
+}
+
+function updateQuickLFO() {
+  const rate = parseFloat(document.getElementById('quickLfoRate').value) || 1.0;
+  const depth = parseFloat(document.getElementById('quickLfoDepth').value) || 0.5;
+  document.getElementById('lfoRateDisplay').textContent = rate.toFixed(1);
+  document.getElementById('lfoDepthDisplay').textContent = (depth * 100).toFixed(0) + '%';
+}
+
+function createQuickLFO() {
+  if (!currentPattern) {
+    alert('Load or create a pattern first');
+    return;
+  }
+
+  const rate = parseFloat(document.getElementById('quickLfoRate').value) || 1.0;
+  const depth = parseFloat(document.getElementById('quickLfoDepth').value) || 0.5;
+  const waveshape = document.getElementById('quickLfoWave').value || 'sine';
+
+  const lfo = {
+    id: 'lfo_' + Math.random().toString(36).substr(2, 9),
+    frequency: rate,
+    waveshape: waveshape,
+    phase: 0,
+    active: true,
+    oscillator: new LFOOscillator(rate, waveshape)
+  };
+
+  lfoOscillators.push(lfo);
+
+  if (!currentPattern.modulationRack) currentPattern.modulationRack = [];
+  currentPattern.modulationRack.push({
+    id: Math.random().toString(36).substr(2, 9),
+    source: 'lfo',
+    lfoId: lfo.id,
+    target: 'filterCutoff',
+    depth: depth,
+    active: true,
+    baseValue: 0
+  });
+
+  updateModulationRackUI();
+  saveCurrentPattern();
+  alert(`LFO created: ${rate}Hz ${waveshape}, depth ${(depth * 100).toFixed(0)}%`);
+}
+
+function initMacroControls() {
+  const panel = document.getElementById('macroControlsPanel');
+  if (!panel) return;
+
+  panel.innerHTML = '';
+  for (let i = 0; i < 8; i++) {
+    const div = document.createElement('div');
+    div.innerHTML = `
+      <div style="text-align:center">
+        <div style="font-size:10px;font-weight:600;margin-bottom:6px">Macro ${i + 1}</div>
+        <input type="range" id="macro${i}" min="0" max="1" value="0" step="0.01"
+               oninput="setMacroValue(${i}, this.value)"
+               style="width:100%;cursor:pointer">
+        <div style="font-size:9px;color:var(--text-secondary);margin-top:4px" id="macroValue${i}">0%</div>
+      </div>
+    `;
+    panel.appendChild(div);
+  }
+}
+
+function setMacroValue(index, value) {
+  macroValues[index] = parseFloat(value);
+  const display = document.getElementById(`macroValue${index}`);
+  if (display) display.textContent = Math.round(value * 100) + '%';
+
+  if (currentRecording) {
+    recordParameterChange(`macro_${index}`, parseFloat(value));
+  }
+}
+
+function startPerformanceRecording() {
+  if (!audioCtx) {
+    alert('Audio context not initialized');
+    return;
+  }
+
+  const name = prompt('Recording name:', `Take ${Object.keys(recordedPerformances).length + 1}`);
+  if (!name) return;
+
+  currentRecording = {
+    id: Math.random().toString(36).substr(2, 9),
+    name: name,
+    startTime: audioCtx.currentTime,
+    events: [],
+    patternId: currentPattern ? currentPattern.id : null
+  };
+
+  sequencerState.isRecording = true;
+  document.getElementById('recordBtn').style.display = 'none';
+  document.getElementById('stopRecordBtn').style.display = 'block';
+
+  const statusEl = document.getElementById('recordingStatus');
+  if (statusEl) {
+    statusEl.textContent = `🔴 Recording: ${name}`;
+    statusEl.style.color = 'var(--red)';
+  }
+}
+
+function stopPerformanceRecording() {
+  if (!currentRecording) return;
+
+  sequencerState.isRecording = false;
+  document.getElementById('recordBtn').style.display = 'block';
+  document.getElementById('stopRecordBtn').style.display = 'none';
+
+  const duration = audioCtx.currentTime - currentRecording.startTime;
+  recordedPerformances[currentRecording.id] = currentRecording;
+
+  if (currentPattern) {
+    if (!currentPattern.recordings) currentPattern.recordings = [];
+    currentPattern.recordings.push({
+      id: currentRecording.id,
+      name: currentRecording.name,
+      duration: duration,
+      timestamp: Date.now(),
+      automation: currentRecording.events
+    });
+    saveCurrentPattern();
+  }
+
+  const statusEl = document.getElementById('recordingStatus');
+  if (statusEl) {
+    statusEl.textContent = `✓ Recorded: ${currentRecording.name} (${duration.toFixed(1)}s)`;
+    statusEl.style.color = 'var(--lime)';
+  }
+
+  updateRecordingsList();
+  currentRecording = null;
+}
+
+function recordParameterChange(paramName, value) {
+  if (!currentRecording) return;
+
+  const elapsed = audioCtx.currentTime - currentRecording.startTime;
+  currentRecording.events.push({
+    time: elapsed,
+    parameter: paramName,
+    value: value
+  });
+}
+
+function updateRecordingsList() {
+  const list = document.getElementById('recordingsList');
+  if (!list || !currentPattern || !currentPattern.recordings) return;
+
+  list.innerHTML = '';
+  for (const rec of currentPattern.recordings) {
+    const div = document.createElement('div');
+    div.style.cssText = 'padding:6px;background:rgba(255,51,85,0.05);border-radius:3px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center';
+    div.innerHTML = `
+      <span><strong>${rec.name}</strong><br><small>${rec.duration.toFixed(1)}s</small></span>
+      <button onclick="exportRecording('${rec.id}')" style="background:rgba(0,240,255,0.2);border:none;color:var(--cyan);padding:2px 6px;border-radius:2px;cursor:pointer;font-size:8px">Export</button>
+    `;
+    list.appendChild(div);
+  }
+}
+
+function exportRecording(recId) {
+  if (!currentPattern || !currentPattern.recordings) return;
+  const rec = currentPattern.recordings.find(r => r.id === recId);
+  if (!rec) return;
+
+  const json = {
+    name: rec.name,
+    bpm: bpm,
+    timestamp: rec.timestamp,
+    duration: rec.duration,
+    automation: rec.automation
+  };
+
+  const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${rec.name.replace(/\s+/g, '_')}_${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// === PHASE 19c: MULTI-PATTERN SEQUENCING & CROSSFADE ===
+
+function queuePattern(patternId, durationBars = 4) {
+  if (!currentPattern) return;
+
+  durationBars = Math.max(1, Math.min(8, durationBars));
+  const barMs = (60000 / bpm) * 4;
+  const queueDurationMs = barMs * durationBars;
+
+  sequencerState.crossfade = {
+    active: true,
+    startTime: audioCtx.currentTime + (queueDurationMs / 1000),
+    duration: durationBars,
+    sourcePattern: currentPattern.id,
+    targetPattern: patternId,
+    startGain: 1.0
+  };
+
+  patternQueue.push({
+    id: patternId,
+    queuedAt: audioCtx.currentTime,
+    durationBars: durationBars,
+    duration: queueDurationMs
+  });
+
+  updatePatternQueueUI();
+}
+
+function performCrossfade(now) {
+  if (!sequencerState.crossfade.active) return;
+
+  const crossfade = sequencerState.crossfade;
+  const timeUntilStart = crossfade.startTime - now;
+
+  if (timeUntilStart > 0) {
+    return;
+  }
+
+  const totalDurationMs = (60000 / bpm) * 4 * crossfade.duration;
+  const elapsedMs = Math.abs(timeUntilStart * 1000);
+  const progress = Math.min(1, elapsedMs / totalDurationMs);
+
+  if (progress >= 1) {
+    if (!currentPattern) return;
+
+    const targetId = crossfade.targetPattern;
+    const patternToLoad = patternLibrary.find(p => p.id === targetId);
+
+    if (patternToLoad) {
+      loadPatternById(targetId);
+
+      patternQueue = patternQueue.filter(p => p.id !== targetId);
+      sequencerState.crossfade.active = false;
+      updatePatternQueueUI();
+    }
+
+    if (voicePool && voicePool.master) {
+      voicePool.master.gain.setValueAtTime(1.0, audioCtx.currentTime);
+    }
+
+    return;
+  }
+
+  const sourceVol = Math.max(0, 1 - progress);
+  const targetVol = Math.min(1, progress);
+
+  if (voicePool && voicePool.master) {
+    voicePool.master.gain.setValueAtTime(sourceVol, audioCtx.currentTime);
+  }
+}
+
+function updatePatternQueueUI() {
+  const queueDisplay = document.getElementById('patternQueueDisplay');
+  if (!queueDisplay) return;
+
+  let html = '<div style="font-size:9px;color:var(--cyan);padding:4px;border-top:1px solid rgba(0,240,255,0.2)">';
+
+  if (sequencerState.crossfade.active) {
+    const totalBars = sequencerState.crossfade.duration;
+    html += `<div>📊 Crossfade in progress: ${totalBars} bars</div>`;
+  }
+
+  if (patternQueue.length > 0) {
+    html += '<div>Queued patterns:</div>';
+    patternQueue.forEach((q, idx) => {
+      const pattern = patternLibrary.find(p => p.id === q.id);
+      if (pattern) {
+        html += `<div style="margin-left:8px;font-size:8px">→ ${pattern.name} (${q.durationBars}b)</div>`;
+      }
+    });
+  } else {
+    html += '<div style="opacity:0.5">No patterns queued</div>';
+  }
+
+  html += '</div>';
+  queueDisplay.innerHTML = html;
+}
+
+function abortCrossfade() {
+  sequencerState.crossfade.active = false;
+  patternQueue = [];
+  updatePatternQueueUI();
+
+  if (voicePool && voicePool.master) {
+    voicePool.master.gain.setValueAtTime(1.0, audioCtx.currentTime);
+  }
+}
+
+function showQueueDurationMenu(patternId) {
+  const durations = [1, 2, 4, 8];
+  const choice = prompt('Queue pattern in how many bars?\n\nOptions: 1, 2, 4, 8\n\nDefault: 4', '4');
+
+  if (choice === null) return;
+
+  const durationBars = parseInt(choice);
+  if (durations.includes(durationBars)) {
+    queuePattern(patternId, durationBars);
+    alert(`Pattern queued for transition in ${durationBars} bars`);
+  } else {
+    alert('Invalid duration. Use 1, 2, 4, or 8 bars');
+  }
+}
+
+// === PHASE 20a: SPECTRAL ANALYZER & REAL-TIME VISUALIZATION ===
+
+function initSpectralDisplay() {
+  if (!audioCtx) return;
+
+  spectralCanvas = document.getElementById('spectralCanvas');
+  waveformCanvas = document.getElementById('waveformCanvas');
+
+  if (!spectralCanvas || !waveformCanvas) return;
+
+  spectralCtx = spectralCanvas.getContext('2d');
+  waveformCtx = waveformCanvas.getContext('2d');
+
+  if (!voicePool || !voicePool.master) return;
+
+  const analyser = audioCtx.createAnalyser();
+  voicePool.master.connect(analyser);
+  analyser.connect(audioCtx.destination);
+
+  spectralAnalyzer = new SpectralAnalyzer(analyser, 64);
+
+  startSpectralAnimation();
+}
+
+function toggleSpectralDisplay() {
+  const panel = document.getElementById('visualizationPanel');
+  const canvas = document.getElementById('spectralCanvas');
+  const toggle = document.getElementById('specToggle');
+
+  if (canvas.style.display === 'none') {
+    canvas.style.display = 'block';
+    toggle.style.background = 'rgba(0,240,255,0.2)';
+    panel.style.display = 'block';
+    if (!spectralAnimId) startSpectralAnimation();
+  } else {
+    canvas.style.display = 'none';
+    toggle.style.background = '';
+    if (!document.getElementById('waveformCanvas').style.display ||
+        document.getElementById('waveformCanvas').style.display === 'none') {
+      panel.style.display = 'none';
+    }
+  }
+}
+
+function toggleWaveformDisplay() {
+  const panel = document.getElementById('visualizationPanel');
+  const canvas = document.getElementById('waveformCanvas');
+  const toggle = document.getElementById('waveToggle');
+
+  if (canvas.style.display === 'none') {
+    canvas.style.display = 'block';
+    toggle.style.background = 'rgba(0,240,255,0.2)';
+    panel.style.display = 'block';
+    if (!spectralAnimId) startSpectralAnimation();
+  } else {
+    canvas.style.display = 'none';
+    toggle.style.background = '';
+    if (!document.getElementById('spectralCanvas').style.display ||
+        document.getElementById('spectralCanvas').style.display === 'none') {
+      panel.style.display = 'none';
+    }
+  }
+}
+
+function startSpectralAnimation() {
+  if (!spectralAnalyzer || !spectralCtx || !waveformCtx) return;
+
+  function animate() {
+    const freqData = spectralAnalyzer.getFrequencyData();
+
+    if (document.getElementById('spectralCanvas').style.display !== 'none') {
+      drawSpectralBars(spectralCtx, freqData);
+    }
+
+    if (document.getElementById('waveformCanvas').style.display !== 'none') {
+      drawWaveform(waveformCtx, spectralAnalyzer.analyser);
+    }
+
+    updatePerformanceMetricsDisplay();
+
+    spectralAnimId = requestAnimationFrame(animate);
+  }
+
+  animate();
+}
+
+function drawSpectralBars(ctx, frequencyData) {
+  const canvas = ctx.canvas;
+  const width = canvas.width;
+  const height = canvas.height;
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, width, height);
+
+  const bandWidth = width / frequencyData.length;
+
+  for (let i = 0; i < frequencyData.length; i++) {
+    const value = Math.pow(frequencyData[i], 1.2);
+    const barHeight = value * height;
+    const x = i * bandWidth;
+
+    const hue = (i / frequencyData.length) * 360;
+    ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+    ctx.globalAlpha = 0.8;
+    ctx.fillRect(x, height - barHeight, bandWidth - 1, barHeight);
+
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.strokeStyle = 'rgba(0,240,255,0.1)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0, 0, width, height);
+}
+
+function drawWaveform(ctx, analyser) {
+  const canvas = ctx.canvas;
+  const width = canvas.width;
+  const height = canvas.height;
+  const bufferLength = 2048;
+  const dataArray = new Uint8Array(bufferLength);
+
+  analyser.getByteTimeDomainData(dataArray);
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.strokeStyle = '#00ff00';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+
+  const sliceWidth = width / bufferLength;
+  let x = 0;
+
+  for (let i = 0; i < bufferLength; i++) {
+    const v = dataArray[i] / 128;
+    const y = (v * height) / 2;
+
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+
+    x += sliceWidth;
+  }
+
+  ctx.lineTo(width, height / 2);
+  ctx.stroke();
+
+  if (isPlaying && audioCtx) {
+    const playheadX = (nextStepTime % (audioCtx.baseLatency + 0.1)) / (audioCtx.baseLatency + 0.1) * width;
+    ctx.strokeStyle = 'rgba(255,0,0,0.5)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(playheadX, 0);
+    ctx.lineTo(playheadX, height);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = 'rgba(0,240,255,0.1)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0, 0, width, height);
+}
+
+function updatePerformanceMetricsDisplay() {
+  const cpuEl = document.getElementById('metricsCPU');
+  const voicesEl = document.getElementById('metricsVoices');
+  const modEl = document.getElementById('metricsModulation');
+  const latencyEl = document.getElementById('metricsLatency');
+
+  if (cpuEl && performanceMetrics) {
+    cpuEl.textContent = performanceMetrics.cpuUsage + '%';
+    cpuEl.style.color = performanceMetrics.cpuUsage > 80 ? 'var(--red)' :
+                        performanceMetrics.cpuUsage > 50 ? 'var(--orange)' : 'var(--lime)';
+  }
+
+  if (voicesEl && performanceMetrics) {
+    voicesEl.textContent = performanceMetrics.voiceCount || 0;
+  }
+
+  if (modEl && currentPattern && currentPattern.modulationRack) {
+    modEl.textContent = currentPattern.modulationRack.length;
+  }
+
+  if (latencyEl && audioCtx) {
+    const latency = (audioCtx.baseLatency || 0) * 1000 + (audioCtx.outputLatency || 0) * 1000;
+    latencyEl.textContent = latency.toFixed(1) + 'ms';
+  }
+}
+
+// Phase 20c: Update automation displays
+function updateAutomationDisplays() {
+  if (!automationVisualizers) return;
+
+  // Update automation curve with current performance recording data
+  if (currentRecording && automationVisualizers.automation) {
+    updateAutomationVisualization();
+    const canvas = document.getElementById('automationCurveCanvas');
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) automationVisualizers.automation.draw(ctx);
+    }
+  }
+
+  // Draw LFO waveform if modulation is active
+  if (currentPattern && currentPattern.modulationRack && currentPattern.modulationRack.length > 0 && automationVisualizers.lfo) {
+    const firstLFO = currentPattern.modulationRack.find(m => m.source === 'lfo1');
+    if (firstLFO) {
+      const canvas = document.getElementById('lfoPreviewCanvas');
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) automationVisualizers.lfo.draw(ctx, firstLFO.frequency || 2.5, firstLFO.waveshape || 'sine', firstLFO.depth || 0.5);
+      }
+    }
+  }
+
+  // Draw envelope visualization
+  if (automationVisualizers.envelope) {
+    const canvas = document.getElementById('envelopeCanvas');
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const isActive = isPlaying && currentRecording;
+        automationVisualizers.envelope.draw(ctx, isActive);
+      }
+    }
+  }
+
+  // Draw performance timeline
+  if (automationVisualizers.timeline && isPlaying) {
+    automationVisualizers.timeline.setPlayheadTime(audioCtx.currentTime % 30);
+    const canvas = document.getElementById('timelineCanvas');
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) automationVisualizers.timeline.draw(ctx, 0, 30);
+    }
+  }
+}
+
+// Phase 20c: Add to spectral animation loop
+function startAutomationAnimation() {
+  if (!automationVisualizers) return;
+
+  function animate() {
+    updateAutomationDisplays();
+    requestAnimationFrame(animate);
+  }
+
+  animate();
+}
+
+// === PHASE 20d: PROBABILISTIC SEQUENCING & MUSIC THEORY ENGINE ===
+
+let probabilityMode = false;
+let probabilityMap = new Array(32).fill(0.5);
+let musicTheoryRules = {
+  enforceScale: true,
+  enforceHarmony: false,
+  chordBias: 0.7,
+  densityFactor: 0.5
+};
+
+function toggleProbabilityMode() {
+  if (!currentPattern) {
+    alert('Load or create a pattern first');
+    return;
+  }
+
+  probabilityMode = !probabilityMode;
+  const toggle = document.getElementById('probabilityToggle');
+
+  if (probabilityMode) {
+    probabilityMap = new Array(currentPattern.grid[0]?.length || 32).fill(0.5);
+    toggle.style.background = 'rgba(255,136,68,0.3)';
+    toggle.textContent = '📊 Probability Active';
+    updateProbabilityStatus('Probability mode active - adjust density slider');
+  } else {
+    toggle.style.background = '';
+    toggle.textContent = '📊 Probability Mode';
+    updateProbabilityStatus('Ready for probabilistic generation');
+  }
+}
+
+function updateProbabilityStatus(message) {
+  const status = document.getElementById('probabilityStatus');
+  if (status) status.textContent = message;
+}
+
+function randomizeWithConstraints() {
+  if (!currentPattern) {
+    alert('Load or create a pattern first');
+    return;
+  }
+
+  const scale = getSelectedScale();
+  const densityFactor = parseInt(document.getElementById('densitySlider')?.value || 50) / 100;
+
+  for (let trackIdx = 0; trackIdx < currentPattern.grid.length; trackIdx++) {
+    for (let stepIdx = 0; stepIdx < currentPattern.grid[trackIdx].length; stepIdx++) {
+      const step = currentPattern.grid[trackIdx][stepIdx];
+
+      if (Math.random() < densityFactor) {
+        if (document.getElementById('applyMusicTheory')?.checked) {
+          const notes = scale.notes.map(n => n + (Math.floor(stepIdx / 8) * 12));
+          const randomNote = notes[Math.floor(Math.random() * notes.length)];
+          step.note = randomNote;
+        } else {
+          step.note = 36 + Math.floor(Math.random() * 24);
+        }
+        step.velocity = 0.7 + Math.random() * 0.3;
+      } else {
+        step.note = null;
+        step.velocity = 0;
+      }
+    }
+  }
+
+  pushUndoState();
+  renderGrid();
+  updateProbabilityStatus('Pattern randomized with constraints');
+}
+
+function applyMusicTheoryRules() {
+  if (!currentPattern) {
+    alert('Load or create a pattern first');
+    return;
+  }
+
+  const scale = getSelectedScale();
+  const chordBias = document.getElementById('useChordBias')?.checked ? 0.7 : 0;
+  const densityFactor = parseInt(document.getElementById('densitySlider')?.value || 50) / 100;
+
+  let activeChord = null;
+  let chordStepCounter = 0;
+  const stepsPerChord = 8;
+
+  for (let trackIdx = 0; trackIdx < currentPattern.grid.length; trackIdx++) {
+    for (let stepIdx = 0; stepIdx < currentPattern.grid[trackIdx].length; stepIdx++) {
+      const step = currentPattern.grid[trackIdx][stepIdx];
+
+      if (!step.note) continue;
+
+      // Calculate current chord based on step position
+      if (chordBias > 0) {
+        if (chordStepCounter % stepsPerChord === 0) {
+          activeChord = getChordForStep(stepIdx);
+        }
+      }
+
+      // Apply scale quantization
+      if (document.getElementById('applyMusicTheory')?.checked) {
+        step.note = scale.nearestInScale(step.note);
+
+        // Bias toward chord tones if harmony is enforced
+        if (chordBias > 0 && activeChord && Math.random() < chordBias) {
+          const chordNotes = activeChord.notes || [0, 2, 4];
+          const noteClass = step.note % 12;
+          const octave = Math.floor(step.note / 12);
+
+          const closestChordNote = chordNotes.reduce((prev, curr) => {
+            return Math.abs(curr - noteClass) < Math.abs(prev - noteClass) ? curr : prev;
+          });
+
+          step.note = closestChordNote + octave * 12;
+        }
+      }
+
+      chordStepCounter++;
+    }
+  }
+
+  pushUndoState();
+  renderGrid();
+  updateProbabilityStatus('Music theory rules applied to pattern');
+}
+
+function getSelectedScale() {
+  const scaleName = document.getElementById('scaleSelector')?.value || 'Major';
+  const keyName = document.getElementById('keySelector')?.value || 'C';
+  const keyNotes = {C: 0, 'C#': 1, D: 2, 'D#': 3, E: 4, F: 5, 'F#': 6, G: 7, 'G#': 8, A: 9, 'A#': 10, B: 11};
+  const keyOffset = keyNotes[keyName] || 0;
+
+  const scaleMap = {
+    'Major': MusicalScale.Major,
+    'Minor': MusicalScale.Minor,
+    'Dorian': MusicalScale.Dorian,
+    'Phrygian': MusicalScale.Phrygian,
+    'Pentatonic': MusicalScale.Pentatonic,
+    'Chromatic': MusicalScale.Chromatic
+  };
+
+  const scale = scaleMap[scaleName] || MusicalScale.Major;
+  return {
+    notes: scale.notes,
+    nearestInScale: (note) => scale.nearestInScale(note + keyOffset) - keyOffset,
+    name: scaleName
+  };
+}
+
+function getChordForStep(stepIndex) {
+  const progressions = {
+    'I-IV-V-I': [
+      {notes: [0, 4, 7], name: 'I'},
+      {notes: [5, 9, 12], name: 'IV'},
+      {notes: [7, 11, 14], name: 'V'},
+      {notes: [0, 4, 7], name: 'I'}
+    ],
+    'ii-V-I': [
+      {notes: [2, 6, 9], name: 'ii'},
+      {notes: [7, 11, 14], name: 'V'},
+      {notes: [0, 4, 7], name: 'I'}
+    ]
+  };
+
+  const prog = progressions['I-IV-V-I'];
+  const chordIndex = Math.floor((stepIndex / 8) % prog.length);
+  return prog[chordIndex];
+}
+
+function updateDensityDisplay() {
+  const slider = document.getElementById('densitySlider');
+  const value = document.getElementById('densityValue');
+  if (slider && value) {
+    value.textContent = slider.value + '%';
+  }
+}
+
+// === PHASE 20b: PATTERN GENERATION FUNCTIONS ===
+
+let sketchMode = false;
+let sketchGrid = null;
+
+function toggleSketchMode() {
+  if (!currentPattern) {
+    alert('Load or create a pattern first');
+    return;
+  }
+
+  sketchMode = !sketchMode;
+  const toggle = document.getElementById('sketchToggle');
+
+  if (sketchMode) {
+    sketchGrid = JSON.parse(JSON.stringify(currentPattern.grid));
+    sketchGrid.forEach(row => row.forEach(step => step.sketch = false));
+    toggle.style.background = 'rgba(0,240,255,0.3)';
+    toggle.textContent = '✎ Sketch Active';
+    updateGenerationStatus('Sketch mode active - click cells to mark');
+  } else {
+    toggle.style.background = '';
+    toggle.textContent = '✎ Sketch Mode';
+    sketchGrid = null;
+    updateGenerationStatus('Sketch mode disabled');
+  }
+}
+
+function generateFromSketch() {
+  if (!currentPattern) {
+    alert('Load or create a pattern first');
+    return;
+  }
+
+  const scaleSelect = document.getElementById('scaleSelector')?.value || 'Major';
+  const scaleMap = {
+    'Major': MusicalScale.Major,
+    'Minor': MusicalScale.Minor,
+    'Dorian': MusicalScale.Dorian,
+    'Phrygian': MusicalScale.Phrygian,
+    'Pentatonic': MusicalScale.Pentatonic,
+    'Chromatic': MusicalScale.Chromatic
+  };
+
+  const scale = scaleMap[scaleSelect] || MusicalScale.Major;
+  const enforceScale = document.getElementById('enforceScaleCheck')?.checked !== false;
+  const enforceHarmony = document.getElementById('enforceHarmonyCheck')?.checked === true;
+
+  let workingGrid = JSON.parse(JSON.stringify(currentPattern.grid));
+
+  workingGrid = generatePatternFromSketch(workingGrid, scale, {
+    enforceHarmony: enforceHarmony,
+    chord: enforceHarmony ? ChordProgression.IMajor.chords[0] : null
+  });
+
+  if (enforceScale) {
+    workingGrid = quantizeToScale(workingGrid, scale);
+  }
+
+  if (enforceHarmony) {
+    workingGrid = applyChordHarmony(workingGrid, ChordProgression.IMajor, 4);
+  }
+
+  currentPattern.grid = workingGrid;
+  renderGrid();
+  pushUndoState('Generate pattern from sketch');
+  updateGenerationStatus('Pattern generated and applied');
+}
+
+function quantizeCurrentPattern() {
+  if (!currentPattern) {
+    alert('Load or create a pattern first');
+    return;
+  }
+
+  const scaleSelect = document.getElementById('scaleSelector')?.value || 'Major';
+  const scaleMap = {
+    'Major': MusicalScale.Major,
+    'Minor': MusicalScale.Minor,
+    'Dorian': MusicalScale.Dorian,
+    'Phrygian': MusicalScale.Phrygian,
+    'Pentatonic': MusicalScale.Pentatonic,
+    'Chromatic': MusicalScale.Chromatic
+  };
+
+  const scale = scaleMap[scaleSelect] || MusicalScale.Major;
+
+  currentPattern.grid = quantizeToScale(JSON.parse(JSON.stringify(currentPattern.grid)), scale);
+  renderGrid();
+  pushUndoState('Quantize pattern to scale');
+  updateGenerationStatus(`Pattern quantized to ${scaleSelect}`);
+}
+
+function updateGenerationStatus(message) {
+  const statusEl = document.getElementById('generationStatus');
+  if (statusEl) {
+    statusEl.textContent = message;
+    statusEl.style.color = 'var(--cyan)';
+  }
+}
+
 // === PHASE 14: PERFORMANCE METER & MONITORING ===
 
 function initPerformanceMonitoring() {
@@ -3957,7 +5712,12 @@ function savePattern(name, genre = 'custom') {
     swing: swingAmount,
     grid: JSON.parse(JSON.stringify(grid)),
     created: new Date().toISOString(),
-    lastModified: new Date().toISOString()
+    lastModified: new Date().toISOString(),
+    // Phase 19: Modulation & Performance
+    modulationRack: currentPattern && currentPattern.modulationRack ? currentPattern.modulationRack : [],
+    midiMappings: currentPattern && currentPattern.midiMappings ? currentPattern.midiMappings : {},
+    macros: currentPattern && currentPattern.macros ? currentPattern.macros : [],
+    recordings: currentPattern && currentPattern.recordings ? currentPattern.recordings : []
   };
 
   return new Promise((resolve, reject) => {
@@ -4000,6 +5760,24 @@ function loadPatternById(id) {
       swingAmount = pattern.swing || 0;
       grid = JSON.parse(JSON.stringify(pattern.grid));
       currentPatternId = id;
+      currentPattern = pattern; // Set currentPattern reference
+
+      // Phase 19: Restore modulation and performance data
+      if (pattern.modulationRack) {
+        lfoOscillators = pattern.modulationRack
+          .filter(m => m.source === 'lfo')
+          .map(m => ({
+            id: m.lfoId,
+            frequency: m.frequency || 1.0,
+            waveshape: m.waveshape || 'sine',
+            phase: 0,
+            active: true,
+            oscillator: new LFOOscillator(m.frequency || 1.0, m.waveshape || 'sine')
+          }));
+      }
+      if (pattern.recordings) {
+        updateRecordingsList();
+      }
 
       document.getElementById('bpmSlider').value = bpm;
       document.getElementById('bpmDisplay').textContent = bpm;
@@ -4008,6 +5786,7 @@ function loadPatternById(id) {
       document.getElementById('swingDisplay').textContent = swingAmount + '%';
 
       renderGrid();
+      updateModulationRackUI();
       pushUndoState('Load pattern: ' + pattern.name);
       resolve(pattern);
     };
@@ -4798,6 +6577,7 @@ function renderPatternLibrary() {
       </div>
       <div style="display:flex;gap:4px">
         ${!batchSelectionMode ? `
+          <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px" onclick="showQueueDurationMenu('${p.id}')">⏱️ Queue</button>
           <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px" onclick="exportPatternAsJSON('${p.id}')">JSON</button>
           <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px" onclick="exportPatternAsMIDI('${p.id}')">MIDI</button>
           <button class="ai-pat-btn" style="padding:2px 6px;font-size:9px;background:var(--orange)" onclick="exportPatternAsRekordbox('${p.id}')">🎛️ RBX</button>
@@ -6631,6 +8411,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Update XDJ UI status immediately
   updateXDJUIStatus();
+
+  // Phase 19: Initialize Macro Controls
+  initMacroControls();
+
+  // Phase 20: Initialize Spectral Display
+  setTimeout(() => {
+    initSpectralDisplay();
+  }, 100);
+
+  // Phase 20c: Initialize Automation Visualizers
+  setTimeout(() => {
+    initAutomationVisualizers();
+    startAutomationAnimation();
+  }, 150);
 });
 </script>
 
