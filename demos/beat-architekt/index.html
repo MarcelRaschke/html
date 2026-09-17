@@ -8572,6 +8572,89 @@ function toggleLoopRecordingPanel() {
   }
 }
 
+// === PHASE 22c: CUE POINT MANAGER CLASS ===
+
+class CuePointManager {
+  constructor() {
+    this.cues = new Map(); // sampleId → [cues]
+    this.cueColors = {
+      'Intro': '#00ccff',
+      'Verse': '#00ff88',
+      'Chorus': '#ffff00',
+      'Break': '#ff9966',
+      'Climax': '#ff3333',
+      'Outro': '#cc88ff'
+    };
+  }
+
+  addCue(sampleId, {timeMs, name = 'Cue', color}) {
+    if (!this.cues.has(sampleId)) {
+      this.cues.set(sampleId, []);
+    }
+
+    const cue = {
+      id: `cue_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      timeMs: timeMs,
+      name: name,
+      color: color || this.cueColors[name] || '#00ccff'
+    };
+
+    this.cues.get(sampleId).push(cue);
+    this.sortCues(sampleId);
+    return cue.id;
+  }
+
+  updateCue(sampleId, cueId, updates) {
+    const cues = this.cues.get(sampleId);
+    if (!cues) return false;
+
+    const cue = cues.find(c => c.id === cueId);
+    if (!cue) return false;
+
+    Object.assign(cue, updates);
+    this.sortCues(sampleId);
+    return true;
+  }
+
+  deleteCue(sampleId, cueId) {
+    const cues = this.cues.get(sampleId);
+    if (!cues) return false;
+
+    const idx = cues.findIndex(c => c.id === cueId);
+    if (idx === -1) return false;
+
+    cues.splice(idx, 1);
+    return true;
+  }
+
+  getCuesForSample(sampleId) {
+    return (this.cues.get(sampleId) || []).sort((a, b) => a.timeMs - b.timeMs);
+  }
+
+  sortCues(sampleId) {
+    const cues = this.cues.get(sampleId);
+    if (cues) cues.sort((a, b) => a.timeMs - b.timeMs);
+  }
+
+  async saveCuesToDB(sampleId) {
+    if (!sampleLibrary) return;
+    const sample = sampleLibrary.getSample(sampleId);
+    if (!sample) return;
+
+    sample.cues = this.getCuesForSample(sampleId);
+    await sampleLibrary.saveSample(sample);
+  }
+
+  async loadCuesFromDB(sampleId) {
+    if (!sampleLibrary) return [];
+    const sample = sampleLibrary.getSample(sampleId);
+    if (!sample || !sample.cues) return [];
+
+    this.cues.set(sampleId, sample.cues);
+    return sample.cues;
+  }
+}
+
 // === PHASE 22b: SLICE MANAGER CLASS ===
 
 class SliceManager {
@@ -8671,6 +8754,76 @@ class SliceManager {
     this.slices.set(sampleId, sample.slices);
     return sample.slices;
   }
+}
+
+// === PHASE 22c: CUE POINT MANAGER INIT ===
+
+let cuePointManager = new CuePointManager();
+
+// === PHASE 22c: CUE POINT FUNCTIONS ===
+
+async function addCueAtPlayhead(sampleId, name = 'Cue') {
+  const playhead = playheadTime || 0;
+  const color = cuePointManager.cueColors[name] || '#00ccff';
+
+  cuePointManager.addCue(sampleId, {
+    timeMs: playhead * 1000,
+    name: name,
+    color: color
+  });
+
+  await cuePointManager.saveCuesToDB(sampleId);
+  showToast(`✅ Cue added: ${name} @ ${playhead.toFixed(2)}s`);
+}
+
+function jumpToCue(sampleId, timeMs) {
+  // Seek playhead to cue time
+  playheadTime = timeMs / 1000;
+  updatePlayheadUI();
+}
+
+function showCueManager(sampleId) {
+  const cues = cuePointManager.getCuesForSample(sampleId);
+
+  const names = ['Intro', 'Verse', 'Chorus', 'Break', 'Climax', 'Outro'];
+  const html = names.map(name => `
+    <button onclick="addCueAtPlayhead('${sampleId}', '${name}')"
+      style="flex:1;padding:6px;background:${cuePointManager.cueColors[name] || '#00ccff'}15;border:1px solid ${cuePointManager.cueColors[name] || '#00ccff'}40;border-radius:4px;color:${cuePointManager.cueColors[name] || '#00ccff'};font-size:9px;cursor:pointer;font-weight:600">
+      ${name}
+    </button>
+  `).join('');
+
+  const cueList = cues.map(cue => `
+    <div style="padding:8px;background:rgba(0,0,0,0.2);border-left:3px solid ${cue.color};border-radius:3px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-weight:600;color:${cue.color};font-size:10px">${cue.name}</div>
+        <div style="font-size:8px;color:var(--text-dim)">${(cue.timeMs / 1000).toFixed(2)}s</div>
+      </div>
+      <div style="display:flex;gap:4px">
+        <button onclick="jumpToCue('${sampleId}', ${cue.timeMs})" style="padding:4px 6px;background:rgba(0,200,255,0.2);border:1px solid rgba(0,200,255,0.4);border-radius:3px;color:var(--cyan);font-size:8px;cursor:pointer">▶</button>
+        <button onclick="deleteCuePoint('${sampleId}', '${cue.id}')" style="padding:4px 6px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:3px;color:#ff6666;font-size:8px;cursor:pointer">✕</button>
+      </div>
+    </div>
+  `).join('');
+
+  showModal(`🎯 Cue Manager - ${sampleId}`, `
+    <div style="margin-bottom:12px">
+      <div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">Quick Add</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap">
+        ${html}
+      </div>
+    </div>
+    <div>
+      <div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">Cues</div>
+      ${cueList || '<div style="color:var(--text-dim);text-align:center;padding:20px">No cues yet</div>'}
+    </div>
+  `);
+}
+
+async function deleteCuePoint(sampleId, cueId) {
+  cuePointManager.deleteCue(sampleId, cueId);
+  await cuePointManager.saveCuesToDB(sampleId);
+  showToast('✅ Cue deleted');
 }
 
 // === PHASE 22a: SLICE DETECTOR FUNCTIONS ===
@@ -9366,6 +9519,9 @@ function updateSampleListWithWaveforms() {
     footer.innerHTML = `
       <span>${sample.duration.toFixed(2)}s @ ${sample.sampleRate/1000}kHz</span>
       <div style="display:flex;gap:4px">
+        <button onclick="showCueManager('${sample.id}')" style="padding:4px 8px;background:rgba(0,150,255,0.15);border:1px solid rgba(0,150,255,0.4);color:#00aeff;border-radius:3px;cursor:pointer;font-size:9px">
+          🎯 Cues
+        </button>
         <button onclick="openSliceEditor('${sample.id}')" style="padding:4px 8px;background:rgba(255,150,100,0.15);border:1px solid rgba(255,150,100,0.4);color:#ff9966;border-radius:3px;cursor:pointer;font-size:9px">
           🔪 Slice
         </button>
