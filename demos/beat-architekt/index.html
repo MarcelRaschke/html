@@ -9786,6 +9786,11 @@ function playSliceWithModes(sampleId, sliceId, options = {}) {
   }
   source.stop(now + (sliceDuration / Math.abs(playbackRate)));
 
+  // Phase 23d: Record slice playback if recording
+  if (slicePerformanceRecorder.isRecording) {
+    slicePerformanceRecorder.recordSlicePlayback(sliceId, velocity, pan, mode.reverse);
+  }
+
   // Phase 22h: Handle auto-chain to next slice
   if (mode.autoChain && mode.autoChainTarget) {
     const chainDelay = sliceDuration / Math.abs(playbackRate);
@@ -9859,6 +9864,391 @@ function showSlicePlaybackModeEditor(sampleId, sliceId) {
   `;
 
   showModal('Slice Playback Modes', html, '450px');
+}
+
+// === PHASE 23a: BPM DETECTION ENGINE ===
+
+class BPMDetector {
+  constructor(audioCtx, fftSize = 4096) {
+    this.audioCtx = audioCtx;
+    this.fftSize = fftSize;
+  }
+
+  analyzeBuffer(buffer) {
+    // Extract onset times via spectral flux analysis
+    const data = buffer.getChannelData(0);
+    const sampleRate = buffer.sampleRate;
+    const hopSize = this.fftSize / 2;
+    const frames = Math.floor(data.length / hopSize);
+
+    // Compute spectral flux for each frame
+    const fluxValues = [];
+    const fft = new Float32Array(this.fftSize);
+
+    for (let f = 0; f < frames - 1; f++) {
+      const offset = f * hopSize;
+
+      // Copy frame to FFT buffer
+      for (let i = 0; i < this.fftSize; i++) {
+        fft[i] = data[offset + i] || 0;
+      }
+
+      // Simple onset detection via RMS energy changes
+      let rms = 0;
+      for (let i = 0; i < this.fftSize; i++) {
+        rms += fft[i] * fft[i];
+      }
+      rms = Math.sqrt(rms / this.fftSize);
+      fluxValues.push(rms);
+    }
+
+    // Find peaks in flux (onsets)
+    const onsets = [];
+    const threshold = this._calculateThreshold(fluxValues);
+
+    for (let i = 1; i < fluxValues.length - 1; i++) {
+      if (fluxValues[i] > threshold && fluxValues[i] > fluxValues[i-1] && fluxValues[i] > fluxValues[i+1]) {
+        const timeMs = (i * hopSize / sampleRate) * 1000;
+        onsets.push(timeMs);
+      }
+    }
+
+    // Estimate BPM from onset intervals
+    if (onsets.length < 2) return null;
+
+    const intervals = [];
+    for (let i = 1; i < onsets.length; i++) {
+      intervals.push(onsets[i] - onsets[i-1]);
+    }
+
+    // Find most common interval (beat)
+    const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+
+    // Convert interval (ms) to BPM: BPM = 60000 / intervalMs
+    const estimatedBPM = Math.round(60000 / avgInterval);
+
+    // Validate BPM is within reasonable range (60-180 BPM)
+    if (estimatedBPM < 60 || estimatedBPM > 180) {
+      return null;
+    }
+
+    return {
+      bpm: estimatedBPM,
+      confidence: this._calculateConfidence(intervals, avgInterval),
+      onsets: onsets
+    };
+  }
+
+  _calculateThreshold(fluxValues) {
+    const mean = fluxValues.reduce((a, b) => a + b, 0) / fluxValues.length;
+    const variance = fluxValues.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / fluxValues.length;
+    return mean + Math.sqrt(variance);
+  }
+
+  _calculateConfidence(intervals, avgInterval) {
+    // Confidence based on interval consistency
+    const variance = intervals.reduce((a, b) => a + Math.pow(b - avgInterval, 2), 0) / intervals.length;
+    const stdDev = Math.sqrt(variance);
+    const cv = stdDev / avgInterval; // Coefficient of variation
+
+    // High confidence if intervals are consistent (low CV)
+    return Math.max(0, 1 - cv);
+  }
+}
+
+let bpmDetector = null;
+
+function initBPMDetector() {
+  if (audioCtx) {
+    bpmDetector = new BPMDetector(audioCtx);
+  }
+}
+
+function detectSampleBPM(sampleId) {
+  if (!bpmDetector || !sampleLibrary) return;
+
+  const sample = sampleLibrary.getSample(sampleId);
+  if (!sample || !sample.buffer) {
+    showToast('❌ Sample not found');
+    return;
+  }
+
+  showToast('🔍 Analyzing BPM...');
+
+  const result = bpmDetector.analyzeBuffer(sample.buffer);
+
+  if (result) {
+    // Store BPM in sample metadata
+    sample.detectedBPM = result.bpm;
+    sample.bpmConfidence = result.confidence;
+    sample.onsets = result.onsets;
+
+    showToast(`✅ Detected BPM: ${result.bpm} (confidence: ${(result.confidence * 100).toFixed(0)}%)`);
+    updateSampleList();
+  } else {
+    showToast('❌ Could not detect BPM (try 60-180 BPM range samples)');
+  }
+}
+
+// === PHASE 23b: MUSICAL KEY DETECTION ===
+
+class KeyDetector {
+  constructor() {
+    // Chromatic scale frequencies (C to B)
+    this.noteFrequencies = [16.35, 18.35, 20.60, 21.83, 24.50, 27.50, 30.87, 32.70, 36.71, 41.20, 43.65, 49.00];
+    this.noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  }
+
+  analyzeBuffer(buffer, sampleRate) {
+    // Analyze first 4 seconds for key detection
+    const analysisLength = Math.min(sampleRate * 4, buffer.length);
+    const data = buffer.getChannelData(0).slice(0, analysisLength);
+
+    // Compute power in each semitone band
+    const chromagram = new Array(12).fill(0);
+    const fftSize = 4096;
+
+    for (let i = 0; i < data.length - fftSize; i += fftSize / 4) {
+      const frame = data.slice(i, i + fftSize);
+      const spectrum = this._fft(frame);
+
+      // Distribute spectral energy to nearest semitone
+      for (let f = 0; f < spectrum.length; f++) {
+        const freq = (f * sampleRate) / fftSize;
+        const semitone = this._frequencyToSemitone(freq);
+        const binIndex = Math.round(semitone) % 12;
+        chromagram[binIndex] += spectrum[f];
+      }
+    }
+
+    // Find dominant key (highest energy in chromatic scale)
+    const maxIndex = chromagram.indexOf(Math.max(...chromagram));
+    const confidence = chromagram[maxIndex] / chromagram.reduce((a, b) => a + b, 0);
+
+    return {
+      key: this.noteNames[maxIndex],
+      confidence: confidence,
+      chromagram: chromagram
+    };
+  }
+
+  _fft(frame) {
+    // Simplified magnitude spectrum (basic DFT approximation)
+    const spectrum = new Array(frame.length / 2).fill(0);
+    for (let k = 0; k < spectrum.length; k++) {
+      let re = 0, im = 0;
+      for (let n = 0; n < frame.length; n++) {
+        const angle = -2 * Math.PI * k * n / frame.length;
+        re += frame[n] * Math.cos(angle);
+        im += frame[n] * Math.sin(angle);
+      }
+      spectrum[k] = Math.sqrt(re * re + im * im);
+    }
+    return spectrum;
+  }
+
+  _frequencyToSemitone(freq) {
+    if (freq < 1) return -1;
+    // Convert frequency to semitone number (A4 = 440 Hz = semitone 57)
+    return 12 * Math.log2(freq / 16.35); // C0 = 16.35 Hz
+  }
+}
+
+let keyDetector = null;
+
+function initKeyDetector() {
+  keyDetector = new KeyDetector();
+}
+
+function detectSampleKey(sampleId) {
+  if (!keyDetector || !sampleLibrary) return;
+
+  const sample = sampleLibrary.getSample(sampleId);
+  if (!sample || !sample.buffer) {
+    showToast('❌ Sample not found');
+    return;
+  }
+
+  showToast('🎵 Analyzing key...');
+
+  const result = keyDetector.analyzeBuffer(sample.buffer, sample.buffer.sampleRate);
+
+  // Store key in sample metadata
+  sample.detectedKey = result.key;
+  sample.keyConfidence = result.confidence;
+
+  showToast(`✅ Detected Key: ${result.key} (confidence: ${(result.confidence * 100).toFixed(0)}%)`);
+  updateSampleList();
+}
+
+// === PHASE 23c: SLICE PROBABILITY SEQUENCING ===
+
+class SliceProbabilitySequencer {
+  constructor() {
+    this.sliceProbabilities = new Map(); // sliceId → probability (0-1)
+    this.sequenceMode = 'random'; // 'random', 'markov', 'weighted'
+  }
+
+  setSliceProbability(sliceId, probability) {
+    this.sliceProbabilities.set(sliceId, Math.max(0, Math.min(1, probability)));
+  }
+
+  getSliceProbability(sliceId) {
+    return this.sliceProbabilities.get(sliceId) || 0.5;
+  }
+
+  shouldTriggerSlice(sliceId) {
+    const probability = this.getSliceProbability(sliceId);
+    return Math.random() < probability;
+  }
+
+  getRandomSliceFromTrack(sampleId, trackKey) {
+    // Get all slices assigned to this track
+    const assignments = sliceSequencer.getAssignmentsForTrack(trackKey);
+    if (assignments.length === 0) return null;
+
+    // Filter by probability
+    const candidateAssignments = assignments.filter(a => {
+      return this.shouldTriggerSlice(a.sliceId);
+    });
+
+    if (candidateAssignments.length === 0) return null;
+
+    // Return random candidate
+    return candidateAssignments[Math.floor(Math.random() * candidateAssignments.length)];
+  }
+}
+
+let sliceProbabilitySequencer = new SliceProbabilitySequencer();
+
+// === PHASE 23d: PERFORMANCE RECORDING DURING SLICE PLAYBACK ===
+
+class SlicePerformanceRecorder {
+  constructor() {
+    this.isRecording = false;
+    this.currentRecording = null;
+    this.recordedSlicePerformances = new Map(); // sliceId → [{timestamp, param, value}]
+  }
+
+  startRecording(recordingName = 'Performance') {
+    this.isRecording = true;
+    this.currentRecording = {
+      name: recordingName,
+      startTime: audioCtx.currentTime,
+      events: []
+    };
+    return this.currentRecording;
+  }
+
+  recordSliceEvent(sliceId, paramName, value) {
+    if (!this.isRecording || !this.currentRecording) return;
+
+    const timestamp = audioCtx.currentTime - this.currentRecording.startTime;
+    this.currentRecording.events.push({
+      timestamp,
+      sliceId,
+      parameter: paramName,
+      value
+    });
+  }
+
+  recordSlicePlayback(sliceId, velocity, pan, reverse) {
+    if (!this.isRecording || !this.currentRecording) return;
+
+    this.recordSliceEvent(sliceId, 'played', {velocity, pan, reverse});
+  }
+
+  stopRecording() {
+    if (!this.isRecording) return null;
+
+    this.isRecording = false;
+    const recording = this.currentRecording;
+    this.currentRecording = null;
+
+    // Sort events by timestamp
+    recording.events.sort((a, b) => a.timestamp - b.timestamp);
+
+    return recording;
+  }
+
+  playbackRecording(recording) {
+    if (!recording || recording.events.length === 0) return;
+
+    const startTime = audioCtx.currentTime;
+
+    recording.events.forEach(event => {
+      const delay = event.timestamp * 1000; // Convert to milliseconds
+
+      setTimeout(() => {
+        if (event.parameter === 'played') {
+          // Trigger slice playback with recorded parameters
+          const slices = sliceManager.slices.get(/* sample id */);
+          if (slices) {
+            const slice = slices.find(s => s.id === event.sliceId);
+            if (slice) {
+              playSliceWithModes(/* sampleId */, event.sliceId, {
+                velocity: event.value.velocity,
+                pan: event.value.pan,
+                reverse: event.value.reverse
+              });
+            }
+          }
+        }
+      }, delay);
+    });
+  }
+
+  exportRecordingAsJSON(recording) {
+    return JSON.stringify({
+      name: recording.name,
+      timestamp: Date.now(),
+      duration: recording.events[recording.events.length - 1]?.timestamp || 0,
+      events: recording.events
+    }, null, 2);
+  }
+}
+
+let slicePerformanceRecorder = new SlicePerformanceRecorder();
+
+function showSliceAnalysisPanel(sampleId) {
+  if (!sampleLibrary) return;
+
+  const sample = sampleLibrary.getSample(sampleId);
+  if (!sample) return;
+
+  const html = `
+    <div style="padding:16px;max-height:500px;overflow-y:auto">
+      <h3 style="margin-top:0;color:var(--cyan)">📊 Sample Analysis: ${sample.name}</h3>
+
+      <div style="margin-bottom:12px;padding:10px;background:rgba(0,150,255,0.05);border-radius:4px">
+        <div style="font-size:9px;color:var(--text-light);margin-bottom:6px">
+          <strong style="color:var(--cyan)">BPM:</strong> ${sample.detectedBPM ? `${sample.detectedBPM} BPM (${(sample.bpmConfidence * 100).toFixed(0)}% confidence)` : 'Not detected'}
+        </div>
+        <button onclick="detectSampleBPM('${sampleId}')" style="width:100%;padding:6px;background:rgba(100,200,255,0.2);border:1px solid rgba(100,200,255,0.4);color:var(--cyan);border-radius:3px;cursor:pointer;font-size:8px">🔍 Detect BPM</button>
+      </div>
+
+      <div style="margin-bottom:12px;padding:10px;background:rgba(170,255,0,0.05);border-radius:4px">
+        <div style="font-size:9px;color:var(--text-light);margin-bottom:6px">
+          <strong style="color:var(--lime)">Key:</strong> ${sample.detectedKey ? `${sample.detectedKey} (${(sample.keyConfidence * 100).toFixed(0)}% confidence)` : 'Not detected'}
+        </div>
+        <button onclick="detectSampleKey('${sampleId}')" style="width:100%;padding:6px;background:rgba(170,255,0,0.2);border:1px solid rgba(170,255,0,0.4);color:var(--lime);border-radius:3px;cursor:pointer;font-size:8px">🎵 Detect Key</button>
+      </div>
+
+      <div style="margin-bottom:12px;padding:10px;background:rgba(255,150,100,0.05);border-radius:4px">
+        <div style="font-size:9px;color:var(--text-light);margin-bottom:6px">
+          <strong style="color:var(--orange)">Recording:</strong> ${slicePerformanceRecorder.isRecording ? '🔴 Recording...' : 'Ready'}
+        </div>
+        ${!slicePerformanceRecorder.isRecording ?
+          `<button onclick="slicePerformanceRecorder.startRecording('Performance - ${sample.name}')" style="width:100%;padding:6px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);color:var(--red);border-radius:3px;cursor:pointer;font-size:8px">⏹️ Start Recording</button>` :
+          `<button onclick="const rec = slicePerformanceRecorder.stopRecording(); showToast('✅ Recording saved'); closeModal();" style="width:100%;padding:6px;background:rgba(100,255,200,0.2);border:1px solid rgba(100,255,200,0.4);color:#66ffcc;border-radius:3px;cursor:pointer;font-size:8px">⏸️ Stop Recording</button>`
+        }
+      </div>
+
+      <button onclick="closeModal()" style="width:100%;padding:8px;background:rgba(0,150,255,0.2);border:1px solid rgba(0,150,255,0.4);color:var(--cyan);border-radius:4px;cursor:pointer;font-size:9px">Done</button>
+    </div>
+  `;
+
+  showModal('Sample Analysis', html, '400px');
 }
 
 // === PHASE 22a: SLICE DETECTOR FUNCTIONS ===
@@ -10564,6 +10954,9 @@ function updateSampleListWithWaveforms() {
         </button>
         <button onclick="openSliceEditor('${sample.id}')" style="padding:4px 8px;background:rgba(255,150,100,0.15);border:1px solid rgba(255,150,100,0.4);color:#ff9966;border-radius:3px;cursor:pointer;font-size:9px">
           🔪 Slice
+        </button>
+        <button onclick="showSliceAnalysisPanel('${sample.id}')" style="padding:4px 8px;background:rgba(100,200,255,0.15);border:1px solid rgba(100,200,255,0.4);color:#64c8ff;border-radius:3px;cursor:pointer;font-size:9px">
+          📊 Analyze
         </button>
         <button onclick="deleteSample('${sample.id}')" style="padding:4px 8px;background:rgba(255,51,85,0.15);border:1px solid var(--red);color:var(--red);border-radius:3px;cursor:pointer;font-size:9px">
           🗑️
@@ -11866,6 +12259,16 @@ document.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => {
     initSliceEffectsChain();
   }, 270);
+
+  // Phase 23a: Initialize BPM Detector
+  setTimeout(() => {
+    initBPMDetector();
+  }, 280);
+
+  // Phase 23b: Initialize Key Detector
+  setTimeout(() => {
+    initKeyDetector();
+  }, 290);
 });
 </script>
 
