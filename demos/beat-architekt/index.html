@@ -10251,6 +10251,332 @@ function showSliceAnalysisPanel(sampleId) {
   showModal('Sample Analysis', html, '400px');
 }
 
+// === PHASE 23e: CROSS-SAMPLE FINGERPRINTING & AUTO-MATCHING ===
+
+class AudioFingerprint {
+  constructor(audioCtx, sampleRate = 44100) {
+    this.audioCtx = audioCtx;
+    this.sampleRate = sampleRate;
+    this.fftSize = 4096;
+  }
+
+  generateFingerprint(buffer, sampleId) {
+    if (!buffer || buffer.length === 0) return null;
+
+    const frameSize = this.fftSize;
+    const hopSize = frameSize / 4;
+    const data = buffer.getChannelData(0);
+
+    const mfccFrames = [];
+    const chromaFrames = [];
+    const centroidValues = [];
+    const fluxValues = [];
+
+    let prevSpectrum = new Float32Array(frameSize / 2);
+
+    for (let i = 0; i < data.length - frameSize; i += hopSize) {
+      const frame = data.slice(i, i + frameSize);
+      const spectrum = this._getSpectrum(frame);
+
+      // MFCC extraction (simplified: 13 coefficients)
+      mfccFrames.push(this._getMFCCVector(spectrum));
+
+      // Chroma vector
+      chromaFrames.push(this._getChromaVector(spectrum));
+
+      // Spectral centroid
+      centroidValues.push(this._spectralCentroid(spectrum));
+
+      // Spectral flux (energy change)
+      fluxValues.push(this._spectralFlux(spectrum, prevSpectrum));
+      prevSpectrum = spectrum;
+    }
+
+    // Average across frames
+    const mfccMean = this._vectorMean(mfccFrames);
+    const chromaMean = this._vectorMean(chromaFrames);
+    const centroid = centroidValues.reduce((a, b) => a + b, 0) / centroidValues.length;
+    const spectralFlux = fluxValues.reduce((a, b) => a + b, 0) / fluxValues.length;
+
+    const fingerprint = {
+      mfccMean,
+      chromaMean,
+      centroid,
+      spectralFlux,
+      generated: Date.now()
+    };
+
+    return fingerprint;
+  }
+
+  _getSpectrum(frame) {
+    const spectrum = new Float32Array(frame.length);
+    let sum = 0;
+    for (let i = 0; i < frame.length; i++) {
+      spectrum[i] = frame[i] * frame[i];
+      sum += spectrum[i];
+    }
+    const rms = Math.sqrt(sum / frame.length) + 1e-10;
+    for (let i = 0; i < spectrum.length; i++) spectrum[i] /= rms;
+    return spectrum;
+  }
+
+  _getMFCCVector(spectrum) {
+    const mfcc = new Float32Array(13);
+    const mel = new Float32Array(40);
+    for (let i = 0; i < 40; i++) {
+      const start = Math.floor((i / 40) * spectrum.length);
+      const end = Math.floor(((i + 1) / 40) * spectrum.length);
+      let sum = 0;
+      for (let j = start; j < end; j++) sum += spectrum[j];
+      mel[i] = Math.log(sum / (end - start) + 1e-10);
+    }
+    for (let i = 0; i < 13; i++) {
+      mfcc[i] = 0;
+      for (let j = 0; j < 40; j++) {
+        mfcc[i] += mel[j] * Math.cos(i * Math.PI * (j + 0.5) / 40);
+      }
+    }
+    return mfcc;
+  }
+
+  _getChromaVector(spectrum) {
+    const chroma = new Float32Array(12);
+    for (let i = 0; i < spectrum.length; i++) {
+      const freq = (i / spectrum.length) * (this.sampleRate / 2);
+      const semitone = 12 * Math.log2(freq / 16.35) % 12;
+      if (semitone >= 0 && semitone < 12) {
+        chroma[Math.floor(semitone)] += spectrum[i];
+      }
+    }
+    const sum = chroma.reduce((a, b) => a + b, 0) + 1e-10;
+    for (let i = 0; i < 12; i++) chroma[i] /= sum;
+    return chroma;
+  }
+
+  _spectralCentroid(spectrum) {
+    let numerator = 0, denominator = 0;
+    for (let i = 0; i < spectrum.length; i++) {
+      const freq = (i / spectrum.length) * (this.sampleRate / 2);
+      numerator += freq * spectrum[i];
+      denominator += spectrum[i];
+    }
+    return denominator > 0 ? numerator / denominator : 5000;
+  }
+
+  _spectralFlux(spectrum, prevSpectrum) {
+    let flux = 0;
+    for (let i = 0; i < spectrum.length; i++) {
+      const delta = spectrum[i] - prevSpectrum[i];
+      flux += delta * delta;
+    }
+    return Math.sqrt(flux / spectrum.length);
+  }
+
+  _vectorMean(vectors) {
+    if (vectors.length === 0) return new Float32Array(13);
+    const mean = new Float32Array(vectors[0].length);
+    for (const v of vectors) {
+      for (let i = 0; i < v.length; i++) mean[i] += v[i];
+    }
+    for (let i = 0; i < mean.length; i++) mean[i] /= vectors.length;
+    return mean;
+  }
+}
+
+class SimilarityMatcher {
+  constructor() {}
+
+  scoreSimilarity(fp1, fp2, sample1, sample2) {
+    if (!fp1 || !fp2) return 0;
+
+    const mfccScore = 1 - this._euclideanDistance(fp1.mfccMean, fp2.mfccMean);
+    const chromaScore = this._cosineSimilarity(fp1.chromaMean, fp2.chromaMean);
+    const centroidScore = 1 - (Math.abs(fp1.centroid - fp2.centroid) / 10000);
+    const bpmScore = this._bpmHarmonicScore(sample1?.detectedBPM || 120, sample2?.detectedBPM || 120);
+
+    const weights = { mfcc: 0.4, chroma: 0.3, centroid: 0.2, bpm: 0.1 };
+    const score = Math.max(0, Math.min(1,
+      weights.mfcc * mfccScore +
+      weights.chroma * chromaScore +
+      weights.centroid * centroidScore +
+      weights.bpm * bpmScore
+    ));
+
+    return score;
+  }
+
+  _euclideanDistance(vec1, vec2) {
+    if (vec1.length !== vec2.length) return 1;
+    let sum = 0;
+    for (let i = 0; i < vec1.length; i++) {
+      sum += (vec1[i] - vec2[i]) ** 2;
+    }
+    return Math.min(1, Math.sqrt(sum) / Math.sqrt(vec1.length));
+  }
+
+  _cosineSimilarity(vec1, vec2) {
+    if (vec1.length !== vec2.length) return 0;
+    let dot = 0, norm1 = 0, norm2 = 0;
+    for (let i = 0; i < vec1.length; i++) {
+      dot += vec1[i] * vec2[i];
+      norm1 += vec1[i] * vec1[i];
+      norm2 += vec2[i] * vec2[i];
+    }
+    const denom = Math.sqrt(norm1) * Math.sqrt(norm2) + 1e-10;
+    return (dot / denom + 1) / 2;
+  }
+
+  _bpmHarmonicScore(bpm1, bpm2) {
+    if (!bpm1 || !bpm2) return 0.5;
+    const ratios = [0.5, 1, 1.5, 2];
+    const ratio = bpm1 / bpm2;
+    for (const r of ratios) {
+      if (Math.abs(ratio - r) < 0.1) return 1;
+    }
+    return Math.max(0, 1 - Math.abs(ratio - 1) / 2);
+  }
+}
+
+let audioFingerprint = null;
+let similarityMatcher = new SimilarityMatcher();
+
+function initAudioFingerprint() {
+  audioFingerprint = new AudioFingerprint(audioCtx);
+}
+
+async function generateSampleFingerprints() {
+  if (!audioFingerprint || !sampleLibrary) return;
+
+  const samples = sampleLibrary.listSamples();
+  let generated = 0;
+
+  for (const sample of samples) {
+    if (!sample.fingerprint || Date.now() - (sample.fingerprint.generated || 0) > 3600000) {
+      if (sample.buffer) {
+        sample.fingerprint = audioFingerprint.generateFingerprint(sample.buffer, sample.id);
+        generated++;
+      }
+    }
+  }
+
+  return generated;
+}
+
+async function findRelatedSamples(sampleId, threshold = 0.7) {
+  if (!sampleLibrary || !audioFingerprint) return [];
+
+  const targetSample = sampleLibrary.getSample(sampleId);
+  if (!targetSample) return [];
+
+  if (!targetSample.fingerprint && targetSample.buffer) {
+    targetSample.fingerprint = audioFingerprint.generateFingerprint(targetSample.buffer, sampleId);
+  }
+
+  const samples = sampleLibrary.listSamples();
+  const related = [];
+
+  for (const sample of samples) {
+    if (sample.id === sampleId) continue;
+
+    if (!sample.fingerprint && sample.buffer) {
+      sample.fingerprint = audioFingerprint.generateFingerprint(sample.buffer, sample.id);
+    }
+
+    if (sample.fingerprint && targetSample.fingerprint) {
+      const score = similarityMatcher.scoreSimilarity(
+        targetSample.fingerprint,
+        sample.fingerprint,
+        targetSample,
+        sample
+      );
+
+      if (score >= threshold) {
+        let reason = [];
+        if (score > 0.8) reason.push('Similar timbre');
+        if (Math.abs(targetSample.detectedBPM - sample.detectedBPM) < 5) reason.push('Matching BPM');
+        if (targetSample.detectedKey === sample.detectedKey) reason.push('Same key');
+        else if (targetSample.detectedKey && sample.detectedKey) reason.push('Transposed key');
+
+        related.push({
+          sampleId: sample.id,
+          name: sample.name,
+          matchScore: score,
+          reason: reason.join(', ') || 'Spectral similarity'
+        });
+      }
+    }
+  }
+
+  return related.sort((a, b) => b.matchScore - a.matchScore).slice(0, 10);
+}
+
+function showRelatedSamplesPanel(sampleId) {
+  if (!sampleLibrary) return;
+
+  const sample = sampleLibrary.getSample(sampleId);
+  if (!sample) return;
+
+  showToast('🔍 Finding related samples...');
+
+  findRelatedSamples(sampleId).then(related => {
+    const html = `
+      <div style="padding:16px;max-height:600px;overflow-y:auto">
+        <h3 style="margin-top:0;color:var(--cyan)">🔗 Related Samples: ${sample.name}</h3>
+
+        ${related.length === 0 ? `<p style="color:var(--text-light);font-size:9px">No related samples found</p>` : `
+          ${related.map(r => `
+            <div style="margin-bottom:12px;padding:10px;background:rgba(0,150,255,0.05);border-radius:4px;border-left:3px solid var(--cyan)">
+              <div style="font-size:10px;font-weight:bold;color:var(--cyan);margin-bottom:4px">${r.name}</div>
+              <div style="font-size:8px;color:var(--text-light);margin-bottom:6px">
+                <span style="display:inline-block;width:80px">Match: ${(r.matchScore * 100).toFixed(0)}%</span>
+                <span style="color:var(--lime)">${r.reason}</span>
+              </div>
+              <div style="display:flex;gap:4px;font-size:8px">
+                <button onclick="sampleLibrary.getSample('${r.sampleId}').isPreviewPlaying ? sampleLibrary.getSample('${r.sampleId}').source?.stop() : playPreview('${r.sampleId}')" style="flex:1;padding:4px;background:rgba(100,200,255,0.2);border:1px solid var(--cyan);color:var(--cyan);border-radius:2px;cursor:pointer">🔊 Preview</button>
+                <button onclick="closeModal()" style="flex:1;padding:4px;background:rgba(100,255,200,0.2);border:1px solid #66ffcc;color:#66ffcc;border-radius:2px;cursor:pointer">Use</button>
+              </div>
+            </div>
+          `).join('')}
+        `}
+
+        <button onclick="generateSampleFingerprints().then(() => showToast('✅ Fingerprints generated')); closeModal();" style="width:100%;margin-top:12px;padding:8px;background:rgba(255,150,100,0.2);border:1px solid var(--orange);color:var(--orange);border-radius:4px;cursor:pointer;font-size:9px">⚡ Refresh Matches</button>
+        <button onclick="closeModal()" style="width:100%;margin-top:8px;padding:8px;background:rgba(0,150,255,0.2);border:1px solid var(--cyan);color:var(--cyan);border-radius:4px;cursor:pointer;font-size:9px">Done</button>
+      </div>
+    `;
+
+    showModal('Related Samples', html, '420px');
+  });
+}
+
+function playPreview(sampleId) {
+  const sample = sampleLibrary.getSample(sampleId);
+  if (!sample || !sample.buffer) return;
+
+  if (sample.isPreviewPlaying && sample.source) {
+    sample.source.stop();
+    sample.isPreviewPlaying = false;
+    return;
+  }
+
+  const source = audioCtx.createBufferSource();
+  source.buffer = sample.buffer;
+
+  const gainNode = audioCtx.createGain();
+  gainNode.gain.value = 0.5;
+
+  source.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+
+  source.start(0, 0, Math.min(5, sample.duration));
+  sample.source = source;
+  sample.isPreviewPlaying = true;
+
+  setTimeout(() => {
+    sample.isPreviewPlaying = false;
+  }, Math.min(5000, sample.duration * 1000));
+}
+
 // === PHASE 22a: SLICE DETECTOR FUNCTIONS ===
 
 let transientDetector = null;
