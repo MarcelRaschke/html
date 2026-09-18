@@ -3563,7 +3563,8 @@ function startSequencer() {
         // Phase 22e: Check for slice assignment first
         const sliceAssignment = sliceSequencer.getSliceAssignment(t.key, currentStep);
         if (sliceAssignment) {
-          playSlice(sliceAssignment.sampleId, sliceAssignment.sliceId, {
+          // Phase 22h: Use playSliceWithModes to support advanced playback modes
+          playSliceWithModes(sliceAssignment.sampleId, sliceAssignment.sliceId, {
             velocity: sliceAssignment.velocity * step.velocity,
             pan: sliceAssignment.pan + step.pan,
             reverse: sliceAssignment.reverse
@@ -9638,6 +9639,228 @@ function showSliceModulationEditor(sampleId, sliceId) {
   showModal('Slice Modulation', html, '450px');
 }
 
+// === PHASE 22h: SMART PLAYBACK MODES ===
+
+class SlicePlaybackModes {
+  constructor() {
+    this.sliceModes = new Map(); // sliceId → {reverse, speedMode, grainStart, grainEnd, autoChain}
+  }
+
+  setPlaybackMode(sliceId, mode = {}) {
+    // mode: {reverse, speedMode, grainStart, grainEnd, autoChain}
+    this.sliceModes.set(sliceId, {
+      reverse: mode.reverse || false,
+      speedMode: mode.speedMode || 'normal', // 'normal', 'half', 'double', 'timestretched'
+      grainStart: mode.grainStart || 0, // 0-1, portion of slice start
+      grainEnd: mode.grainEnd || 1, // 0-1, portion of slice end
+      autoChain: mode.autoChain || false, // Chain next slice seamlessly
+      autoChainTarget: mode.autoChainTarget || null // Next slice to chain
+    });
+  }
+
+  getPlaybackMode(sliceId) {
+    return this.sliceModes.get(sliceId) || {
+      reverse: false,
+      speedMode: 'normal',
+      grainStart: 0,
+      grainEnd: 1,
+      autoChain: false,
+      autoChainTarget: null
+    };
+  }
+}
+
+let slicePlaybackModes = new SlicePlaybackModes();
+
+function createTimeStretchBuffer(originalBuffer, ratio) {
+  // Simple time-stretch via resampling (pitch-neutral speed change)
+  // ratio: 0.5 = half-speed (2x duration), 2.0 = double-speed (0.5x duration)
+
+  const rate = audioCtx.sampleRate;
+  const originalLength = originalBuffer.length;
+  const stretchedLength = Math.round(originalLength / ratio);
+
+  const stretched = audioCtx.createBuffer(
+    originalBuffer.numberOfChannels,
+    stretchedLength,
+    rate
+  );
+
+  for (let ch = 0; ch < originalBuffer.numberOfChannels; ch++) {
+    const originalData = originalBuffer.getChannelData(ch);
+    const stretchedData = stretched.getChannelData(ch);
+
+    for (let i = 0; i < stretchedLength; i++) {
+      const pos = (i * ratio) % originalLength;
+      const idx = Math.floor(pos);
+      const frac = pos - idx;
+
+      // Linear interpolation for smoother stretching
+      const s0 = originalData[idx];
+      const s1 = originalData[(idx + 1) % originalLength];
+      stretchedData[i] = s0 + (s1 - s0) * frac;
+    }
+  }
+
+  return stretched;
+}
+
+function playSliceWithModes(sampleId, sliceId, options = {}) {
+  if (!audioCtx || !sampleLibrary) return;
+
+  const sample = sampleLibrary.getSample(sampleId);
+  if (!sample || !sample.buffer) return;
+
+  const slices = sliceManager.getSlicesForSample(sampleId);
+  const slice = slices.find(s => s.id === sliceId);
+  if (!slice) return;
+
+  const mode = slicePlaybackModes.getPlaybackMode(sliceId);
+  const velocity = options.velocity || 1.0;
+  const pan = options.pan || 0;
+
+  const now = audioCtx.currentTime;
+  const sliceStart = (slice.startMs / 1000) + (mode.grainStart * (slice.endMs - slice.startMs) / 1000);
+  const sliceEnd = (slice.startMs / 1000) + (mode.grainEnd * (slice.endMs - slice.startMs) / 1000);
+  const sliceDuration = sliceEnd - sliceStart;
+
+  // Apply time-stretch if needed
+  let playbackBuffer = sample.buffer;
+  let playbackRate = 1;
+
+  if (mode.speedMode === 'half') {
+    playbackRate = 0.5; // Half-speed
+  } else if (mode.speedMode === 'double') {
+    playbackRate = 2.0; // Double-speed
+  } else if (mode.speedMode === 'timestretched') {
+    // Create time-stretched buffer (preserves pitch)
+    playbackBuffer = createTimeStretchBuffer(sample.buffer, 0.5); // Half-speed without pitch shift
+    playbackRate = 1.0;
+  }
+
+  const source = audioCtx.createBufferSource();
+  source.buffer = playbackBuffer;
+  source.playbackRate.value = mode.reverse ? -playbackRate : playbackRate;
+
+  const gainNode = audioCtx.createGain();
+  gainNode.gain.setValueAtTime(velocity * 0.8, now);
+  gainNode.gain.exponentialRampToValueAtTime(0.001, now + (sliceDuration / Math.abs(playbackRate)));
+
+  const pannerNode = audioCtx.createStereoPanner();
+  pannerNode.pan.value = pan;
+
+  // Phase 22g: Calculate modulation values for this slice playback
+  let modValues = {};
+
+  if (lfoOscillators && lfoOscillators.length > 0) {
+    lfoOscillators.forEach((lfo, idx) => {
+      if (lfo.oscillator && lfo.active) {
+        modValues[`lfo${idx + 1}`] = lfo.oscillator.getValue();
+      }
+    });
+  }
+
+  if (envelopeGenerators && envelopeGenerators.length > 0) {
+    modValues.envelope = envelopeGenerators[0]?.getValue?.() || 0;
+  }
+
+  if (typeof macroValues !== 'undefined') {
+    for (let i = 0; i < macroValues.length; i++) {
+      modValues[`macro_${i + 1}`] = (macroValues[i] || 0) / 100;
+    }
+  }
+
+  // Phase 22f: Apply slice effects with modulation
+  const baseEffects = sliceEffectsManager.getSliceEffects(sliceId);
+  const modulatedEffects = sliceModulationRouter.applyModulations(sliceId, baseEffects, modValues);
+  const effectChain = applySliceEffects(source, gainNode, sliceId, {duration: sliceDuration / Math.abs(playbackRate), effects: modulatedEffects});
+
+  // Connect to output
+  gainNode.connect(pannerNode);
+  pannerNode.connect(audioCtx.destination);
+
+  if (mode.reverse) {
+    source.start(now, sliceEnd);
+  } else {
+    source.start(now, sliceStart, sliceDuration / playbackRate);
+  }
+  source.stop(now + (sliceDuration / Math.abs(playbackRate)));
+
+  // Phase 22h: Handle auto-chain to next slice
+  if (mode.autoChain && mode.autoChainTarget) {
+    const chainDelay = sliceDuration / Math.abs(playbackRate);
+    setTimeout(() => {
+      playSliceWithModes(sampleId, mode.autoChainTarget, options);
+    }, chainDelay * 1000);
+  }
+}
+
+function showSlicePlaybackModeEditor(sampleId, sliceId) {
+  const slice = sliceManager.getSlicesForSample(sampleId).find(s => s.id === sliceId);
+  if (!slice) return showToast('❌ Slice not found');
+
+  const mode = slicePlaybackModes.getPlaybackMode(sliceId);
+  const slices = sliceManager.getSlicesForSample(sampleId);
+
+  const html = `
+    <div style="padding:16px;max-height:600px;overflow-y:auto">
+      <h3 style="margin-top:0;color:var(--orange)">⏮️ Slice Playback Modes: ${slice.label || 'Slice'}</h3>
+
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:9px;color:var(--text-light);margin-bottom:6px">
+          <input type="checkbox" ${mode.reverse ? 'checked' : ''}
+            onchange="slicePlaybackModes.getPlaybackMode('${sliceId}').reverse = this.checked"
+            style="margin-right:6px">
+          ◀️ Reverse Playback
+        </label>
+      </div>
+
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:9px;color:var(--text-light);margin-bottom:6px">🎚️ Speed Mode</label>
+        <select onchange="slicePlaybackModes.getPlaybackMode('${sliceId}').speedMode = this.value"
+          style="width:100%;padding:6px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:3px;color:var(--text);font-size:9px">
+          <option value="normal" ${mode.speedMode === 'normal' ? 'selected' : ''}>Normal (1x)</option>
+          <option value="half" ${mode.speedMode === 'half' ? 'selected' : ''}>Half-Speed (0.5x)</option>
+          <option value="double" ${mode.speedMode === 'double' ? 'selected' : ''}>Double-Speed (2x)</option>
+          <option value="timestretched" ${mode.speedMode === 'timestretched' ? 'selected' : ''}>Time-Stretched (no pitch shift)</option>
+        </select>
+      </div>
+
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:9px;color:var(--text-light);margin-bottom:6px">🌾 Grain Selection Start: ${(mode.grainStart * 100).toFixed(0)}%</label>
+        <input type="range" min="0" max="100" step="1" value="${mode.grainStart * 100}"
+          onchange="slicePlaybackModes.getPlaybackMode('${sliceId}').grainStart = this.value/100"
+          style="width:100%;cursor:pointer;margin-bottom:8px">
+
+        <label style="display:block;font-size:9px;color:var(--text-light);margin-bottom:6px">🌾 Grain Selection End: ${(mode.grainEnd * 100).toFixed(0)}%</label>
+        <input type="range" min="0" max="100" step="1" value="${mode.grainEnd * 100}"
+          onchange="slicePlaybackModes.getPlaybackMode('${sliceId}').grainEnd = this.value/100"
+          style="width:100%;cursor:pointer">
+      </div>
+
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:9px;color:var(--text-light);margin-bottom:6px">
+          <input type="checkbox" ${mode.autoChain ? 'checked' : ''}
+            onchange="slicePlaybackModes.getPlaybackMode('${sliceId}').autoChain = this.checked"
+            style="margin-right:6px">
+          🔗 Auto-Chain to Next Slice
+        </label>
+        ${mode.autoChain ? `
+          <select onchange="slicePlaybackModes.getPlaybackMode('${sliceId}').autoChainTarget = this.value"
+            style="width:100%;padding:6px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:3px;color:var(--text);font-size:8px">
+            <option value="">Select target slice...</option>
+            ${slices.map(s => `<option value="${s.id}" ${mode.autoChainTarget === s.id ? 'selected' : ''}>${s.label || 'Slice'}</option>`).join('')}
+          </select>
+        ` : ''}
+      </div>
+
+      <button onclick="closeModal()" style="width:100%;padding:8px;background:rgba(0,150,255,0.2);border:1px solid rgba(0,150,255,0.4);color:var(--cyan);border-radius:4px;cursor:pointer">Done</button>
+    </div>
+  `;
+
+  showModal('Slice Playback Modes', html, '450px');
+}
+
 // === PHASE 22a: SLICE DETECTOR FUNCTIONS ===
 
 let transientDetector = null;
@@ -9895,6 +10118,7 @@ function updateSlicesTable() {
         <td style="padding:8px;text-align:center;gap:4px;display:flex;justify-content:center">
           <button onclick="auditEditingSlice(${idx})" style="padding:4px 8px;background:rgba(100,200,255,0.2);border:1px solid rgba(100,200,255,0.4);border-radius:3px;color:var(--cyan);font-size:9px;cursor:pointer">▶</button>
           <button onclick="showSliceEffectsEditor('${currentSliceEditSampleId}', '${slice.id}')" style="padding:4px 8px;background:rgba(100,255,200,0.2);border:1px solid rgba(100,255,200,0.4);border-radius:3px;color:#66ffcc;font-size:9px;cursor:pointer">🎛️</button>
+          <button onclick="showSlicePlaybackModeEditor('${currentSliceEditSampleId}', '${slice.id}')" style="padding:4px 8px;background:rgba(255,150,100,0.2);border:1px solid rgba(255,150,100,0.4);border-radius:3px;color:#ff9966;font-size:9px;cursor:pointer">⏮️</button>
           <button onclick="deleteEditingSlice(${idx})" style="padding:4px 8px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:3px;color:#ff6666;font-size:9px;cursor:pointer">🗑</button>
         </td>
       </tr>
