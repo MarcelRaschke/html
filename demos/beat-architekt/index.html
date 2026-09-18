@@ -1523,6 +1523,7 @@ let currentRecording = null;
 let recordedPerformances = {};
 let macroValues = new Array(8).fill(0);
 let patternQueue = [];
+let activeLoopRegion = null;
 let sequencerState = {
   isRecording: false,
   playbackMode: 'live',
@@ -8826,6 +8827,177 @@ async function deleteCuePoint(sampleId, cueId) {
   showToast('✅ Cue deleted');
 }
 
+// === PHASE 22d: LOOP MANAGER CLASS ===
+
+class LoopManager {
+  constructor() {
+    this.loops = new Map(); // sampleId → [loops]
+  }
+
+  addLoop(sampleId, loop) {
+    if (!this.loops.has(sampleId)) {
+      this.loops.set(sampleId, []);
+    }
+    loop.id = loop.id || `loop_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    this.loops.get(sampleId).push(loop);
+    return loop.id;
+  }
+
+  updateLoop(sampleId, loopId, updates) {
+    const loops = this.loops.get(sampleId);
+    if (!loops) return false;
+
+    const loop = loops.find(l => l.id === loopId);
+    if (!loop) return false;
+
+    Object.assign(loop, updates);
+    return true;
+  }
+
+  deleteLoop(sampleId, loopId) {
+    const loops = this.loops.get(sampleId);
+    if (!loops) return false;
+
+    const idx = loops.findIndex(l => l.id === loopId);
+    if (idx === -1) return false;
+
+    loops.splice(idx, 1);
+    return true;
+  }
+
+  getLoopsForSample(sampleId) {
+    return this.loops.get(sampleId) || [];
+  }
+
+  async saveLoopsToDB(sampleId) {
+    if (!sampleLibrary) return false;
+    const sample = sampleLibrary.getSample(sampleId);
+    if (!sample) return false;
+
+    sample.loops = this.loops.get(sampleId) || [];
+    return sampleLibrary.saveSample(sample);
+  }
+
+  async loadLoopsFromDB(sampleId) {
+    if (!sampleLibrary) return [];
+    const sample = sampleLibrary.getSample(sampleId);
+    if (!sample || !sample.loops) return [];
+
+    this.loops.set(sampleId, sample.loops);
+    return sample.loops;
+  }
+}
+
+// === PHASE 22d: LOOP MANAGER INIT ===
+
+let loopManager = new LoopManager();
+
+// === PHASE 22d: LOOP REGION FUNCTIONS ===
+
+async function addLoopRegion(sampleId, startMs, endMs, label = 'Loop') {
+  loopManager.addLoop(sampleId, {
+    startMs: Math.max(0, startMs),
+    endMs: Math.max(startMs + 100, endMs),
+    label: label,
+    mode: 'loop'
+  });
+
+  await loopManager.saveLoopsToDB(sampleId);
+  const sample = sampleLibrary.getSample(sampleId);
+  const duration = (endMs - startMs) / 1000;
+  showToast(`✅ Loop added: ${duration.toFixed(2)}s`);
+}
+
+async function deleteLoopRegion(sampleId, loopId) {
+  loopManager.deleteLoop(sampleId, loopId);
+  await loopManager.saveLoopsToDB(sampleId);
+  showToast('✅ Loop deleted');
+}
+
+function jumpToLoop(sampleId, loopId) {
+  const loops = loopManager.getLoopsForSample(sampleId);
+  const loop = loops.find(l => l.id === loopId);
+  if (loop) {
+    playheadTime = loop.startMs / 1000;
+    activeLoopRegion = loop;
+    updatePlayheadUI();
+  }
+}
+
+function showLoopEditor(sampleId) {
+  const sample = sampleLibrary.getSample(sampleId);
+  if (!sample || !sample.buffer) return showToast('❌ Sample not loaded');
+
+  const loops = loopManager.getLoopsForSample(sampleId);
+  const duration = sample.duration || (sample.buffer.length / sample.sampleRate);
+
+  const html = `
+    <div style="padding:16px;max-height:600px;overflow-y:auto">
+      <h3 style="margin-top:0;color:var(--cyan)">🔁 Loop Region Editor</h3>
+
+      <div style="margin-bottom:16px">
+        <label style="font-size:9px;color:var(--text-light);display:block;margin-bottom:4px">
+          Loop Start (ms): <input id="loopStartInput" type="number" min="0" value="0" style="width:80px;padding:4px;background:rgba(0,0,0,0.3);border:1px solid var(--cyan);color:var(--cyan);border-radius:3px">
+        </label>
+        <label style="font-size:9px;color:var(--text-light);display:block;margin-bottom:8px">
+          Loop End (ms): <input id="loopEndInput" type="number" min="100" value="1000" style="width:80px;padding:4px;background:rgba(0,0,0,0.3);border:1px solid var(--cyan);color:var(--cyan);border-radius:3px">
+        </label>
+        <label style="font-size:9px;color:var(--text-light);display:block;margin-bottom:8px">
+          Label: <input id="loopLabelInput" type="text" value="Loop" style="width:100px;padding:4px;background:rgba(0,0,0,0.3);border:1px solid var(--cyan);color:var(--cyan);border-radius:3px">
+        </label>
+        <button onclick="confirmAddLoop('${sampleId}')" style="padding:6px 12px;background:var(--cyan);color:var(--bg);border:none;border-radius:3px;cursor:pointer;font-weight:600;font-size:9px">
+          + Add Loop
+        </button>
+      </div>
+
+      <div style="margin-top:12px">
+        <h4 style="margin:8px 0;color:var(--text-light);font-size:10px">Active Loops:</h4>
+        ${loops.length ? loops.map(loop => {
+          const startSec = (loop.startMs / 1000).toFixed(2);
+          const endSec = (loop.endMs / 1000).toFixed(2);
+          const loopDur = ((loop.endMs - loop.startMs) / 1000).toFixed(2);
+          return `
+            <div style="padding:8px;background:rgba(0,150,255,0.1);border-left:3px solid var(--cyan);border-radius:3px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+              <div style="font-size:9px">
+                <div style="color:var(--cyan);font-weight:600">${loop.label}</div>
+                <div style="color:var(--text-light)">${startSec}s → ${endSec}s (${loopDur}s)</div>
+              </div>
+              <div style="display:flex;gap:4px">
+                <button onclick="jumpToLoop('${sampleId}', '${loop.id}')" style="padding:2px 6px;background:rgba(0,200,100,0.2);border:1px solid rgba(0,200,100,0.4);color:#00c864;border-radius:2px;cursor:pointer;font-size:8px">
+                  ▶
+                </button>
+                <button onclick="deleteLoopRegion('${sampleId}', '${loop.id}')" style="padding:2px 6px;background:rgba(255,51,85,0.2);border:1px solid rgba(255,51,85,0.4);color:var(--red);border-radius:2px;cursor:pointer;font-size:8px">
+                  ✕
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('') : '<div style="padding:8px;color:var(--text-light);font-size:9px">No loops defined</div>'}
+      </div>
+    </div>
+  `;
+
+  showModal('Loop Region Editor', html, '420px');
+}
+
+function confirmAddLoop(sampleId) {
+  const startInput = document.getElementById('loopStartInput');
+  const endInput = document.getElementById('loopEndInput');
+  const labelInput = document.getElementById('loopLabelInput');
+
+  const startMs = parseInt(startInput.value) || 0;
+  const endMs = parseInt(endInput.value) || 1000;
+  const label = labelInput.value || 'Loop';
+
+  if (endMs <= startMs) {
+    showToast('❌ Loop end must be after start');
+    return;
+  }
+
+  addLoopRegion(sampleId, startMs, endMs, label);
+  closeModal();
+}
+
 // === PHASE 22a: SLICE DETECTOR FUNCTIONS ===
 
 let transientDetector = null;
@@ -9521,6 +9693,9 @@ function updateSampleListWithWaveforms() {
       <div style="display:flex;gap:4px">
         <button onclick="showCueManager('${sample.id}')" style="padding:4px 8px;background:rgba(0,150,255,0.15);border:1px solid rgba(0,150,255,0.4);color:#00aeff;border-radius:3px;cursor:pointer;font-size:9px">
           🎯 Cues
+        </button>
+        <button onclick="showLoopEditor('${sample.id}')" style="padding:4px 8px;background:rgba(0,200,150,0.15);border:1px solid rgba(0,200,150,0.4);color:#00c896;border-radius:3px;cursor:pointer;font-size:9px">
+          🔁 Loops
         </button>
         <button onclick="openSliceEditor('${sample.id}')" style="padding:4px 8px;background:rgba(255,150,100,0.15);border:1px solid rgba(255,150,100,0.4);color:#ff9966;border-radius:3px;cursor:pointer;font-size:9px">
           🔪 Slice
