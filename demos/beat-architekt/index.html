@@ -6130,8 +6130,34 @@ function playSlice(sampleId, sliceId, options = {}) {
   const pannerNode = audioCtx.createStereoPanner();
   pannerNode.pan.value = pan;
 
-  // Phase 22f: Apply slice effects
-  const effectChain = applySliceEffects(source, gainNode, sliceId, {duration: sliceDuration});
+  // Phase 22g: Calculate modulation values for this slice playback
+  let modValues = {};
+
+  // Get LFO values (already oscillating in real-time)
+  if (lfoOscillators && lfoOscillators.length > 0) {
+    lfoOscillators.forEach((lfo, idx) => {
+      if (lfo.oscillator && lfo.active) {
+        modValues[`lfo${idx + 1}`] = lfo.oscillator.getValue();
+      }
+    });
+  }
+
+  // Get envelope value (attack/decay/sustain/release state)
+  if (envelopeGenerators && envelopeGenerators.length > 0) {
+    modValues.envelope = envelopeGenerators[0]?.getValue?.() || 0;
+  }
+
+  // Get macro values
+  if (typeof macroValues !== 'undefined') {
+    for (let i = 0; i < macroValues.length; i++) {
+      modValues[`macro_${i + 1}`] = (macroValues[i] || 0) / 100; // Normalize to 0-1
+    }
+  }
+
+  // Phase 22f: Apply slice effects with modulation
+  const baseEffects = sliceEffectsManager.getSliceEffects(sliceId);
+  const modulatedEffects = sliceModulationRouter.applyModulations(sliceId, baseEffects, modValues);
+  const effectChain = applySliceEffects(source, gainNode, sliceId, {duration: sliceDuration, effects: modulatedEffects});
 
   // Connect to output
   gainNode.connect(pannerNode);
@@ -9338,7 +9364,8 @@ function createSliceEffectsChain(ctx, options = {}) {
 }
 
 function applySliceEffects(source, gainNode, sliceId, options = {}) {
-  const effects = sliceEffectsManager.getSliceEffects(sliceId);
+  // Use modulatedEffects if provided (with Phase 22g modulation applied), otherwise use base effects
+  const effects = options.effects || sliceEffectsManager.getSliceEffects(sliceId);
   const now = audioCtx.currentTime;
   const duration = options.duration || 1.0;
 
@@ -9444,11 +9471,171 @@ function showSliceEffectsEditor(sampleId, sliceId) {
           style="width:100%;cursor:pointer">
       </div>
 
-      <button onclick="closeModal()" style="width:100%;padding:8px;background:rgba(0,150,255,0.2);border:1px solid rgba(0,150,255,0.4);color:var(--cyan);border-radius:4px;cursor:pointer">Done</button>
+      <div style="display:flex;gap:8px">
+        <button onclick="closeModal()" style="flex:1;padding:8px;background:rgba(0,150,255,0.2);border:1px solid rgba(0,150,255,0.4);color:var(--cyan);border-radius:4px;cursor:pointer;font-size:9px">Done</button>
+        <button onclick="showSliceModulationEditor('${sampleId}', '${sliceId}')" style="flex:1;padding:8px;background:rgba(170,255,0,0.2);border:1px solid rgba(170,255,0,0.4);color:var(--lime);border-radius:4px;cursor:pointer;font-size:9px">📡 Modulation</button>
+      </div>
     </div>
   `;
 
   showModal('Slice Effects', html, '400px');
+}
+
+// === PHASE 22g: SLICE MODULATION ROUTING ===
+
+class SliceModulationRouter {
+  constructor() {
+    this.routings = new Map(); // sliceId → [{source, target, depth}, ...]
+  }
+
+  addModulationRoute(sliceId, source, target, depth = 0.5) {
+    // source: 'lfo1', 'lfo2', 'envelope', 'macro_X' (e.g., 'macro_1')
+    // target: 'filterCutoff', 'filterResonance', 'pan', 'reverbSend'
+    if (!this.routings.has(sliceId)) {
+      this.routings.set(sliceId, []);
+    }
+    this.routings.get(sliceId).push({
+      id: `route_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      source,
+      target,
+      depth: Math.max(0, Math.min(1, depth))
+    });
+  }
+
+  removeModulationRoute(sliceId, routeId) {
+    if (this.routings.has(sliceId)) {
+      const routes = this.routings.get(sliceId);
+      const idx = routes.findIndex(r => r.id === routeId);
+      if (idx >= 0) routes.splice(idx, 1);
+    }
+  }
+
+  getModulationRoutes(sliceId) {
+    return this.routings.get(sliceId) || [];
+  }
+
+  applyModulations(sliceId, effects, modValues = {}) {
+    // modValues: {lfo1: -1 to 1, lfo2: -1 to 1, envelope: 0-1, macro_X: 0-1}
+    const routes = this.getModulationRoutes(sliceId);
+    const modifiedEffects = JSON.parse(JSON.stringify(effects));
+
+    routes.forEach(route => {
+      const modValue = modValues[route.source] !== undefined ? modValues[route.source] : 0;
+
+      switch (route.target) {
+        case 'filterCutoff':
+          // Map LFO (-1 to 1) to cutoff range (20Hz - 20000Hz)
+          const lfoCutoff = 20 + (modValue + 1) * 0.5 * (20000 - 20);
+          modifiedEffects.filter.cutoff = effects.filter.cutoff + (lfoCutoff - effects.filter.cutoff) * route.depth;
+          break;
+
+        case 'filterResonance':
+          // Map LFO to resonance (0-40)
+          const lfoRes = (modValue + 1) * 0.5 * 40;
+          modifiedEffects.filter.resonance = Math.max(0, effects.filter.resonance + (lfoRes - effects.filter.resonance) * route.depth);
+          break;
+
+        case 'pan':
+          // Map LFO to pan range (-1 to 1)
+          const lfoPan = modValue; // Already -1 to 1
+          modifiedEffects.pan = Math.max(-1, Math.min(1, (effects.pan || 0) + lfoPan * route.depth));
+          break;
+
+        case 'reverbSend':
+          // Map LFO/macro to reverb send (0-1)
+          const lfoReverb = (modValue + 1) * 0.5; // Normalize -1 to 1 → 0 to 1
+          modifiedEffects.reverb.send = Math.max(0, Math.min(1, effects.reverb.send + (lfoReverb - effects.reverb.send) * route.depth));
+          break;
+
+        case 'distortionDrive':
+          const lfoDrive = (modValue + 1) * 0.5; // 0 to 1
+          modifiedEffects.distortion.drive = Math.max(0, Math.min(1, effects.distortion.drive + (lfoDrive - effects.distortion.drive) * route.depth));
+          break;
+
+        case 'delayTime':
+          const lfoDelayTime = 0.1 + (modValue + 1) * 0.5 * (2 - 0.1); // 0.1 to 2s
+          modifiedEffects.delay.time = effects.delay.time + (lfoDelayTime - effects.delay.time) * route.depth;
+          break;
+      }
+    });
+
+    return modifiedEffects;
+  }
+}
+
+let sliceModulationRouter = new SliceModulationRouter();
+
+function showSliceModulationEditor(sampleId, sliceId) {
+  const slice = sliceManager.getSlicesForSample(sampleId).find(s => s.id === sliceId);
+  if (!slice) return showToast('❌ Slice not found');
+
+  const routes = sliceModulationRouter.getModulationRoutes(sliceId);
+
+  const availableSources = ['lfo1', 'lfo2', 'envelope'];
+  if (typeof macroValues !== 'undefined') {
+    for (let i = 0; i < Math.min(8, macroValues.length); i++) {
+      availableSources.push(`macro_${i + 1}`);
+    }
+  }
+
+  const availableTargets = [
+    {value: 'filterCutoff', label: '🎹 Filter Cutoff'},
+    {value: 'filterResonance', label: '📊 Filter Resonance'},
+    {value: 'pan', label: '⬅️➡️ Pan'},
+    {value: 'reverbSend', label: '🎚️ Reverb Send'},
+    {value: 'distortionDrive', label: '🔥 Distortion Drive'},
+    {value: 'delayTime', label: '⏳ Delay Time'}
+  ];
+
+  const routesList = routes.map(route => `
+    <div style="padding:8px;background:rgba(0,0,0,0.2);border-radius:3px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:8px;color:var(--text-light)">
+        <strong style="color:var(--lime)">${route.source}</strong> →
+        <strong style="color:var(--magenta)">${availableTargets.find(t => t.value === route.target)?.label || route.target}</strong>
+        <div style="font-size:7px;margin-top:2px">Depth: ${(route.depth * 100).toFixed(0)}%</div>
+      </div>
+      <input type="range" min="0" max="100" value="${route.depth * 100}"
+        onchange="sliceModulationRouter.getModulationRoutes('${sliceId}').find(r => r.id === '${route.id}').depth = this.value/100"
+        style="width:60px;cursor:pointer;margin:0 8px">
+      <button onclick="sliceModulationRouter.removeModulationRoute('${sliceId}', '${route.id}'); showSliceModulationEditor('${sampleId}', '${sliceId}')"
+        style="padding:2px 6px;background:rgba(255,51,85,0.2);border:1px solid rgba(255,51,85,0.4);color:var(--red);border-radius:2px;cursor:pointer;font-size:8px">✕</button>
+    </div>
+  `).join('');
+
+  const html = `
+    <div style="padding:16px;max-height:600px;overflow-y:auto">
+      <h3 style="margin-top:0;color:var(--magenta)">📡 Slice Modulation Routing: ${slice.label || 'Slice'}</h3>
+      <p style="font-size:8px;color:var(--text-light);margin:8px 0">Route LFO/envelope/macro to slice parameters</p>
+
+      ${routesList || '<div style="color:var(--text-dim);font-size:8px;margin-bottom:12px">No modulation routes yet</div>'}
+
+      <div style="background:rgba(0,150,255,0.05);border:1px solid rgba(0,150,255,0.2);border-radius:4px;padding:12px;margin-bottom:12px">
+        <div style="font-size:9px;font-weight:600;color:var(--cyan);margin-bottom:8px">➕ Add Route</div>
+        <div style="display:flex;gap:4px;margin-bottom:8px">
+          <select id="modSourceSelect" style="flex:1;padding:4px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:3px;color:var(--text);font-size:8px">
+            <option value="">Source...</option>
+            ${availableSources.map(src => `<option value="${src}">${src}</option>`).join('')}
+          </select>
+          <select id="modTargetSelect" style="flex:1;padding:4px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:3px;color:var(--text);font-size:8px">
+            <option value="">Target...</option>
+            ${availableTargets.map(tgt => `<option value="${tgt.value}">${tgt.label}</option>`).join('')}
+          </select>
+        </div>
+        <button onclick="
+          const src = document.getElementById('modSourceSelect').value;
+          const tgt = document.getElementById('modTargetSelect').value;
+          if (src && tgt) {
+            sliceModulationRouter.addModulationRoute('${sliceId}', src, tgt, 0.5);
+            showSliceModulationEditor('${sampleId}', '${sliceId}');
+          }
+        " style="width:100%;padding:6px;background:rgba(170,255,0,0.2);border:1px solid rgba(170,255,0,0.4);color:var(--lime);border-radius:3px;cursor:pointer;font-size:8px">Add Route</button>
+      </div>
+
+      <button onclick="closeModal()" style="width:100%;padding:8px;background:rgba(0,150,255,0.2);border:1px solid rgba(0,150,255,0.4);color:var(--cyan);border-radius:4px;cursor:pointer">Done</button>
+    </div>
+  `;
+
+  showModal('Slice Modulation', html, '450px');
 }
 
 // === PHASE 22a: SLICE DETECTOR FUNCTIONS ===
