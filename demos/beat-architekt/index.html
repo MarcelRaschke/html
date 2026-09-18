@@ -853,6 +853,12 @@ body::before {
           <button class="ai-pat-btn" onclick="document.getElementById('importFile').click()">↑ Import</button>
           <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImport(this.files[0])">
         </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <select id="sliceSequencerTrackSelect" style="flex:1;padding:4px 8px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;font-size:10px">
+            <option value="">Select track...</option>
+          </select>
+          <button class="ai-pat-btn" onclick="openSliceSequencerFromSelect()" style="font-size:10px">🎚️ Slices</button>
+        </div>
         <div id="patternLibraryList" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);font-size:10px"></div>
         <div id="patternQueueDisplay" style="margin-top:8px;border:1px solid rgba(0,240,255,0.2);border-radius:4px;background:rgba(0,240,255,0.02)"></div>
         <div style="margin-top:8px;text-align:right;font-size:9px;color:var(--text-dim)">Undo: Ctrl+Z | Redo: Ctrl+Shift+Z</div>
@@ -3554,7 +3560,17 @@ function startSequencer() {
 
       const step = grid[t.key][currentStep];
       if (step.active) {
-        playSound(t.key, step.velocity, step.pan);
+        // Phase 22e: Check for slice assignment first
+        const sliceAssignment = sliceSequencer.getSliceAssignment(t.key, currentStep);
+        if (sliceAssignment) {
+          playSlice(sliceAssignment.sampleId, sliceAssignment.sliceId, {
+            velocity: sliceAssignment.velocity * step.velocity,
+            pan: sliceAssignment.pan + step.pan,
+            reverse: sliceAssignment.reverse
+          });
+        } else {
+          playSound(t.key, step.velocity, step.pan);
+        }
       }
     }
   }
@@ -6076,6 +6092,55 @@ function playSound(track, velocity = 1.0, pan = 0) {
   setTimeout(() => {
     voicePool.activeVoices = Math.max(0, voicePool.activeVoices - 1);
   }, (p.decay + 0.01) * 1000);
+}
+
+// === PHASE 22e: SLICE PLAYBACK FUNCTION ===
+
+function playSlice(sampleId, sliceId, options = {}) {
+  if (!audioCtx) return;
+
+  const sample = sampleLibrary ? sampleLibrary.getSample(sampleId) : null;
+  if (!sample || !sample.buffer) return;
+
+  const slices = sliceManager.getSlicesForSample(sampleId);
+  const slice = slices.find(s => s.id === sliceId);
+  if (!slice) return;
+
+  const velocity = options.velocity || 1.0;
+  const pan = options.pan || 0;
+  const reverse = options.reverse || false;
+
+  const now = audioCtx.currentTime;
+  const sliceStart = slice.startMs / 1000;
+  const sliceEnd = slice.endMs / 1000;
+  const sliceDuration = sliceEnd - sliceStart;
+
+  const source = audioCtx.createBufferSource();
+  source.buffer = sample.buffer;
+
+  if (reverse) {
+    // Reverse playback: start from end, play backwards
+    source.playbackRate.value = -1;
+  }
+
+  const gainNode = audioCtx.createGain();
+  gainNode.gain.setValueAtTime(velocity * 0.8, now);
+  gainNode.gain.exponentialRampToValueAtTime(0.001, now + sliceDuration);
+
+  const pannerNode = audioCtx.createStereoPanner();
+  pannerNode.pan.value = pan;
+
+  source.connect(gainNode);
+  gainNode.connect(pannerNode);
+  pannerNode.connect(audioCtx.destination);
+
+  if (reverse) {
+    // For reverse, start from end and play backwards
+    source.start(now, sliceEnd);
+  } else {
+    source.start(now, sliceStart, sliceDuration);
+  }
+  source.stop(now + sliceDuration);
 }
 
 function clearGrid() {
@@ -8998,6 +9063,162 @@ function confirmAddLoop(sampleId) {
   closeModal();
 }
 
+// === PHASE 22e: SLICE SEQUENCER CLASS ===
+
+class SliceSequencer {
+  constructor() {
+    this.sliceAssignments = new Map(); // trackKey_step → {sampleId, sliceId, reverse, velocity, pan}
+  }
+
+  assignSliceToStep(trackKey, step, sampleId, sliceId, options = {}) {
+    const key = `${trackKey}_${step}`;
+    this.sliceAssignments.set(key, {
+      sampleId: sampleId,
+      sliceId: sliceId,
+      reverse: options.reverse || false,
+      velocity: options.velocity || 1.0,
+      pan: options.pan || 0
+    });
+  }
+
+  getSliceAssignment(trackKey, step) {
+    return this.sliceAssignments.get(`${trackKey}_${step}`);
+  }
+
+  clearSliceAssignment(trackKey, step) {
+    const key = `${trackKey}_${step}`;
+    this.sliceAssignments.delete(key);
+  }
+
+  getAssignmentsForTrack(trackKey) {
+    const assignments = [];
+    for (const [key, value] of this.sliceAssignments) {
+      if (key.startsWith(trackKey + '_')) {
+        const step = parseInt(key.split('_')[1]);
+        assignments.push({step, ...value});
+      }
+    }
+    return assignments;
+  }
+}
+
+// === PHASE 22e: SLICE SEQUENCER INIT ===
+
+let sliceSequencer = new SliceSequencer();
+
+// === PHASE 22e: SLICE SEQUENCER FUNCTIONS ===
+
+function openSliceSequencerConfig(trackKey) {
+  const track = TRACKS.find(t => t.key === trackKey);
+  if (!track) return showToast('❌ Track not found');
+
+  const samples = sampleLibrary ? sampleLibrary.listSamples() : [];
+  const assignments = sliceSequencer.getAssignmentsForTrack(trackKey);
+
+  const stepsList = Array.from({length: STEPS}, (_, i) => {
+    const assignment = assignments.find(a => a.step === i);
+    const sample = assignment ? samples.find(s => s.id === assignment.sampleId) : null;
+    const slice = assignment && sample ? sliceManager.getSlicesForSample(assignment.sampleId).find(s => s.id === assignment.sliceId) : null;
+
+    return `
+      <div style="padding:8px;background:rgba(0,0,0,0.2);border-radius:3px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:9px;min-width:30px">
+          <strong style="color:var(--cyan)">Step ${i + 1}</strong>
+        </div>
+        <div style="flex:1;margin:0 8px;font-size:8px;color:var(--text-light)">
+          ${sample && slice ? `${sample.name.substring(0, 20)} → ${slice.label || 'Slice'}` : 'Unassigned'}
+        </div>
+        <button onclick="openSliceSelector('${trackKey}', ${i})" style="padding:2px 6px;background:rgba(0,150,255,0.2);border:1px solid rgba(0,150,255,0.4);color:var(--cyan);border-radius:2px;cursor:pointer;font-size:8px">
+          Assign
+        </button>
+        ${assignment ? `<button onclick="clearSliceAssignment('${trackKey}', ${i})" style="padding:2px 6px;background:rgba(255,51,85,0.2);border:1px solid rgba(255,51,85,0.4);color:var(--red);border-radius:2px;cursor:pointer;font-size:8px">✕</button>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  const html = `
+    <div style="padding:16px;max-height:600px;overflow-y:auto">
+      <h3 style="margin-top:0;color:var(--cyan)">🎚️ Slice Sequencer: ${track.name}</h3>
+      <p style="font-size:9px;color:var(--text-light);margin:8px 0">Assign samples/slices to sequencer steps for slice-based playback</p>
+      ${stepsList}
+    </div>
+  `;
+
+  showModal('Slice Sequencer Config', html, '480px');
+}
+
+function openSliceSelector(trackKey, step) {
+  const samples = sampleLibrary ? sampleLibrary.listSamples() : [];
+
+  const sampleList = samples.map(sample => {
+    const slices = sliceManager.getSlicesForSample(sample.id);
+    if (slices.length === 0) return '';
+
+    return `
+      <div style="margin-bottom:12px">
+        <div style="font-weight:600;color:var(--cyan);font-size:9px;margin-bottom:4px">${sample.name}</div>
+        ${slices.map(slice => `
+          <button onclick="confirmSliceAssignment('${trackKey}', ${step}, '${sample.id}', '${slice.id}')"
+            style="width:100%;padding:4px;background:rgba(0,150,255,0.1);border:1px solid rgba(0,150,255,0.3);color:var(--text-light);border-radius:2px;cursor:pointer;font-size:8px;margin-bottom:2px;text-align:left">
+            ${slice.label || `Slice ${slice.startMs}-${slice.endMs}ms`} (${((slice.endMs - slice.startMs)/1000).toFixed(2)}s)
+          </button>
+        `).join('')}
+      </div>
+    `;
+  }).join('');
+
+  const html = `
+    <div style="padding:16px;max-height:600px;overflow-y:auto">
+      <h3 style="margin-top:0;color:var(--cyan)">Select Slice for Step ${step + 1}</h3>
+      ${sampleList || '<div style="color:var(--text-light);font-size:9px">No samples with slices available</div>'}
+    </div>
+  `;
+
+  showModal('Select Slice', html, '400px');
+}
+
+function confirmSliceAssignment(trackKey, step, sampleId, sliceId) {
+  sliceSequencer.assignSliceToStep(trackKey, step, sampleId, sliceId);
+  showToast(`✅ Slice assigned to Step ${step + 1}`);
+  closeModal();
+  // Re-open the sequencer config to show updated assignments
+  setTimeout(() => openSliceSequencerConfig(trackKey), 100);
+}
+
+function clearSliceAssignment(trackKey, step) {
+  sliceSequencer.clearSliceAssignment(trackKey, step);
+  showToast(`✅ Slice assignment cleared for Step ${step + 1}`);
+  closeModal();
+  setTimeout(() => openSliceSequencerConfig(trackKey), 100);
+}
+
+function populateSliceSequencerTrackSelect() {
+  const select = document.getElementById('sliceSequencerTrackSelect');
+  if (!select) return;
+
+  // Clear existing options except the placeholder
+  while (select.options.length > 1) {
+    select.remove(1);
+  }
+
+  // Add track options
+  TRACKS.forEach(track => {
+    const option = document.createElement('option');
+    option.value = track.key;
+    option.textContent = track.name;
+    select.appendChild(option);
+  });
+}
+
+function openSliceSequencerFromSelect() {
+  const select = document.getElementById('sliceSequencerTrackSelect');
+  if (!select || !select.value) {
+    return showToast('❌ Please select a track');
+  }
+
+  openSliceSequencerConfig(select.value);
+}
+
 // === PHASE 22a: SLICE DETECTOR FUNCTIONS ===
 
 let transientDetector = null;
@@ -10991,6 +11212,11 @@ document.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => {
     initSliceDetector();
   }, 250);
+
+  // Phase 22e: Populate Slice Sequencer Track Selector
+  setTimeout(() => {
+    populateSliceSequencerTrackSelect();
+  }, 260);
 });
 </script>
 
