@@ -2,6 +2,9 @@
   "name": "Prompt Injection Defense Security Policy",
   "version": "1.0.0",
   "scope": "Phase 2 ML-Based Defense Implementation",
+  "max_turns": 25,
+  "max_retries_per_tool": 3,
+  "subagent_max_depth": 1,
   "validation_targets": [
     {
       "path": "lib/llm-security",
