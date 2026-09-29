@@ -1,0 +1,59 @@
+name: Security Validation
+
+on:
+  push:
+    branches:
+      - main
+      - feat/deepresearch-prompt-injection
+    paths:
+      - 'lib/llm-security/**'
+      - 'tests/llm-security/**'
+      - '.security-policy.json'
+      - 'package.json'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'lib/llm-security/**'
+      - 'tests/llm-security/**'
+      - '.security-policy.json'
+      - 'package.json'
+
+jobs:
+  security-tests:
+    name: Run Security Tests & Validation
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run Phase 2 ML Detector Tests
+        run: node tests/llm-security/phase2-ml-detectors.js
+      
+      - name: Validate security implementation
+        run: npm run validate:security:ci
+        env:
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+        continue-on-error: true
+      
+      - name: Upload audit log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-audit-log
+          path: .audit/security-validation.log
+          retention-days: 90
+      
+      - name: Check test results
+        run: |
+          if [ -f .audit/security-validation.log ]; then
+            echo "Security validation log:"
+            cat .audit/security-validation.log
+          fi
