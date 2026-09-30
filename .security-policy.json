@@ -1,0 +1,53 @@
+{
+  "name": "Prompt Injection Defense Security Policy",
+  "version": "1.0.0",
+  "scope": "Phase 2 ML-Based Defense Implementation",
+  "max_turns": 25,
+  "max_retries_per_tool": 3,
+  "subagent_max_depth": 1,
+  "validation_targets": [
+    {
+      "path": "lib/llm-security",
+      "type": "security_module",
+      "checks": [
+        "input_validation",
+        "injection_prevention",
+        "semantic_safety",
+        "risk_scoring_logic",
+        "model_specific_patterns"
+      ]
+    },
+    {
+      "path": "tests/llm-security/phase2-ml-detectors.js",
+      "type": "test_suite",
+      "checks": [
+        "attack_coverage",
+        "false_positive_rates",
+        "detection_accuracy"
+      ]
+    }
+  ],
+  "security_requirements": {
+    "ml_detection": {
+      "semantic_jailbreak_detection": "required",
+      "bayesian_risk_scoring": "required",
+      "model_specific_profiling": "required",
+      "extended_patterns": "required"
+    },
+    "thresholds": {
+      "min_coverage": 0.97,
+      "max_false_positive_rate": 0.02,
+      "max_latency_ms": 100
+    }
+  },
+  "exploit_vectors": [
+    "direct_prompt_injection",
+    "semantic_jailbreak",
+    "paraphrased_attack",
+    "encoding_evasion",
+    "model_specific_exploit",
+    "indirect_injection",
+    "context_window_attack",
+    "api_level_injection"
+  ]
+}

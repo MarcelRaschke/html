@@ -1,0 +1,14 @@
+{
+  "type": "module",
+  "scripts": {
+    "validate:security": "mythos-jr --policy .security-policy.json --audit-log .audit/security-validation.log",
+    "validate:security:ci": "mythos-jr --policy .security-policy.json --audit-log .audit/security-validation.log --health-port 9091",
+    "test:security": "node tests/llm-security/phase2-ml-detectors.js && npm run validate:security",
+    "benchmark:jailbreak": "node benchmarks/jailbreak-effectiveness.js",
+    "test:adversarial": "node tests/llm-security/adversarial-suite.js",
+    "test:integration": "node tests/llm-security/integration-real-world.js"
+  },
+  "devDependencies": {
+    "@m2ai/mythos-jr": "^1.0.0"
+  }
+}
