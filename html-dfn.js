@@ -20,7 +20,9 @@ function handleClick(event) {
   var node;
   var eventInDfnPanel = false;
   while (current) {
-    if (current.localName === 'dfn') {
+    if (current.matches(
+      "dfn, h2[data-dfn-type], h3[data-dfn-type], h4[data-dfn-type], h5[data-dfn-type], h6[data-dfn-type]"
+    )) {
       node = current;
     }
     if (dfnPanel && current === dfnPanel) {
@@ -63,10 +65,9 @@ function loadReferences(id, path, specURL) {
   dfnPanel.appendChild(p);
   if (!dfnMapDone) {
     p.textContent = 'Loading cross-references…';
-    fetch('/xrefs.json')
-      .then(response => response.json())
-      .then(data => {
-        dfnMap = data;
+    import('./xrefs.json', { with: { type: 'json' } })
+      .then(module => {
+        dfnMap = module.default;
         dfnMapDone = true;
         if (dfnPanel) {
           fillInReferences(id);
@@ -81,7 +82,7 @@ function loadReferences(id, path, specURL) {
 
 function createPanel(id, path, specURL) {
   var panel = document.createElement('div');
-  panel.className = 'dfnPanel';
+  panel.className = 'dfn-panel on';
   if (id) {
     var permalinkP = document.createElement('p');
     var permalinkA = document.createElement('a');
@@ -162,12 +163,7 @@ function movePanel(event) {
   if (!dfnPanel) {
     return;
   }
-  dfnPanel.style.position = 'fixed';
-  dfnPanel.style.left = '1em';
-  dfnPanel.style.bottom = '1em';
-  dfnPanel.style.maxWidth = '20em';
-  dfnPanel.style.maxHeight = '50vh';
-  dfnPanel.style.overflow = 'auto';
+  dfnPanel.classList.add("activated");
   if (event) {
     event.stopPropagation();
   }
@@ -192,7 +188,6 @@ function restoreOrClosePanelOnNav(event) {
   }
 }
 
-document.body.classList.add('dfnEnabled');
 document.addEventListener('click', handleClick);
 if (isMultipage) {
   document.addEventListener('DOMContentLoaded', restoreOrClosePanelOnNav);

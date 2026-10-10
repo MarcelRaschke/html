@@ -45,27 +45,26 @@ Validity (more often referred to as document conformance in the WHATWG) is a qua
 There are a number of ways to track changes to the standard:
 
 * The Twitter feed: [@htmlstandard](https://twitter.com/htmlstandard)
-* The [GitHub commits log](https://github.com/whatwg/html/commits/master)
+* The [GitHub commits log](https://github.com/whatwg/html/commits)
 * The standard is available in the [Git repository](https://github.com/whatwg/html/). You may use any Git client to check out the latest version and use your client's diff tools to compare revisions and see what has been changed.
-* At a broader level, Anne and Simon once wrote a document that gave a high-level overview of changes to HTML over the last decade or so: https://html-differences.whatwg.org/
 
 ### What are the various versions of the HTML Standard?
 
 The HTML Standard is available in three forms: [single-page](https://html.spec.whatwg.org/) (_very large_), [multi-page](https://html.spec.whatwg.org/multipage/), and the [developer's edition](https://html.spec.whatwg.org/dev/).
 
-The W3C publishes some [forked versions](https://wiki.whatwg.org/wiki/Fork_tracking) of the HTML Standard, and of other WHATWG standards. We have requested that they stop publishing these but they have refused. They copy most of our fixes into their forks, but their forks are usually weeks to months behind. They also make intentional changes, and sometimes even unintentional changes, to their versions. We highly recommend not paying any attention to the W3C forks of WHATWG standards.
+The W3C used to publish some [forked versions](https://wiki.whatwg.org/wiki/Fork_tracking) of the HTML Standard. They are no longer maintained and now redirect to the HTML Standard. If you spot any others please open an issue on [w3c/whatwg-coord](https://github.com/w3c/whatwg-coord/issues/) so the W3C staff can work to get them redirected.
 
 ### How do I know if a particular feature in the standard is ready to use?
 
 Here are some sites to help you work out what you can use:
 
-* http://caniuse.com/
+* https://caniuse.com/
 * https://developer.mozilla.org/
 
 The following sites also have some useful information:
 
-* http://html5doctor.com/
-* http://diveintohtml5.info/
+* https://html5doctor.com/
+* https://diveintohtml5.info/
 
 If you know of any more (or if you have some yourself) then send a pull request to add them to the list! (Or, if you think any of the above have lost usefulness over time, send a pull request removing them and outlining your reasoning.)
 
@@ -79,15 +78,15 @@ Back before the Living Standard development model, we were planning to put the c
 
 At the time, the W3C Recommendation label had high standards, such as 100% test coverage of two complete and fully interoperable implementations. In 2008, the editor estimated it would take another 14 years to reach that point, based on comparing it to the amount of work done for HTML4 and other large specifications like CSS2/2.1.
 
-Since then, we've realized that much like the [waterfall model](https://en.wikipedia.org/wiki/Waterfall_model) is not a good fit for software development, it is also not a good way of developing standards. These days we keep the HTML Standard continually under development, adding tests as we go and verifying them against implementations, [per our working mode](https://whatwg.org/working-mode). So, the 2022 date is no longer relevant.
+Since then, we've realized that much like the [waterfall model](https://en.wikipedia.org/wiki/Waterfall_model) is not a good fit for software development, it is also not a good way of developing standards. These days we keep the HTML Standard continually under development, adding tests as we go and verifying them against implementations, [per our working mode](https://whatwg.org/working-mode). So, the year 2022 is no longer relevant.
 
 ### Is design rationale documented?
 
-Sort of. Often some record of the rationale for a particular design choice can be found within discussions in the GitHub issue tracker, commit logs, or the mailing-list archive or IRC channel archives. Sometimes, there is an explanation in the specification, but doing that everywhere would make the specification huge.
+Sort of. Often some record of the rationale for a particular design choice can be found within discussions in the GitHub issue tracker, commit logs, or the mailing-list archive or [Chat archives](https://whatwg.org/chat#logs). Sometimes, there is an explanation in the specification, but doing that everywhere would make the specification huge.
 
 For a few cases that someone did take the time document, the information can be found at the following locations:
 
-* [Rationale](https://wiki.whatwg.org/wiki/Rationale) — a page that documents some reasons behind decisions in the spec, originally written and maintained by Variable. If anyone wants to help him out, try to grab someone on [IRC](https://wiki.whatwg.org/wiki/IRC); we're always looking for more contributors and this is a good place to start.
+* [Rationale](https://wiki.whatwg.org/wiki/Rationale) — a page that documents some reasons behind decisions in the spec, originally written and maintained by Variable. If anyone wants to help him out, try to find someone via [Chat](https://whatwg.org/chat); we're always looking for more contributors and this is a good place to start.
 * [Why no namespaces](https://wiki.whatwg.org/wiki/Why_no_namespaces)
 * [Why no script implements](https://wiki.whatwg.org/wiki/Why_no_script_implements)
 * [Why not reuse legend](https://wiki.whatwg.org/wiki/Why_not_reuse_legend) or another _mini-header_ element.
@@ -131,7 +130,7 @@ These alternatives were chosen because they meet the following criteria:
 
 ### Under what conditions should a DOCTYPE be used in a document delivered with an XML media type?
 
-Generally, the use of a DOCTYPE in an document delivered with an XML media type is unnecessary. However, there are cases where inclusion of a DOCTYPE is a reasonable thing to do:
+Generally, the use of a DOCTYPE in a document delivered with an XML media type is unnecessary. However, there are cases where inclusion of a DOCTYPE is a reasonable thing to do:
 
 1. The document is intended to be a polyglot document such that the same text may be treated as either HTML or XML.
 2. You wish to declare entity references for use within the document. Note that most browsers only read the internal subset and do not retrieve external entities. (This is not compatible with HTML, and thus not suitable for polyglot documents.)
@@ -201,7 +200,7 @@ In conclusion, while HTML does not allow the XML namespace syntax, there is a wa
 
 Regardless of whether documents are delivered as `text/html` or with an XML media type, UTF-8 is the only conformant character encoding.
 
-For HTML, it is strongly recommended that you specify the encoding using the HTTP `Content-Type` header. If you are unable to [configure your server](http://www.w3.org/International/O-HTTP-charset) to send the correct headers, then you may use the `<meta>` element:
+For HTML, it is strongly recommended that you specify the encoding using the HTTP `Content-Type` header. If you are unable to [configure your server](https://www.w3.org/International/articles/http-charset/) to send the correct headers, then you may use the `<meta>` element:
 
 ```html
 <meta charset="UTF-8">
@@ -245,7 +244,7 @@ Namespaces:
 
 * Use the namespace-aware version for creating elements: `document.createElementNS(ns, elementName)`.
 
-### Why does the HTML Standard legitimise tag soup?
+### Why does the HTML Standard legitimize tag soup?
 
 Actually it doesn't. This is a misconception that comes from the confusion between conformance requirements for documents, and the requirements for user agents.
 
@@ -339,6 +338,16 @@ Short of that, there are actually quite a number of ways for people to invent th
 
 HTML allows `<div>` as a grouping element in `<dl>`. See [the `<dl>` specification](https://html.spec.whatwg.org/multipage/#the-dl-element) and [issue #1937](https://github.com/whatwg/html/issues/1937) wherein this was added.
 
+### HTML should add more named character references!
+
+Although this would be convenient, the overall conclusion of the editors and of browser engine implementers is that expanding the [named character references](https://html.spec.whatwg.org/multipage/named-characters.html#named-character-references) list is not worth the cost to the ecosystem:
+
+* The backward-compatibility characteristics of such additions are bad. They do not add new capabilities, since you can already use numeric character references or unescaped code points; they just introduce new ways of writing the same thing, which will fail to display correctly in older browsers.
+
+* The benefits of such features can also be accomplished by preprocessor languages directly. That is, preprocessed languages that compile to HTML, such as Markdown, wiki syntax, JSX, or server-side templating systems, can add these capabilities themselves. The only reason to add these to the browser is to help people writing raw HTML. We do want to support people writing raw HTML, but features for that audience are less impactful than general web platform features, which weighs into the overall decision as to whether to add them or not.
+
+* Most importantly, [the HTML parser is security sensitive](https://github.com/whatwg/html/issues/919#issuecomment-276329905). Any changes in it can cause mismatches between markup producers and markup consumers until everyone is updated to the latest version, which can lead to security bugs. This means that changes to the parser have to add an extreme amount of value to the ecosystem, to overcome this security hazard. Per the above points, our judgment is that adding or modifying named character references does not meet this bar.
+
 ### Where's the harm in adding...?
 
 Every feature we add to the web platform has a cost:
@@ -355,32 +364,6 @@ Every feature we add to the web platform has a cost:
 * Bug fixing: when bugs are found in the spec or implementations, someone has to figure out a fix, implement it, test it, ship it, tests have to be fixed, documentation has to be updated, etc
 * Code size: each feature increases the size of browsers (both on-disk binaries and in-memory resident size)
 
-## WHATWG and the W3C HTML WG
-
-### Are there plans to merge the groups?
-
-No. The two groups have different goals. The WHATWG spec is intended to describe what browsers should aim for, introducing new features and describing reality in as much, and as accurate, detail as possible. The W3C spec is intended to follow the W3C process to REC.
-
-On the WHATWG side, the editors read the feedback sent to both groups and take all input into account — and indeed there are far more places where input on HTML is sent than just these two mailing lists (e.g. blogs, www-html@w3.org, forums, direct mail, meetings, etc). (In particular, the editors do not look at the source of technical arguments when attempting to determine what path to take on an issue or other.)
-
-### Which group has authority in the event of a dispute?
-
-The two groups have different specs, so each has authority over its spec. The specs can and have diverged on some topics; unfortunately, these differences are not documented anywhere.
-
-### Isn't it bad that the specs have forked?
-
-Yes. The WHATWG originally committed to remaining consistent with the W3C spec unless the W3C working group showed a lapse in judgement. When that (in Hixie's opinion) occurred, there was little choice left but to let the specs diverge.
-
-The plan to get the specs to converge again, such as it is, is to just do a better job with the WHATWG spec, such that it becomes the logical and obvious choice for anyone wanting to figure out which spec they should use.
-
-### What is the history of HTML?
-
-Here are some documents that detail the history of HTML:
-
-* [A feature history of the modern web platform](https://platform.html5.org/history/) (2003 onward) ([on GitHub](https://github.com/whatwg/platform.html5.org/blob/master/history/index.html))
-* [HTML's timeline on the ESW wiki](http://esw.w3.org/topic/HTML/history) (1997 to 2008)
-* [The history section in the HTML standard itself](https://html.spec.whatwg.org/multipage/introduction.html#history-2)
-
 ## Using HTML
 
 ### Why are some presentational elements like `<b>`, `<i>` and `<small>` still included?
@@ -395,7 +378,7 @@ Some people argue that in such cases, the `<span>` element should be used with a
 
 In essence, the `<i>` and `<b>` elements convey distinct, though non-specific, semantics, which are to be determined by the reader in the context of their use. In other words, although they don't convey specific semantics by themselves, but instead they indicate that the content is somehow semantically distinct from its surroundings — leaving the interpretation of the semantics up to the reader.
 
-This is further explained in the article [The `<b>` and `<i>` Elements](http://lachy.id.au/log/2007/05/b-and-i).
+This is further explained in the article [The `<b>` and `<i>` Elements](https://lachy.id.au/log/2007/05/b-and-i).
 
 Similarly, the `<small>` element is defined for content that is commonly typographically rendered in small print, and which is often referred to as "fine print"; that could include copyright statements, disclaimers and other legal text commonly found at the end of a document.
 
@@ -411,16 +394,38 @@ So, we can't really decide what the element should be based on past practice, li
 
 This leaves the question of what is the most useful use we can put the element to, if we keep it. The conclusion so far has been that the most useful use for `<cite>` is as an element to allow typographic control over titles, since those are often made italics, and that semantic is roughly close to what it meant in previous versions, and happens to match at least one of the common uses for the element. Generally, however, names and titles aren't typeset the same way, so making the element apply to both would lead to confusing typography.
 
-There are already many ways of marking up names already (e.g. the [hCard microformat](http://microformats.org/wiki/hcard), the microdata vCard vocabulary, `<span>` and class names, etc), if you really need it.
+There are already many ways of marking up names already (e.g. the [hCard microformat](https://microformats.org/wiki/hcard), the microdata vCard vocabulary, `<span>` and class names, etc), if you really need it.
 
 ### Do you have any hints on how to use `<section>` and `<article>` and so on?
 
 Some hopefully helpful hints:
 
-* One way to look at it is how would you draw the page outline/table-of-contents? Each entry in the table of contents should be a `<section>`/`<article>`/`<aside>`/`<nav>`, and if it's not in the table of contents and doesn't have an `<h1>`, it should probably not be a `<section>`/`<article>`/`<aside>`/`<nav>`.
+* One way to look at it is how would you draw the page outline/table-of-contents? Each entry in the table of contents should be a `<section>`/`<article>`/`<aside>`/`<nav>`, and if it's not in the table of contents and doesn't have a heading, it should probably not be a `<section>`/`<article>`/`<aside>`/`<nav>`.
 * You can still use `<div>`. It's the right element if you need a styling hook because CSS can't give you enough to do what you want.
-* Generally, `<section>`s should start with an `<h1>` and the section title. It's not a hard-and-fast rule, but if you find yourself in a situation where an `<h1>` would be inappropriate, you probably want `<div>` rather than `<section>`.
-* Sections can contain Articles, and vice versa. e.g. you can have a section that is news, a section that is editorials, a section that is sports, each with many articles, and each of those can have subsections, and each section can have comments, which are marked up using `<article>`, and each comment could be big enough that it has separate `<section>`s, and so on.
+* Generally, `<section>`s should start with a heading element containing the section title. It's not a hard-and-fast rule, but if you find yourself in a situation where a heading would be inappropriate, you probably want `<div>` rather than `<section>`.
+* Sections can contain articles, and vice versa. e.g. you can have a section that is news, a section that is editorials, a section that is sports, each with many articles, and each of those can have subsections, and each section can have comments, which are marked up using `<article>`, and each comment could be big enough that it has separate `<section>`s, and so on.
+
+## WHATWG and the W3C HTML WG
+
+### Are there plans to merge the groups?
+
+No. The two groups have different goals. The WHATWG develops the standard. The W3C HTML WG's goal is to endorse the WHATWG [HTML Review Drafts](https://html.spec.whatwg.org/review-drafts/) as W3C Recommendations. You can learn more about this in the [Memorandum of Understanding](https://www.w3.org/2019/04/WHATWG-W3C-MOU.html) that outlines the process.
+
+On the WHATWG side, the editors accept feedback from all participants and organizations, including those from other standards bodies like the W3C or Ecma, via our GitHub issue tracker. (In particular, the editors do not look at the source of technical arguments when attempting to determine what path to take on an issue or other.)
+
+### Which group has authority in the event of a dispute?
+
+The WHATWG editors determine what gets merged into the WHATWG Living Standard, according to the [WHATWG Working Mode](https://whatwg.org/working-mode). If participants from the community, including from the W3C HTML WG, dispute an editor decision, they can [raise an issue for discussion with the WHATWG Steering Group](https://whatwg.org/workstream-policy#appeals).
+
+In the case of W3C HTML WG participants in particular, there is a [conflict procedure](https://www.w3.org/2019/04/WHATWG-W3C-MOU.html#conflict) they can follow to raise their concerns with others in the W3C. Ultimately, this might result in the group choosing not to endorse the most recent contents of the WHATWG HTML Standard as a W3C Recommendation.
+
+## What is the history of HTML?
+
+Here are some documents that detail the history of HTML:
+
+* [A feature history of the modern web platform](https://platform.html5.org/history/) (2003 onward) ([on GitHub](https://github.com/whatwg/platform.html5.org/blob/main/history/index.html))
+* [HTML's timeline on the W3C HTML WG wiki](https://www.w3.org/html/wg/wiki/History) (1997 to 2008)
+* [The history section in the HTML Standard itself](https://html.spec.whatwg.org/multipage/introduction.html#history-2)
 
 ## Other specifications
 
@@ -430,4 +435,4 @@ The Web Forms 2.0 specification was folded into what is now the HTML Standard.
 
 The Web Controls 1.0 specification was overtaken by events and has been abandoned. Its problem space is mostly handled by ARIA and Web Components now.
 
-The DOM Parsing specification was abandoned by the WHATWG because the W3C was doing a better job of maintaining that specification. We do not want to cause confusion in the market place, so when another organization writes a specification that covers the same technology as one of ours, we only continue to publish it if our version is technically superior.
+The DOM Parsing specification was abandoned by the WHATWG because the W3C was doing a better job of maintaining that specification. We do not want to cause confusion in the marketplace, so when another organization writes a specification that covers the same technology as one of ours, we only continue to publish it if our version is technically superior.
