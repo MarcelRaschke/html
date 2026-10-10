@@ -1,0 +1,11 @@
+[Unit]
+Description=Hosttech DDNS alle 5 Minuten
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+AccuracySec=10s
+Persistent=false
+
+[Install]
+WantedBy=timers.target
