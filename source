@@ -152708,10 +152708,10 @@ legend[align=right i] {
   </div>
 
   <dl>
-   <dt>'<dfn class="dfn-paneled css" data-dfn-for="legend" data-dfn-type="value" data-export=""
+   <dt>'<dfn class="dfn-paneled css" data-dfn-for="legend" data-dfn-type="value"
    id="valdef-legend-auto" data-x="css-legend-auto">auto</dfn>'
    <dd>This element is eligable to be a <span>rendered legend</span>.
-   <dt>'<dfn class="dfn-paneled css" data-dfn-for="legend" data-dfn-type="value" data-export=""
+   <dt>'<dfn class="dfn-paneled css" data-dfn-for="legend" data-dfn-type="value"
    id="valdef-legend-none" data-x="css-legend-none">none</dfn>'
    <dd>This element is not eligable to be a <span>rendered legend</span>.
   </dl>
@@ -161458,10 +161458,6 @@ INSERT INTERFACES HERE
 
    <dt id="refsCOMPOSITE">[COMPOSITE]</dt>
    <dd><cite><a href="https://drafts.csswg.org/compositing/">Compositing and Blending</a></cite>, R. Cabanier, N. Andronikos. W3C.</dd>
-
-   <dt id="refsCOMPAT">[COMPAT]</dt>
-   <dd><cite><a href="https://compat.spec.whatwg.org/">Compatibility Standard</a></cite>, M.
-   Taylor. WHATWG.</dd>
 
    <dt id="refsCOMPUTABLE">[COMPUTABLE]</dt>
    <dd>(Non-normative) <cite><a href="http://www.turingarchive.org/browse.php/B/12">On computable numbers, with an application to the Entscheidungsproblem</a></cite>, A. Turing. In <cite>Proceedings of the London Mathematical Society</cite>, series 2, volume 42, pages 230-265. London Mathematical Society, 1937.</dd>
