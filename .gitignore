@@ -1,0 +1,33 @@
+# Build outputs
+node_modules/
+dist/
+build/
+
+# Audit and security logs
+.audit/
+*.log
+security-validation.log
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Testing coverage
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/

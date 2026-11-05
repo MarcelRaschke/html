@@ -1,0 +1,14 @@
+{
+  "name": "hosttech-ddns",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dynamic DNS für djjessejay.ch über die Hosttech DNS REST API",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/ddns.js",
+    "test": "node --test"
+  }
+}

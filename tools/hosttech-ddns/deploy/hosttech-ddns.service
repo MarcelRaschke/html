@@ -1,0 +1,20 @@
+[Unit]
+Description=Hosttech Dynamic DNS Update (djjessejay.ch)
+Documentation=file:///opt/hosttech-ddns/README.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/hosttech-ddns/env
+ExecStart=/usr/bin/node /opt/hosttech-ddns/src/ddns.js
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
