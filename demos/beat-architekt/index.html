@@ -876,6 +876,49 @@ body::before {
         </div>
       </div>
 
+      <!-- Phase 23f: Sample Upload & BPM Sync -->
+      <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--lime);font-weight:600;margin-bottom:12px">📤 Phase 23f: Samples & Time-Stretch</div>
+        <div style="padding:10px;background:rgba(170,255,0,0.05);border-radius:4px">
+          <div style="margin-bottom:8px">
+            <input type="file" id="sampleUploadInput" accept="audio/*" onchange="uploadAndAnalyzeSample(this.files[0])" style="display:none">
+            <button class="ai-pat-btn" style="width:100%;font-size:10px" onclick="document.getElementById('sampleUploadInput').click()">📤 Upload Sample</button>
+          </div>
+          <div style="font-size:10px;margin-bottom:8px">
+            <label style="display:flex;align-items:center;gap:4px">
+              <input type="checkbox" id="bidirectionalSyncCheck" onchange="bpmSyncState.bidirectionalSync = this.checked">
+              <span>Bidirectional XDJ Sync</span>
+            </label>
+          </div>
+          <div id="sampleLibrary" style="font-size:10px;max-height:200px;overflow-y:auto"></div>
+        </div>
+      </div>
+
+      <!-- Phase 23h: Slice Remix Sequencing -->
+      <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--magenta);font-weight:600;margin-bottom:12px">🎬 Phase 23h: Slice Remix</div>
+        <div style="padding:10px;background:rgba(255,0,170,0.05);border-radius:4px">
+          <button id="sliceModeToggle" class="ai-pat-btn" style="width:100%;margin-bottom:8px;font-size:10px" onclick="toggleSliceMode()">▶ Enable Slice Mode</button>
+
+          <div style="font-size:10px;margin-bottom:8px">
+            <label>Load Sample Slices:</label>
+            <select id="sliceSampleSelect" onchange="extractSlices(this.value)" style="width:100%;padding:4px;margin-top:4px;background:var(--bg-secondary);color:var(--magenta);border:1px solid var(--border);border-radius:4px;font-size:10px">
+              <option value="">-- Select Sample --</option>
+              ${sampleLibrary.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+            </select>
+          </div>
+
+          <div style="font-size:10px;margin-bottom:8px">
+            <div style="color:var(--magenta);font-weight:600;margin-bottom:4px">Slice Probabilities</div>
+            <div id="probabilityControl" style="max-height:120px;overflow-y:auto"></div>
+          </div>
+
+          <div style="font-size:10px">
+            <canvas id="sliceTimeline" style="width:100%;height:80px;border:1px solid var(--border);border-radius:4px;background:rgba(0,0,0,0.3)"></canvas>
+          </div>
+        </div>
+      </div>
+
       <!-- Effects Panel -->
       <div id="effectsPanel" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
         <div style="font-size:12px;color:var(--cyan);font-weight:600;margin-bottom:12px">🎛️ Master Effects</div>
@@ -1624,6 +1667,66 @@ let performanceState = {
   warningThreshold: 80,  // CPU % that triggers warning
   criticalThreshold: 95  // CPU % that triggers critical warning
 };
+
+// Phase 23f: Adaptive BPM Syncing to Hardware
+let sampleBPMCache = {
+  buffer: null,
+  detectedBPM: null,
+  confidence: 0,
+  originalBPM: null,
+  lastDetectionTime: null,
+  transientPeaks: [],
+  isAnalyzing: false
+};
+
+let bpmSyncState = {
+  hardwareMode: false,
+  bidirectionalSync: false,
+  syncTolerancePercent: 2,
+  timeStretchAlgorithm: 'phase-vocoder',
+  timeStretchBuffer: null,
+  stretchedSamples: new Map(),
+  lastHardwareBPM: null,
+  hardwareSyncDriftMs: 0,
+  syncHistory: []
+};
+
+// Phase 23g: Intelligent Loop Region Suggestion
+let loopSuggestionState = {
+  isAnalyzing: false,
+  suggestedLoops: [],
+  selectedLoopIndex: -1,
+  previewingLoop: {start: null, end: null, active: false},
+  analysisMetadata: {
+    onsetCount: 0,
+    energyProfile: [],
+    periodicityStrength: 0
+  },
+  appliedLoops: new Map()
+};
+
+// Phase 23h: Slice-Based DJ Remix Sequencing
+let sliceSequencerState = {
+  sliceMode: false,
+  sliceGrid: [],
+  activeSlices: new Map(),
+  sliceLibrary: [],
+  remixTimeline: null,
+  crossSampleChaining: {
+    enabled: true,
+    chains: []
+  },
+  probabilityMap: new Map(),
+  visualTimeline: {
+    pixelsPerSecond: 100,
+    playheadPosition: 0,
+    activeSampleColors: {}
+  }
+};
+
+// Phase 23: Sample Library
+let sampleLibrary = [];
+let currentSampleId = null;
 
 // Phase 19a: LFO Oscillator Class
 class LFOOscillator {
@@ -2781,18 +2884,33 @@ function startSequencer() {
       }, Math.round(delayMs));
     }
 
-    // Use cached track lookup instead of checking Sets on each iteration
-    for (const t of TRACKS) {
-      const trackState = trackLookup.get(t.key);
-      if (!trackState) continue;
-
-      const isTrackActive = soloTrack === null || trackState.solo;
-      if (!isTrackActive || trackState.muted) continue;
-
-      const step = grid[t.key][currentStep];
-      if (step.active) {
-        playSound(t.key, step.velocity, step.pan);
+    // Phase 23h: Slice playback (probability-based triggering)
+    if (sliceSequencerState.sliceMode) {
+      const triggeredSlices = selectSliceWithProbability(currentStep);
+      for (const entry of triggeredSlices) {
+        playSlice(entry.sliceId, time, 1.0, entry.effects);
       }
+    } else {
+      // Use cached track lookup instead of checking Sets on each iteration
+      for (const t of TRACKS) {
+        const trackState = trackLookup.get(t.key);
+        if (!trackState) continue;
+
+        const isTrackActive = soloTrack === null || trackState.solo;
+        if (!isTrackActive || trackState.muted) continue;
+
+        const step = grid[t.key][currentStep];
+        if (step.active) {
+          playSound(t.key, step.velocity, step.pan);
+        }
+      }
+    }
+
+    // Update slice timeline playhead
+    if (sliceSequencerState.sliceMode) {
+      sliceSequencerState.visualTimeline.playheadPosition = time;
+      const canvas = document.getElementById('sliceTimeline');
+      if (canvas) renderSliceTimeline(canvas);
     }
   }
 
@@ -5315,6 +5433,572 @@ function playSound(track, velocity = 1.0, pan = 0) {
   }, (p.decay + 0.01) * 1000);
 }
 
+// Phase 23f: Time-Stretch via Phase Vocoder (~120 lines)
+function timeStretchAudioBuffer(buffer, stretchFactor, algorithm = 'phase-vocoder') {
+  if (!buffer || stretchFactor === 1.0) return buffer;
+
+  const cacheKey = `${buffer.length}_${stretchFactor}`;
+  if (bpmSyncState.stretchedSamples.has(cacheKey)) {
+    return bpmSyncState.stretchedSamples.get(cacheKey);
+  }
+
+  const inputData = buffer.getChannelData(0);
+  const inputLength = inputData.length;
+  const outputLength = Math.round(inputLength / stretchFactor);
+  const stretchedBuffer = audioCtx.createBuffer(buffer.numberOfChannels, outputLength, buffer.sampleRate);
+  const outputData = stretchedBuffer.getChannelData(0);
+
+  if (algorithm === 'phase-vocoder') {
+    const windowSize = 1024;
+    const hopSize = Math.round(windowSize * 0.25);
+    const window = new Float32Array(windowSize);
+    for (let i = 0; i < windowSize; i++) {
+      window[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / (windowSize - 1)));
+    }
+
+    const fft = new Float32Array(windowSize);
+    const ifft = new Float32Array(windowSize);
+    const phase = new Float32Array(windowSize);
+    const prevPhase = new Float32Array(windowSize);
+    let outPos = 0;
+
+    for (let frameStart = 0; frameStart + windowSize < inputLength; frameStart += hopSize) {
+      for (let i = 0; i < windowSize; i++) {
+        fft[i] = inputData[frameStart + i] * window[i];
+      }
+
+      const magnitude = new Float32Array(windowSize / 2);
+      for (let i = 0; i < windowSize / 2; i++) {
+        const real = fft[i * 2] || 0;
+        const imag = fft[i * 2 + 1] || 0;
+        magnitude[i] = Math.sqrt(real * real + imag * imag);
+        phase[i] = Math.atan2(imag, real);
+      }
+
+      const newHopSize = Math.round(hopSize / stretchFactor);
+      const phaseDiff = new Float32Array(windowSize / 2);
+      const binFreq = (2 * Math.PI * hopSize) / windowSize;
+
+      for (let i = 0; i < windowSize / 2; i++) {
+        phaseDiff[i] = phase[i] - prevPhase[i];
+        while (phaseDiff[i] > Math.PI) phaseDiff[i] -= 2 * Math.PI;
+        while (phaseDiff[i] < -Math.PI) phaseDiff[i] += 2 * Math.PI;
+      }
+
+      for (let i = 0; i < Math.min(outputLength - outPos, newHopSize); i++) {
+        if (outPos + i < outputLength) {
+          outputData[outPos + i] += (inputData[frameStart + i] || 0) * window[i];
+        }
+      }
+
+      outPos += newHopSize;
+      prevPhase.set(phase);
+
+      if (outPos >= outputLength) break;
+    }
+  } else {
+    const ratio = inputLength / outputLength;
+    for (let i = 0; i < outputLength; i++) {
+      const position = i * ratio;
+      const index = Math.floor(position);
+      const fraction = position - index;
+      const sample1 = inputData[index] || 0;
+      const sample2 = inputData[Math.min(index + 1, inputLength - 1)] || 0;
+      outputData[i] = sample1 * (1 - fraction) + sample2 * fraction;
+    }
+  }
+
+  bpmSyncState.stretchedSamples.set(cacheKey, stretchedBuffer);
+  return stretchedBuffer;
+}
+
+// Phase 23f: BPM Detection from Audio Buffer
+function detectSampleBPM(audioBuffer) {
+  if (!audioBuffer) return {bpm: null, confidence: 0, onsets: []};
+
+  const data = audioBuffer.getChannelData(0);
+  const sampleRate = audioBuffer.sampleRate;
+  const fftSize = 2048;
+  const offlineCtx = new OfflineAudioContext(1, data.length, sampleRate);
+  const source = offlineCtx.createBufferSource();
+  source.buffer = audioBuffer;
+
+  const analyser = offlineCtx.createAnalyser();
+  analyser.fftSize = fftSize;
+  source.connect(analyser);
+  analyser.connect(offlineCtx.destination);
+
+  const onsets = [];
+  let maxEnergy = 0;
+  const energyThreshold = 0.1;
+
+  for (let i = 0; i < data.length - fftSize; i += fftSize / 4) {
+    let energy = 0;
+    for (let j = 0; j < fftSize; j++) {
+      energy += data[i + j] * data[i + j];
+    }
+    if (energy > maxEnergy * energyThreshold) {
+      onsets.push(i / sampleRate);
+      maxEnergy = Math.max(maxEnergy, energy);
+    }
+  }
+
+  let detectedBPM = 120;
+  let confidence = 0.5;
+
+  if (onsets.length > 2) {
+    const intervals = [];
+    for (let i = 1; i < onsets.length; i++) {
+      intervals.push(onsets[i] - onsets[i - 1]);
+    }
+    const avgInterval = intervals.reduce((a, b) => a + b) / intervals.length;
+    detectedBPM = Math.round((60 / avgInterval) * 10) / 10;
+    const variance = intervals.reduce((sum, x) => sum + Math.pow(x - avgInterval, 2), 0) / intervals.length;
+    confidence = Math.max(0.3, Math.min(1.0, 1 - (Math.sqrt(variance) / avgInterval) * 0.5));
+  }
+
+  return {bpm: detectedBPM, confidence: confidence, onsets: onsets};
+}
+
+// Phase 23f: Sample Upload & Analysis
+function uploadAndAnalyzeSample(file) {
+  if (!file || !audioCtx) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    audioCtx.decodeAudioData(e.target.result, (buffer) => {
+      const analysis = detectSampleBPM(buffer);
+      const sampleId = 'sample_' + Date.now();
+      const sample = {
+        id: sampleId,
+        name: file.name,
+        buffer: buffer,
+        detectedBPM: analysis.bpm,
+        confidence: analysis.confidence,
+        onsets: analysis.onsets,
+        playbackRate: 1.0,
+        loops: [],
+        slices: [],
+        duration: buffer.duration
+      };
+
+      sampleLibrary.push(sample);
+      currentSampleId = sampleId;
+      renderSampleLibrary();
+      showLoopSuggestionModal(sampleId);
+    });
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// Phase 23f: Play Sample with Time-Stretch
+function playSample(sampleId, time = audioCtx.currentTime, velocity = 1.0, stretchFactor = 1.0) {
+  const sample = sampleLibrary.find(s => s.id === sampleId);
+  if (!sample) return;
+
+  const buffer = sample.buffer;
+  const stretchedBuffer = timeStretchAudioBuffer(buffer, stretchFactor);
+
+  const source = audioCtx.createBufferSource();
+  source.buffer = stretchedBuffer;
+  source.playbackRate.value = sample.playbackRate;
+
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(velocity, time);
+
+  source.connect(gain);
+  gain.connect(audioCtx.destination);
+  source.start(time);
+}
+
+// Phase 23f: Render Sample Library UI
+function renderSampleLibrary() {
+  const container = document.getElementById('sampleLibrary');
+  if (!container) return;
+
+  container.innerHTML = sampleLibrary.map(sample => `
+    <div style="padding:8px;border:1px solid var(--border);border-radius:4px;margin:4px 0;background:var(--bg-card)">
+      <div style="font-weight:600;color:var(--cyan)">${sample.name}</div>
+      <div style="font-size:11px;color:var(--text-secondary)">
+        BPM: ${sample.detectedBPM?.toFixed(1) || '—'} (${(sample.confidence * 100).toFixed(0)}%)
+      </div>
+      <div style="font-size:11px;color:var(--text-secondary)">
+        Duration: ${sample.duration?.toFixed(2) || '—'}s | Onsets: ${sample.onsets?.length || 0}
+      </div>
+    </div>
+  `).join('');
+}
+
+// Phase 23g: Loop Region Suggestion Algorithm (~150 lines)
+function suggestLoopRegions(sampleBuffer, detectedBPM, onsets) {
+  if (!sampleBuffer || !detectedBPM || onsets.length < 2) return [];
+
+  const sampleRate = sampleBuffer.sampleRate;
+  const data = sampleBuffer.getChannelData(0);
+  const suggestions = [];
+  const barLengths = [1, 2, 4, 8];
+
+  for (const bars of barLengths) {
+    const barDuration = (60 / detectedBPM) * 4 * bars;
+    const startTime = 0;
+    const endTime = Math.min(barDuration, sampleBuffer.duration);
+
+    if (endTime <= startTime) continue;
+
+    const startSample = Math.round(startTime * sampleRate);
+    const endSample = Math.round(endTime * sampleRate);
+
+    const energyBalance = analyzeLoopEnergy(sampleBuffer, startSample, endSample);
+    const spectralContinuity = analyzeSpectralContinuity(sampleBuffer, startSample, endSample);
+    const transientAlignment = onsets.filter(o => o >= startTime && o <= endTime).length / Math.max(1, onsets.length);
+
+    const confidence = (0.4 * energyBalance + 0.4 * transientAlignment + 0.2 * spectralContinuity);
+
+    suggestions.push({
+      id: 'loop_' + Date.now() + '_' + bars,
+      bars: bars,
+      startTime: startTime,
+      endTime: endTime,
+      barDuration: barDuration,
+      confidence: confidence,
+      reasoning: `${bars}-bar loop (E:${(energyBalance*100).toFixed(0)}% T:${(transientAlignment*100).toFixed(0)}% S:${(spectralContinuity*100).toFixed(0)}%)`,
+      energyBalance: energyBalance,
+      transientAlignment: transientAlignment
+    });
+  }
+
+  return suggestions.sort((a, b) => b.confidence - a.confidence);
+}
+
+// Phase 23g: Energy Analysis (~40 lines)
+function analyzeLoopEnergy(buffer, startSample, endSample) {
+  const data = buffer.getChannelData(0);
+  let loopEnergy = 0;
+  let globalEnergy = 0;
+
+  for (let i = 0; i < data.length; i++) {
+    const energy = data[i] * data[i];
+    globalEnergy += energy;
+    if (i >= startSample && i < endSample) loopEnergy += energy;
+  }
+
+  const loopRMS = Math.sqrt(loopEnergy / (endSample - startSample));
+  const globalRMS = Math.sqrt(globalEnergy / data.length);
+  const ratio = globalRMS > 0 ? loopRMS / globalRMS : 0;
+
+  return Math.max(0, Math.min(1, 1 - Math.abs(ratio - 1) / 2));
+}
+
+// Phase 23g: Spectral Continuity Check (~50 lines)
+function analyzeSpectralContinuity(buffer, startSample, endSample) {
+  const sampleRate = buffer.sampleRate;
+  const data = buffer.getChannelData(0);
+
+  const getMFCC = (start, end) => {
+    const slice = data.slice(start, Math.min(end, start + 2048));
+    const fft = new Float32Array(2048);
+    for (let i = 0; i < slice.length; i++) fft[i] = slice[i];
+
+    let energy = 0;
+    for (let i = 0; i < fft.length; i++) energy += fft[i] * fft[i];
+
+    const mfcc = new Float32Array(13);
+    for (let i = 0; i < 13; i++) {
+      mfcc[i] = Math.log(energy + 1) * Math.cos((i + 1) * Math.PI / 13);
+    }
+    return mfcc;
+  };
+
+  const startMFCC = getMFCC(startSample, startSample + 2048);
+  const endMFCC = getMFCC(Math.max(endSample - 2048, startSample), endSample);
+
+  let dot = 0, normA = 0, normB = 0;
+  for (let i = 0; i < 13; i++) {
+    dot += startMFCC[i] * endMFCC[i];
+    normA += startMFCC[i] * startMFCC[i];
+    normB += endMFCC[i] * endMFCC[i];
+  }
+
+  return Math.max(0, Math.min(1, dot / (Math.sqrt(normA * normB) + 0.001)));
+}
+
+// Phase 23g: Show Loop Suggestion Modal
+function showLoopSuggestionModal(sampleId) {
+  const sample = sampleLibrary.find(s => s.id === sampleId);
+  if (!sample) return;
+
+  const suggestions = suggestLoopRegions(sample.buffer, sample.detectedBPM, sample.onsets);
+
+  let modal = document.getElementById('loopSuggestionModal');
+  if (modal) modal.remove();
+
+  modal = document.createElement('div');
+  modal.id = 'loopSuggestionModal';
+  modal.style.cssText = `
+    position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+    z-index:2000;background:var(--bg-card);border:2px solid var(--lime);
+    border-radius:12px;padding:20px;min-width:500px;box-shadow:0 0 50px rgba(170,255,0,0.3)
+  `;
+
+  modal.innerHTML = `
+    <div style="color:var(--lime);font-size:14px;font-weight:600;margin-bottom:12px">🎯 Loop Region Suggestions</div>
+    <div style="font-size:11px;color:var(--text-secondary);margin-bottom:12px">
+      BPM: ${sample.detectedBPM?.toFixed(1) || '—'} (${(sample.confidence * 100).toFixed(0)}%) | Duration: ${sample.duration?.toFixed(2) || '—'}s
+    </div>
+    <div style="max-height:300px;overflow-y:auto;margin-bottom:12px">
+      ${suggestions.slice(0, 6).map((loop, i) => `
+        <div style="padding:8px;background:rgba(170,255,0,0.05);border:1px solid var(--border);border-radius:4px;margin:4px 0;cursor:pointer" onclick="applyLoop('${sampleId}', ${i})">
+          <div style="color:var(--lime);font-weight:600">${loop.bars}-Bar Loop</div>
+          <div style="font-size:10px;color:var(--text-secondary)">
+            Confidence: ${'█'.repeat(Math.round(loop.confidence * 10))} ${(loop.confidence * 100).toFixed(0)}%
+          </div>
+          <div style="font-size:9px;color:var(--text-dim)">${loop.reasoning}</div>
+          <button onclick="previewLoop('${sampleId}', ${i}); event.stopPropagation()" style="margin-top:4px;padding:2px 6px;background:var(--orange);border:0;border-radius:2px;color:#fff;font-size:9px;cursor:pointer">Preview</button>
+        </div>
+      `).join('')}
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="document.getElementById('loopSuggestionModal').remove()" style="flex:1;padding:8px;background:var(--border);border:0;border-radius:4px;color:var(--text-primary);cursor:pointer">Close</button>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+}
+
+// Phase 23g: Loop Preview (~40 lines)
+function previewLoop(sampleId, loopIndex) {
+  const sample = sampleLibrary.find(s => s.id === sampleId);
+  if (!sample) return;
+
+  const suggestions = suggestLoopRegions(sample.buffer, sample.detectedBPM, sample.onsets);
+  const loop = suggestions[loopIndex];
+  if (!loop) return;
+
+  const source = audioCtx.createBufferSource();
+  source.buffer = sample.buffer;
+  const gain = audioCtx.createGain();
+
+  source.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  const playCount = 2;
+  const playDuration = (loop.endTime - loop.startTime) * playCount;
+  const fadeTime = 0.1;
+
+  gain.gain.setValueAtTime(0.7, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + playDuration - fadeTime);
+
+  source.start(audioCtx.currentTime, loop.startTime, playDuration);
+  setTimeout(() => source.stop(), (playDuration + fadeTime) * 1000);
+}
+
+// Phase 23g: Apply Loop (~30 lines)
+function applyLoop(sampleId, loopIndex) {
+  const sample = sampleLibrary.find(s => s.id === sampleId);
+  if (!sample) return;
+
+  const suggestions = suggestLoopRegions(sample.buffer, sample.detectedBPM, sample.onsets);
+  const loop = suggestions[loopIndex];
+
+  if (loop) {
+    sample.loops.push(loop);
+    loopSuggestionState.appliedLoops.set(sampleId, loop);
+    document.getElementById('loopSuggestionModal').remove();
+  }
+}
+
+// Phase 23h: Slice Extraction (~80 lines)
+function extractSlices(sampleId) {
+  const sample = sampleLibrary.find(s => s.id === sampleId);
+  if (!sample) return [];
+
+  const slices = [];
+  const data = sample.buffer.getChannelData(0);
+  const sampleRate = sample.buffer.sampleRate;
+
+  for (let i = 0; i < sample.onsets.length; i++) {
+    const startTime = sample.onsets[i];
+    const endTime = i < sample.onsets.length - 1 ? sample.onsets[i + 1] : sample.duration;
+
+    const startSample = Math.round(startTime * sampleRate);
+    const endSample = Math.round(endTime * sampleRate);
+
+    let energy = 0;
+    for (let j = startSample; j < endSample; j++) {
+      energy += data[j] * data[j];
+    }
+    energy = Math.sqrt(energy / (endSample - startSample));
+
+    let transientType = 'sustain';
+    if (energy > 0.3) transientType = 'onset';
+    else if (energy < 0.05) transientType = 'silence';
+
+    const slice = {
+      id: 'slice_' + Date.now() + '_' + i,
+      sampleId: sampleId,
+      startSample: startSample,
+      endSample: endSample,
+      duration: endTime - startTime,
+      bpm: sample.detectedBPM,
+      energy: energy,
+      transientType: transientType,
+      tags: [],
+      effects: {enabled: [], parameters: {}}
+    };
+
+    slices.push(slice);
+  }
+
+  sample.slices = slices;
+  sliceSequencerState.sliceLibrary.push(...slices);
+  return slices;
+}
+
+// Phase 23h: Multi-Sample Slice Queueing (~80 lines)
+function queueSliceForStep(step, sliceId, probability = 1.0) {
+  if (!sliceSequencerState.sliceGrid[step]) {
+    sliceSequencerState.sliceGrid[step] = [];
+  }
+
+  const slice = sliceSequencerState.sliceLibrary.find(s => s.id === sliceId);
+  if (!slice) return;
+
+  sliceSequencerState.sliceGrid[step].push({
+    sliceId: sliceId,
+    sampleId: slice.sampleId,
+    probability: probability,
+    effects: {}
+  });
+
+  sliceSequencerState.probabilityMap.set(sliceId, probability);
+  sliceSequencerState.activeSlices.set(sliceId, {step, triggered: false});
+}
+
+// Phase 23h: Cross-Sample Slice Chaining (~120 lines)
+function createSliceChain(sliceIdArray) {
+  const chain = [];
+  let totalDuration = 0;
+
+  for (const sliceId of sliceIdArray) {
+    const slice = sliceSequencerState.sliceLibrary.find(s => s.id === sliceId);
+    if (!slice) continue;
+
+    chain.push({
+      sliceId: sliceId,
+      sampleId: slice.sampleId,
+      duration: slice.duration,
+      offset: totalDuration
+    });
+
+    totalDuration += slice.duration;
+  }
+
+  const chainObj = {
+    id: 'chain_' + Date.now(),
+    slices: chain,
+    totalDuration: totalDuration
+  };
+
+  sliceSequencerState.crossSampleChaining.chains.push(chainObj);
+  return chainObj;
+}
+
+// Phase 23h: Probability-Based Selection (~40 lines)
+function selectSliceWithProbability(step) {
+  const slicesAtStep = sliceSequencerState.sliceGrid[step];
+  if (!slicesAtStep) return [];
+
+  const triggered = [];
+  for (const entry of slicesAtStep) {
+    if (Math.random() < entry.probability) {
+      triggered.push(entry);
+    }
+  }
+  return triggered;
+}
+
+// Phase 23h: Sample Playback with Effects (~100 lines)
+function playSlice(sliceId, time, velocity = 1.0, effectsOverrides = {}) {
+  const slice = sliceSequencerState.sliceLibrary.find(s => s.id === sliceId);
+  if (!slice) return;
+
+  const sample = sampleLibrary.find(s => s.id === slice.sampleId);
+  if (!sample) return;
+
+  const buffer = sample.buffer;
+  const startTime = slice.startSample / buffer.sampleRate;
+  const duration = slice.duration;
+
+  const source = audioCtx.createBufferSource();
+  source.buffer = buffer;
+
+  const stretchFactor = sample.playbackRate || 1.0;
+  source.playbackRate.value = stretchFactor;
+
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(velocity * 0.7, time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + duration - 0.01);
+
+  source.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  source.start(time, startTime, duration);
+  source.stop(time + duration);
+
+  sliceSequencerState.activeSlices.set(sliceId, {triggeredAt: time, endAt: time + duration});
+}
+
+// Phase 23h: Visual Timeline Rendering (~150 lines)
+function renderSliceTimeline(canvas) {
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+  const pxPerSec = sliceSequencerState.visualTimeline.pixelsPerSecond;
+
+  ctx.fillStyle = 'rgba(15,21,32,0.8)';
+  ctx.fillRect(0, 0, width, height);
+
+  const laneHeight = height / Math.max(1, sampleLibrary.length);
+  const playheadX = sliceSequencerState.visualTimeline.playheadPosition * pxPerSec;
+
+  sampleLibrary.forEach((sample, laneIndex) => {
+    const laneY = laneIndex * laneHeight;
+
+    sample.slices?.forEach(slice => {
+      const sliceX = (slice.startSample / sample.buffer.sampleRate) * pxPerSec;
+      const sliceW = (slice.duration) * pxPerSec;
+
+      ctx.fillStyle = sliceSequencerState.visualTimeline.activeSampleColors[sample.id] || 'rgba(0,240,255,0.5)';
+      if (sliceSequencerState.activeSlices.has(slice.id)) {
+        ctx.fillStyle = 'rgba(170,255,0,0.8)';
+      }
+
+      ctx.fillRect(sliceX, laneY, sliceW, laneHeight - 2);
+      ctx.strokeStyle = 'rgba(0,240,255,0.3)';
+      ctx.strokeRect(sliceX, laneY, sliceW, laneHeight - 2);
+    });
+  });
+
+  ctx.strokeStyle = 'var(--red)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(playheadX, 0);
+  ctx.lineTo(playheadX, height);
+  ctx.stroke();
+}
+
+// Phase 23h: Toggle Slice Mode (~20 lines)
+function toggleSliceMode() {
+  sliceSequencerState.sliceMode = !sliceSequencerState.sliceMode;
+  const btn = document.getElementById('sliceModeToggle');
+  if (btn) {
+    btn.style.background = sliceSequencerState.sliceMode ? 'var(--lime)' : 'var(--border)';
+    btn.style.color = sliceSequencerState.sliceMode ? '#000' : 'var(--text-primary)';
+  }
+}
+
 function clearGrid() {
   TRACKS.forEach(t => {
     grid[t.key] = grid[t.key].map(() => ({active: false, velocity: 1.0, pan: 0}));
@@ -6314,8 +6998,25 @@ function handleXDJPadPress(note, velocity) {
 function syncXDJTempo(ccValue) {
   const xdjTempoCurrent = 60 + (ccValue / 127) * 120;
   const tempoChange = Math.abs(xdjTempoCurrent - bpm);
+  const tolerance = (bpm * bpmSyncState.syncTolerancePercent) / 100;
 
-  if (tempoChange > 2) {
+  xdjTempo = xdjTempoCurrent;
+  bpmSyncState.lastHardwareBPM = xdjTempoCurrent;
+  bpmSyncState.syncHistory.push({time: Date.now(), bpm: xdjTempoCurrent});
+  if (bpmSyncState.syncHistory.length > 100) bpmSyncState.syncHistory.shift();
+
+  // Phase 23f: Bidirectional Sync - if current sample has different BPM, send back via CC#6
+  if (currentSampleId && bpmSyncState.bidirectionalSync && xdjMidiOutput && xdjConnected) {
+    const sample = sampleLibrary.find(s => s.id === currentSampleId);
+    if (sample && sample.detectedBPM && Math.abs(sample.detectedBPM - xdjTempoCurrent) > tolerance) {
+      const sampleBpmCC = Math.round((sample.detectedBPM - 60) / 120 * 127);
+      xdjMidiOutput.send([0xB0, 6, Math.max(0, Math.min(127, sampleBpmCC))]);
+      const stretchFactor = xdjTempoCurrent / sample.detectedBPM;
+      bpmSyncState.timeStretchBuffer = timeStretchAudioBuffer(sample.buffer, stretchFactor);
+    }
+  }
+
+  if (tempoChange > tolerance) {
     bpm = Math.round(xdjTempoCurrent * 10) / 10;
     document.getElementById('tempoDisplay').textContent = bpm;
     document.getElementById('tempoSlider').value = bpm;
@@ -7639,6 +8340,143 @@ function toggleVideoExportVisualizer(analyzer) {
     <p style="color:var(--text-dim);font-size:10px;margin-top:16px;line-height:1.4">Need help? Create a free Firebase project at firebase.google.com and enable Firestore Database + Anonymous Auth.</p>
   </div>
 </div>
+
+<!-- Phase 12: Effects Chain Panel -->
+<div id="effectsPanel" style="position:fixed;bottom:20px;left:430px;width:360px;background:var(--bg-card);border:1px solid rgba(170,255,0,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:70vh;overflow-y:auto;display:none">
+  <div style="font-size:13px;font-weight:600;color:var(--lime);margin-bottom:12px">🎛️ Effects Chain</div>
+
+  <!-- AI Pattern Generator -->
+  <div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+    <div style="font-size:11px;font-weight:600;color:var(--cyan);margin-bottom:8px">🤖 AI Generate</div>
+    <textarea id="aiPrompt" placeholder="e.g. 'Techno 4-on-floor with tight hi-hat'" maxlength="200" style="width:100%;padding:8px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;font-size:10px;font-family:monospace;resize:vertical;height:50px;margin-bottom:8px"></textarea>
+    <button onclick="generatePatternFromPrompt()" style="width:100%;padding:8px;background:rgba(0,240,255,0.1);border:1px solid var(--cyan);color:var(--cyan);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;transition:all 0.2s">
+      Generate Pattern
+    </button>
+    <div id="aiStatus" style="display:none;font-size:10px;color:var(--text-secondary);margin-top:8px;text-align:center"></div>
+  </div>
+
+  <!-- Compressor -->
+  <div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+    <label style="display:flex;gap:8px;margin-bottom:8px;cursor:pointer">
+      <input type="checkbox" id="effect_compressor" onchange="toggleEffect('compressor')" style="cursor:pointer">
+      <span style="font-size:11px;font-weight:600;color:var(--text-primary)">Compressor</span>
+    </label>
+    <div id="compressorControls" style="display:none;margin-left:20px;gap:10px;font-size:10px">
+      <div style="margin-bottom:8px">
+        <div style="color:var(--text-secondary);margin-bottom:4px">Threshold: <span style="color:var(--cyan)">-24dB</span></div>
+        <input type="range" min="-40" max="0" value="-24" step="1" oninput="updateCompressor(this.value, document.getElementById('compressorRatio').value)" style="width:100%;cursor:pointer">
+      </div>
+      <div>
+        <div style="color:var(--text-secondary);margin-bottom:4px">Ratio: <span style="color:var(--cyan)" id="ratioDisplay">4:1</span></div>
+        <input type="range" min="1" max="20" value="4" step="0.1" id="compressorRatio" oninput="document.getElementById('ratioDisplay').textContent = (this.value + ':1'); updateCompressor(document.querySelector('input[min=\\\"-40\\\"]').value, this.value)" style="width:100%;cursor:pointer">
+      </div>
+    </div>
+  </div>
+
+  <!-- 3-Band EQ -->
+  <div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+    <label style="display:flex;gap:8px;margin-bottom:8px;cursor:pointer">
+      <input type="checkbox" id="effect_eq" onchange="toggleEffect('eq')" style="cursor:pointer">
+      <span style="font-size:11px;font-weight:600;color:var(--text-primary)">3-Band EQ</span>
+    </label>
+    <div id="eqControls" style="display:none;margin-left:20px;gap:10px;font-size:10px">
+      <div style="margin-bottom:8px">
+        <div style="color:var(--text-secondary);margin-bottom:4px">Bass: <span style="color:var(--cyan)" id="bassDisplay">0dB</span></div>
+        <input type="range" min="-12" max="12" value="0" step="1" id="bassSlider" oninput="document.getElementById('bassDisplay').textContent = (this.value > 0 ? '+' : '') + this.value + 'dB'; updateEQ(this.value, document.getElementById('midSlider').value, document.getElementById('trebleSlider').value)" style="width:100%;cursor:pointer">
+      </div>
+      <div style="margin-bottom:8px">
+        <div style="color:var(--text-secondary);margin-bottom:4px">Mid: <span style="color:var(--cyan)" id="midDisplay">0dB</span></div>
+        <input type="range" min="-12" max="12" value="0" step="1" id="midSlider" oninput="document.getElementById('midDisplay').textContent = (this.value > 0 ? '+' : '') + this.value + 'dB'; updateEQ(document.getElementById('bassSlider').value, this.value, document.getElementById('trebleSlider').value)" style="width:100%;cursor:pointer">
+      </div>
+      <div>
+        <div style="color:var(--text-secondary);margin-bottom:4px">Treble: <span style="color:var(--cyan)" id="trebleDisplay">0dB</span></div>
+        <input type="range" min="-12" max="12" value="0" step="1" id="trebleSlider" oninput="document.getElementById('trebleDisplay').textContent = (this.value > 0 ? '+' : '') + this.value + 'dB'; updateEQ(document.getElementById('bassSlider').value, document.getElementById('midSlider').value, this.value)" style="width:100%;cursor:pointer">
+      </div>
+    </div>
+  </div>
+
+  <!-- Delay -->
+  <div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+    <label style="display:flex;gap:8px;margin-bottom:8px;cursor:pointer">
+      <input type="checkbox" id="effect_delay" onchange="toggleEffect('delay')" style="cursor:pointer">
+      <span style="font-size:11px;font-weight:600;color:var(--text-primary)">Delay</span>
+    </label>
+    <div id="delayControls" style="display:none;margin-left:20px;gap:10px;font-size:10px">
+      <div style="margin-bottom:8px">
+        <div style="color:var(--text-secondary);margin-bottom:4px">Time: <span style="color:var(--cyan)" id="delayTimeDisplay">0.5s</span></div>
+        <input type="range" min="0.1" max="2" value="0.5" step="0.05" id="delayTimeSlider" oninput="document.getElementById('delayTimeDisplay').textContent = this.value + 's'; updateDelay(this.value, document.getElementById('delayFeedbackSlider').value, document.getElementById('delayMixSlider').value)" style="width:100%;cursor:pointer">
+      </div>
+      <div style="margin-bottom:8px">
+        <div style="color:var(--text-secondary);margin-bottom:4px">Feedback: <span style="color:var(--cyan)" id="delayFeedbackDisplay">40%</span></div>
+        <input type="range" min="0" max="0.8" value="0.4" step="0.05" id="delayFeedbackSlider" oninput="document.getElementById('delayFeedbackDisplay').textContent = Math.round(this.value * 100) + '%'; updateDelay(document.getElementById('delayTimeSlider').value, this.value, document.getElementById('delayMixSlider').value)" style="width:100%;cursor:pointer">
+      </div>
+      <div>
+        <div style="color:var(--text-secondary);margin-bottom:4px">Mix: <span style="color:var(--cyan)" id="delayMixDisplay">0%</span></div>
+        <input type="range" min="0" max="1" value="0" step="0.05" id="delayMixSlider" oninput="document.getElementById('delayMixDisplay').textContent = Math.round(this.value * 100) + '%'; updateDelay(document.getElementById('delayTimeSlider').value, document.getElementById('delayFeedbackSlider').value, this.value)" style="width:100%;cursor:pointer">
+      </div>
+    </div>
+  </div>
+
+  <!-- Reverb -->
+  <div style="margin-bottom:14px">
+    <label style="display:flex;gap:8px;margin-bottom:8px;cursor:pointer">
+      <input type="checkbox" id="effect_reverb" onchange="toggleEffect('reverb')" style="cursor:pointer">
+      <span style="font-size:11px;font-weight:600;color:var(--text-primary)">Reverb</span>
+    </label>
+    <div id="reverbControls" style="display:none;margin-left:20px;gap:10px;font-size:10px">
+      <div>
+        <div style="color:var(--text-secondary);margin-bottom:4px">Mix: <span style="color:var(--cyan)" id="reverbMixDisplay">0%</span></div>
+        <input type="range" min="0" max="1" value="0" step="0.05" oninput="document.getElementById('reverbMixDisplay').textContent = Math.round(this.value * 100) + '%'; updateReverb(this.value)" style="width:100%;cursor:pointer">
+      </div>
+    </div>
+  </div>
+
+  <button onclick="document.getElementById('effectsPanel').style.display='none'" style="width:100%;padding:8px;background:rgba(170,255,0,0.1);border:1px solid var(--lime);color:var(--lime);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;transition:all 0.2s">
+    ✕ Close
+  </button>
+</div>
+
+<!-- Phase 13: MIDI Controller Panel -->
+<div id="midiPanel" style="position:fixed;bottom:20px;left:820px;width:340px;background:var(--bg-card);border:1px solid rgba(136,119,255,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:70vh;overflow-y:auto;display:none">
+  <div style="font-size:13px;font-weight:600;color:var(--purple);margin-bottom:12px">🎮 MIDI Controller</div>
+
+  <!-- MIDI Status -->
+  <div style="margin-bottom:12px;padding:10px;background:var(--bg-secondary);border-radius:6px;border-left:3px solid var(--purple)">
+    <div id="midiStatus" style="font-size:10px;color:var(--text-secondary)">Initializing MIDI...</div>
+  </div>
+
+  <!-- Control Toggle -->
+  <button onclick="toggleMIDI()" style="width:100%;padding:10px;background:rgba(136,119,255,0.1);border:1px solid var(--purple);color:var(--purple);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;transition:all 0.2s;margin-bottom:12px">
+    🎛️ Enable MIDI Input
+  </button>
+
+  <!-- Pad Mapping Info -->
+  <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+    <div style="font-size:11px;font-weight:600;color:var(--text-primary);margin-bottom:8px">📍 Pad Layout</div>
+    <div style="font-size:10px;color:var(--text-secondary);line-height:1.6">
+      <div>• C1-D#2 (36-51): 16-pad grid</div>
+      <div>• 4 pads per track, left-to-right</div>
+      <div>• Velocity controls note volume</div>
+    </div>
+  </div>
+
+  <!-- Knob Mapping Info -->
+  <div style="margin-bottom:12px">
+    <div style="font-size:11px;font-weight:600;color:var(--text-primary);margin-bottom:8px">🎚️ Default Knob Map</div>
+    <div style="font-size:10px;color:var(--text-secondary);line-height:1.6">
+      <div>• CC#14 (Mod Wheel): BPM</div>
+      <div>• CC#15: Swing</div>
+      <div>• CC#7 (Volume): Master</div>
+      <div>• CC#16 (GP1): Compressor</div>
+      <div>• CC#17 (GP2): Reverb Mix</div>
+    </div>
+  </div>
+
+  <button onclick="document.getElementById('midiPanel').style.display='none'" style="width:100%;padding:8px;background:rgba(136,119,255,0.1);border:1px solid var(--purple);color:var(--purple);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">
+    ✕ Close
+  </button>
+</div>
+
 <!-- Phase 17: AI Mixing Analysis Panel -->
 <div id="aiMixingPanel" style="position:fixed;bottom:20px;right:20px;width:380px;background:var(--bg-card);border:1px solid rgba(255,136,68,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:75vh;overflow-y:auto;display:none">
   <div style="font-size:13px;font-weight:600;color:#ff8844;margin-bottom:14px">🎚️ AI Mix Analysis</div>
