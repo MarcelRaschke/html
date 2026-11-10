@@ -1674,10 +1674,10 @@ let stemSeparationState = {
     other: false
   },
   stemEffects: {
-    vocals: { highPass: { enabled: false, freq: 100 }, reverb: { enabled: false, wet: 0.3 } },
-    drums: { highPass: { enabled: false, freq: 50 }, reverb: { enabled: false, wet: 0.2 } },
-    bass: { highPass: { enabled: false, freq: 20 }, reverb: { enabled: false, wet: 0.1 } },
-    other: { highPass: { enabled: false, freq: 100 }, reverb: { enabled: false, wet: 0.25 } }
+    vocals: { highPass: { enabled: false, freq: 100 }, reverb: { enabled: false, wet: 0.3 }, delay: { enabled: false, time: 0.5, feedback: 0.3, wet: 0.2 }, compressor: { enabled: false, threshold: -24, ratio: 4, attack: 0.003, release: 0.25 } },
+    drums: { highPass: { enabled: false, freq: 50 }, reverb: { enabled: false, wet: 0.2 }, delay: { enabled: false, time: 0.375, feedback: 0.25, wet: 0.15 }, compressor: { enabled: false, threshold: -20, ratio: 6, attack: 0.003, release: 0.25 } },
+    bass: { highPass: { enabled: false, freq: 20 }, reverb: { enabled: false, wet: 0.1 }, delay: { enabled: false, time: 0.75, feedback: 0.35, wet: 0.1 }, compressor: { enabled: false, threshold: -18, ratio: 8, attack: 0.005, release: 0.3 } },
+    other: { highPass: { enabled: false, freq: 100 }, reverb: { enabled: false, wet: 0.25 }, delay: { enabled: false, time: 0.5, feedback: 0.3, wet: 0.15 }, compressor: { enabled: false, threshold: -22, ratio: 4, attack: 0.003, release: 0.25 } }
   },
   separationQuality: 'balanced',
   processingTime: 0,
@@ -1688,6 +1688,48 @@ let stemSeparationState = {
     other: null
   },
   stemGainNodes: {
+    vocals: null,
+    drums: null,
+    bass: null,
+    other: null
+  },
+  stemDelayNodes: {
+    vocals: null,
+    drums: null,
+    bass: null,
+    other: null
+  },
+  stemDelayFeedbackNodes: {
+    vocals: null,
+    drums: null,
+    bass: null,
+    other: null
+  },
+  stemDelayWetNodes: {
+    vocals: null,
+    drums: null,
+    bass: null,
+    other: null
+  },
+  stemReverbNodes: {
+    vocals: null,
+    drums: null,
+    bass: null,
+    other: null
+  },
+  stemReverbWetNodes: {
+    vocals: null,
+    drums: null,
+    bass: null,
+    other: null
+  },
+  stemCompressorNodes: {
+    vocals: null,
+    drums: null,
+    bass: null,
+    other: null
+  },
+  stemEffectChains: {
     vocals: null,
     drums: null,
     bass: null,
@@ -8815,54 +8857,90 @@ function toggleVideoExportVisualizer(analyzer) {
   <div id="stemsControlPanel" style="display:none;border-top:1px solid rgba(170,255,0,0.2);padding-top:12px">
     <div style="font-size:10px;color:var(--text-dim);margin-bottom:10px;font-weight:600">Stem Controls</div>
 
+    <!-- Quality Selection -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px">
+      <button id="quality-fast" onclick="setStemQuality('fast')" style="padding:6px;background:rgba(170,255,0,0.1);border:1px solid rgba(170,255,0,0.3);color:var(--lime);border-radius:4px;cursor:pointer;font-size:8px;font-weight:600">⚡ Fast</button>
+      <button id="quality-balanced" onclick="setStemQuality('balanced')" style="padding:6px;background:rgba(170,255,0,0.1);border:1px solid rgba(170,255,0,0.3);color:var(--lime);border-radius:4px;cursor:pointer;font-size:8px;font-weight:600">⚙️ Balanced</button>
+      <button id="quality-hq" onclick="setStemQuality('hq')" style="padding:6px;background:rgba(170,255,0,0.1);border:1px solid rgba(170,255,0,0.3);color:var(--lime);border-radius:4px;cursor:pointer;font-size:8px;font-weight:600">🎯 HQ</button>
+    </div>
+
     <!-- Vocals -->
-    <div style="margin-bottom:10px">
+    <div style="margin-bottom:10px;padding:8px;background:rgba(0,240,255,0.05);border-radius:6px">
       <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-        <span style="font-size:10px;color:var(--cyan)">🎙️ Vocals</span>
+        <span style="font-size:10px;color:var(--cyan);font-weight:600">🎙️ Vocals</span>
         <span id="vocalGainValue" style="font-size:9px;color:var(--cyan)">1.0</span>
       </div>
-      <input type="range" min="0" max="200" value="100" oninput="setStemGain('vocals', this.value/100); updateStemGainDisplay('vocals')" style="width:100%;height:4px;background:rgba(0,240,255,0.2);border-radius:2px;cursor:pointer">
-      <button id="vocalMuteBtn" onclick="toggleStemMute('vocals')" style="width:100%;padding:4px;background:rgba(0,240,255,0.1);border:1px solid rgba(0,240,255,0.3);color:var(--cyan);border-radius:4px;cursor:pointer;font-size:8px;margin-top:4px">🔊 Unmuted</button>
+      <input type="range" min="0" max="200" value="100" id="vocalGain" oninput="setStemGain('vocals', this.value/100); updateStemGainDisplay('vocals')" style="width:100%;height:4px;background:rgba(0,240,255,0.2);border-radius:2px;cursor:pointer">
+      <button id="vocalMute" onclick="toggleStemMute('vocals')" style="width:100%;padding:4px;background:rgba(0,240,255,0.1);border:1px solid rgba(0,240,255,0.3);color:var(--cyan);border-radius:4px;cursor:pointer;font-size:8px;margin-top:4px">🔊 Unmuted</button>
+      <!-- Vocals Effects -->
+      <div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(0,240,255,0.2);font-size:9px;color:var(--cyan)">
+        <div style="margin-bottom:4px"><strong>⚡ Delay:</strong> <input type="range" min="0.05" max="2" step="0.05" value="0.5" id="vocalDelayTime" oninput="setStemDelay('vocals', this.value, document.getElementById('vocalDelayFeedback').value, document.getElementById('vocalDelayWet').value); updateStemEffectDisplay('vocal', 'DelayTime', this.value)" style="width:60%;height:2px;vertical-align:middle"> <span style="font-size:8px" id="vocalDelayTimeValue">0.5s</span></div>
+        <div style="margin-bottom:4px"><strong>🔄 Feedback:</strong> <input type="range" min="0" max="1" step="0.05" value="0.3" id="vocalDelayFeedback" oninput="setStemDelay('vocals', document.getElementById('vocalDelayTime').value, this.value, document.getElementById('vocalDelayWet').value); updateStemEffectDisplay('vocal', 'DelayFeedback', this.value)" style="width:60%;height:2px;vertical-align:middle"> <span style="font-size:8px" id="vocalDelayFeedbackValue">30%</span></div>
+        <div style="margin-bottom:4px"><strong>💧 Reverb:</strong> <input type="range" min="0" max="1" step="0.05" value="0.3" id="vocalDelayWet" oninput="setStemReverb('vocals', this.value); updateStemEffectDisplay('vocal', 'Reverb', this.value)" style="width:60%;height:2px;vertical-align:middle"> <span style="font-size:8px" id="vocalReverbValue">30%</span></div>
+        <div><strong>🔫 Comp:</strong> T:<input type="range" min="-48" max="0" step="1" value="-24" id="vocalCompThreshold" oninput="setStemCompressor('vocals', this.value, document.getElementById('vocalCompRatio').value, 0.003, 0.25)" style="width:35%;height:2px;vertical-align:middle"> R:<input type="range" min="1" max="16" step="1" value="4" id="vocalCompRatio" oninput="setStemCompressor('vocals', document.getElementById('vocalCompThreshold').value, this.value, 0.003, 0.25)" style="width:35%;height:2px;vertical-align:middle"></div>
+      </div>
     </div>
 
     <!-- Drums -->
-    <div style="margin-bottom:10px">
+    <div style="margin-bottom:10px;padding:8px;background:rgba(255,51,85,0.05);border-radius:6px">
       <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-        <span style="font-size:10px;color:var(--red)">🥁 Drums</span>
+        <span style="font-size:10px;color:var(--red);font-weight:600">🥁 Drums</span>
         <span id="drumGainValue" style="font-size:9px;color:var(--red)">1.0</span>
       </div>
-      <input type="range" min="0" max="200" value="100" oninput="setStemGain('drums', this.value/100); updateStemGainDisplay('drums')" style="width:100%;height:4px;background:rgba(255,51,85,0.2);border-radius:2px;cursor:pointer">
-      <button id="drumMuteBtn" onclick="toggleStemMute('drums')" style="width:100%;padding:4px;background:rgba(255,51,85,0.1);border:1px solid rgba(255,51,85,0.3);color:var(--red);border-radius:4px;cursor:pointer;font-size:8px;margin-top:4px">🔊 Unmuted</button>
+      <input type="range" min="0" max="200" value="100" id="drumGain" oninput="setStemGain('drums', this.value/100); updateStemGainDisplay('drums')" style="width:100%;height:4px;background:rgba(255,51,85,0.2);border-radius:2px;cursor:pointer">
+      <button id="drumMute" onclick="toggleStemMute('drums')" style="width:100%;padding:4px;background:rgba(255,51,85,0.1);border:1px solid rgba(255,51,85,0.3);color:var(--red);border-radius:4px;cursor:pointer;font-size:8px;margin-top:4px">🔊 Unmuted</button>
+      <!-- Drums Effects -->
+      <div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,51,85,0.2);font-size:9px;color:var(--red)">
+        <div style="margin-bottom:4px"><strong>⚡ Delay:</strong> <input type="range" min="0.05" max="2" step="0.05" value="0.375" id="drumDelayTime" oninput="setStemDelay('drums', this.value, document.getElementById('drumDelayFeedback').value, document.getElementById('drumDelayWet').value); updateStemEffectDisplay('drum', 'DelayTime', this.value)" style="width:60%;height:2px;vertical-align:middle"> <span style="font-size:8px" id="drumDelayTimeValue">0.375s</span></div>
+        <div style="margin-bottom:4px"><strong>🔄 Feedback:</strong> <input type="range" min="0" max="1" step="0.05" value="0.25" id="drumDelayFeedback" oninput="setStemDelay('drums', document.getElementById('drumDelayTime').value, this.value, document.getElementById('drumDelayWet').value); updateStemEffectDisplay('drum', 'DelayFeedback', this.value)" style="width:60%;height:2px;vertical-align:middle"> <span style="font-size:8px" id="drumDelayFeedbackValue">25%</span></div>
+        <div style="margin-bottom:4px"><strong>💧 Reverb:</strong> <input type="range" min="0" max="1" step="0.05" value="0.2" id="drumDelayWet" oninput="setStemReverb('drums', this.value); updateStemEffectDisplay('drum', 'Reverb', this.value)" style="width:60%;height:2px;vertical-align:middle"> <span style="font-size:8px" id="drumReverbValue">20%</span></div>
+        <div><strong>🔫 Comp:</strong> T:<input type="range" min="-48" max="0" step="1" value="-20" id="drumCompThreshold" oninput="setStemCompressor('drums', this.value, document.getElementById('drumCompRatio').value, 0.003, 0.25)" style="width:35%;height:2px;vertical-align:middle"> R:<input type="range" min="1" max="16" step="1" value="6" id="drumCompRatio" oninput="setStemCompressor('drums', document.getElementById('drumCompThreshold').value, this.value, 0.003, 0.25)" style="width:35%;height:2px;vertical-align:middle"></div>
+      </div>
     </div>
 
     <!-- Bass -->
-    <div style="margin-bottom:10px">
+    <div style="margin-bottom:10px;padding:8px;background:rgba(255,204,0,0.05);border-radius:6px">
       <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-        <span style="font-size:10px;color:var(--gold)">🎸 Bass</span>
+        <span style="font-size:10px;color:var(--gold);font-weight:600">🎸 Bass</span>
         <span id="bassGainValue" style="font-size:9px;color:var(--gold)">1.0</span>
       </div>
-      <input type="range" min="0" max="200" value="100" oninput="setStemGain('bass', this.value/100); updateStemGainDisplay('bass')" style="width:100%;height:4px;background:rgba(255,204,0,0.2);border-radius:2px;cursor:pointer">
-      <button id="bassMuteBtn" onclick="toggleStemMute('bass')" style="width:100%;padding:4px;background:rgba(255,204,0,0.1);border:1px solid rgba(255,204,0,0.3);color:var(--gold);border-radius:4px;cursor:pointer;font-size:8px;margin-top:4px">🔊 Unmuted</button>
+      <input type="range" min="0" max="200" value="100" id="bassGain" oninput="setStemGain('bass', this.value/100); updateStemGainDisplay('bass')" style="width:100%;height:4px;background:rgba(255,204,0,0.2);border-radius:2px;cursor:pointer">
+      <button id="bassMute" onclick="toggleStemMute('bass')" style="width:100%;padding:4px;background:rgba(255,204,0,0.1);border:1px solid rgba(255,204,0,0.3);color:var(--gold);border-radius:4px;cursor:pointer;font-size:8px;margin-top:4px">🔊 Unmuted</button>
+      <!-- Bass Effects -->
+      <div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,204,0,0.2);font-size:9px;color:var(--gold)">
+        <div style="margin-bottom:4px"><strong>⚡ Delay:</strong> <input type="range" min="0.05" max="2" step="0.05" value="0.75" id="bassDelayTime" oninput="setStemDelay('bass', this.value, document.getElementById('bassDelayFeedback').value, document.getElementById('bassReverbWet').value); updateStemEffectDisplay('bass', 'DelayTime', this.value)" style="width:60%;height:2px;vertical-align:middle"> <span style="font-size:8px" id="bassDelayTimeValue">0.75s</span></div>
+        <div style="margin-bottom:4px"><strong>🔄 Feedback:</strong> <input type="range" min="0" max="1" step="0.05" value="0.35" id="bassDelayFeedback" oninput="setStemDelay('bass', document.getElementById('bassDelayTime').value, this.value, document.getElementById('bassReverbWet').value); updateStemEffectDisplay('bass', 'DelayFeedback', this.value)" style="width:60%;height:2px;vertical-align:middle"> <span style="font-size:8px" id="bassDelayFeedbackValue">35%</span></div>
+        <div style="margin-bottom:4px"><strong>💧 Reverb:</strong> <input type="range" min="0" max="1" step="0.05" value="0.1" id="bassReverbWet" oninput="setStemReverb('bass', this.value); updateStemEffectDisplay('bass', 'Reverb', this.value)" style="width:60%;height:2px;vertical-align:middle"> <span style="font-size:8px" id="bassReverbValue">10%</span></div>
+        <div><strong>🔫 Comp:</strong> T:<input type="range" min="-48" max="0" step="1" value="-18" id="bassCompThreshold" oninput="setStemCompressor('bass', this.value, document.getElementById('bassCompRatio').value, 0.005, 0.3)" style="width:35%;height:2px;vertical-align:middle"> R:<input type="range" min="1" max="16" step="1" value="8" id="bassCompRatio" oninput="setStemCompressor('bass', document.getElementById('bassCompThreshold').value, this.value, 0.005, 0.3)" style="width:35%;height:2px;vertical-align:middle"></div>
+      </div>
     </div>
 
     <!-- Other -->
-    <div style="margin-bottom:10px">
+    <div style="margin-bottom:10px;padding:8px;background:rgba(255,0,170,0.05);border-radius:6px">
       <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-        <span style="font-size:10px;color:var(--magenta)">🎵 Other</span>
+        <span style="font-size:10px;color:var(--magenta);font-weight:600">🎵 Other</span>
         <span id="otherGainValue" style="font-size:9px;color:var(--magenta)">1.0</span>
       </div>
-      <input type="range" min="0" max="200" value="100" oninput="setStemGain('other', this.value/100); updateStemGainDisplay('other')" style="width:100%;height:4px;background:rgba(255,0,170,0.2);border-radius:2px;cursor:pointer">
-      <button id="otherMuteBtn" onclick="toggleStemMute('other')" style="width:100%;padding:4px;background:rgba(255,0,170,0.1);border:1px solid rgba(255,0,170,0.3);color:var(--magenta);border-radius:4px;cursor:pointer;font-size:8px;margin-top:4px">🔊 Unmuted</button>
+      <input type="range" min="0" max="200" value="100" id="otherGain" oninput="setStemGain('other', this.value/100); updateStemGainDisplay('other')" style="width:100%;height:4px;background:rgba(255,0,170,0.2);border-radius:2px;cursor:pointer">
+      <button id="otherMute" onclick="toggleStemMute('other')" style="width:100%;padding:4px;background:rgba(255,0,170,0.1);border:1px solid rgba(255,0,170,0.3);color:var(--magenta);border-radius:4px;cursor:pointer;font-size:8px;margin-top:4px">🔊 Unmuted</button>
+      <!-- Other Effects -->
+      <div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,0,170,0.2);font-size:9px;color:var(--magenta)">
+        <div style="margin-bottom:4px"><strong>⚡ Delay:</strong> <input type="range" min="0.05" max="2" step="0.05" value="0.5" id="otherDelayTime" oninput="setStemDelay('other', this.value, document.getElementById('otherDelayFeedback').value, document.getElementById('otherReverbWet').value); updateStemEffectDisplay('other', 'DelayTime', this.value)" style="width:60%;height:2px;vertical-align:middle"> <span style="font-size:8px" id="otherDelayTimeValue">0.5s</span></div>
+        <div style="margin-bottom:4px"><strong>🔄 Feedback:</strong> <input type="range" min="0" max="1" step="0.05" value="0.3" id="otherDelayFeedback" oninput="setStemDelay('other', document.getElementById('otherDelayTime').value, this.value, document.getElementById('otherReverbWet').value); updateStemEffectDisplay('other', 'DelayFeedback', this.value)" style="width:60%;height:2px;vertical-align:middle"> <span style="font-size:8px" id="otherDelayFeedbackValue">30%</span></div>
+        <div style="margin-bottom:4px"><strong>💧 Reverb:</strong> <input type="range" min="0" max="1" step="0.05" value="0.25" id="otherReverbWet" oninput="setStemReverb('other', this.value); updateStemEffectDisplay('other', 'Reverb', this.value)" style="width:60%;height:2px;vertical-align:middle"> <span style="font-size:8px" id="otherReverbValue">25%</span></div>
+        <div><strong>🔫 Comp:</strong> T:<input type="range" min="-48" max="0" step="1" value="-22" id="otherCompThreshold" oninput="setStemCompressor('other', this.value, document.getElementById('otherCompRatio').value, 0.003, 0.25)" style="width:35%;height:2px;vertical-align:middle"> R:<input type="range" min="1" max="16" step="1" value="4" id="otherCompRatio" oninput="setStemCompressor('other', document.getElementById('otherCompThreshold').value, this.value, 0.003, 0.25)" style="width:35%;height:2px;vertical-align:middle"></div>
+      </div>
     </div>
 
     <!-- Playback Controls -->
     <div style="display:flex;gap:6px;margin-top:12px">
-      <button id="stemPlayBtn" onclick="playStemMix()" style="flex:1;padding:8px;background:rgba(170,255,0,0.15);border:1px solid var(--lime);color:var(--lime);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">▶ Play Mix</button>
+      <button id="playStemMixBtn" onclick="playStemMix()" style="flex:1;padding:8px;background:rgba(170,255,0,0.15);border:1px solid var(--lime);color:var(--lime);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">▶ Play Mix</button>
       <button id="stemStopBtn" onclick="stopStemPlayback()" style="flex:1;padding:8px;background:rgba(255,51,85,0.15);border:1px solid var(--red);color:var(--red);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">⏹ Stop</button>
     </div>
 
     <!-- Export Buttons -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px">
+      <button id="exportStemMixBtn" onclick="exportStemMix()" style="padding:6px;background:rgba(170,255,0,0.1);border:1px solid rgba(170,255,0,0.3);color:var(--lime);border-radius:4px;cursor:pointer;font-size:8px;grid-column:1/-1;font-weight:600">📦 Export Mix</button>
       <button onclick="exportStemAsWAV('vocals')" style="padding:6px;background:rgba(0,240,255,0.1);border:1px solid rgba(0,240,255,0.3);color:var(--cyan);border-radius:4px;cursor:pointer;font-size:8px">💾 Vocals</button>
       <button onclick="exportStemAsWAV('drums')" style="padding:6px;background:rgba(255,51,85,0.1);border:1px solid rgba(255,51,85,0.3);color:var(--red);border-radius:4px;cursor:pointer;font-size:8px">💾 Drums</button>
       <button onclick="exportStemAsWAV('bass')" style="padding:6px;background:rgba(255,204,0,0.1);border:1px solid rgba(255,204,0,0.3);color:var(--gold);border-radius:4px;cursor:pointer;font-size:8px">💾 Bass</button>
@@ -9137,6 +9215,147 @@ function setStemMute(stemName, muted) {
   }
 }
 
+function createStemEffectChain(stemName) {
+  if (!audioCtx || !stemSeparationState.stemEffects[stemName]) return null;
+
+  const effects = stemSeparationState.stemEffects[stemName];
+
+  // Create Delay nodes
+  const delayNode = audioCtx.createDelay(2);
+  delayNode.delayTime.value = effects.delay.time;
+
+  const delayFeedbackNode = audioCtx.createGain();
+  delayFeedbackNode.gain.value = effects.delay.feedback;
+
+  const delayWetNode = audioCtx.createGain();
+  delayWetNode.gain.value = effects.delay.wet;
+
+  // Create Reverb nodes
+  const reverbNode = audioCtx.createConvolver();
+  const impulse = createPresetImpulse(advancedAudio.currentPreset);
+  reverbNode.buffer = impulse;
+
+  const reverbWetNode = audioCtx.createGain();
+  reverbWetNode.gain.value = effects.reverb.wet;
+
+  const reverbDryNode = audioCtx.createGain();
+  reverbDryNode.gain.value = 1.0;
+
+  // Create Compressor node
+  const compressorNode = audioCtx.createDynamicsCompressor();
+  compressorNode.threshold.value = effects.compressor.threshold;
+  compressorNode.ratio.value = effects.compressor.ratio;
+  compressorNode.attack.value = effects.compressor.attack;
+  compressorNode.release.value = effects.compressor.release;
+
+  // Build effect chain: input → delay → reverb → compressor → output
+  // Delay feedback loop
+  delayNode.connect(delayFeedbackNode);
+  delayFeedbackNode.connect(delayNode);
+  delayNode.connect(delayWetNode);
+
+  // Delay output to Reverb
+  delayWetNode.connect(reverbDryNode);
+  reverbDryNode.connect(reverbNode);
+  reverbNode.connect(reverbWetNode);
+
+  // Reverb output to Compressor
+  reverbWetNode.connect(compressorNode);
+
+  // Store node references
+  stemSeparationState.stemDelayNodes[stemName] = delayNode;
+  stemSeparationState.stemDelayFeedbackNodes[stemName] = delayFeedbackNode;
+  stemSeparationState.stemDelayWetNodes[stemName] = delayWetNode;
+  stemSeparationState.stemReverbNodes[stemName] = reverbNode;
+  stemSeparationState.stemReverbWetNodes[stemName] = reverbWetNode;
+  stemSeparationState.stemCompressorNodes[stemName] = compressorNode;
+
+  return { input: delayNode, output: compressorNode };
+}
+
+function setStemDelay(stemName, time, feedback, wet) {
+  if (!stemSeparationState.stemEffects[stemName]) return;
+
+  const effects = stemSeparationState.stemEffects[stemName];
+  effects.delay.time = Math.max(0.05, Math.min(2, time));
+  effects.delay.feedback = Math.max(0, Math.min(0.95, feedback));
+  effects.delay.wet = Math.max(0, Math.min(1, wet));
+
+  const now = audioCtx.currentTime;
+  const delayNode = stemSeparationState.stemDelayNodes[stemName];
+  const feedbackNode = stemSeparationState.stemDelayFeedbackNodes[stemName];
+  const wetNode = stemSeparationState.stemDelayWetNodes[stemName];
+
+  if (delayNode) delayNode.delayTime.setTargetAtTime(effects.delay.time, now, 0.01);
+  if (feedbackNode) feedbackNode.gain.setTargetAtTime(effects.delay.feedback, now, 0.01);
+  if (wetNode) wetNode.gain.setTargetAtTime(effects.delay.wet, now, 0.01);
+}
+
+function setStemReverb(stemName, wet) {
+  if (!stemSeparationState.stemEffects[stemName]) return;
+
+  const effects = stemSeparationState.stemEffects[stemName];
+  effects.reverb.wet = Math.max(0, Math.min(1, wet));
+
+  const now = audioCtx.currentTime;
+  const reverbWetNode = stemSeparationState.stemReverbWetNodes[stemName];
+
+  if (reverbWetNode) reverbWetNode.gain.setTargetAtTime(effects.reverb.wet, now, 0.01);
+}
+
+function setStemCompressor(stemName, threshold, ratio, attack, release) {
+  if (!stemSeparationState.stemEffects[stemName]) return;
+
+  const effects = stemSeparationState.stemEffects[stemName];
+  effects.compressor.threshold = threshold;
+  effects.compressor.ratio = ratio;
+  effects.compressor.attack = attack;
+  effects.compressor.release = release;
+
+  const now = audioCtx.currentTime;
+  const compressorNode = stemSeparationState.stemCompressorNodes[stemName];
+
+  if (compressorNode) {
+    compressorNode.threshold.setTargetAtTime(threshold, now, 0.01);
+    compressorNode.ratio.setTargetAtTime(ratio, now, 0.01);
+    compressorNode.attack.setTargetAtTime(attack, now, 0.01);
+    compressorNode.release.setTargetAtTime(release, now, 0.01);
+  }
+}
+
+function updateStemEffectDisplay(stemName, effectType, value) {
+  const displayId = stemName + effectType.charAt(0).toUpperCase() + effectType.slice(1) + 'Value';
+  const element = document.getElementById(displayId);
+  if (element) {
+    if (effectType.includes('Delay') || effectType.includes('Time')) {
+      element.textContent = parseFloat(value).toFixed(3) + 's';
+    } else if (effectType.includes('Reverb') || effectType.includes('Feedback') || effectType.includes('Wet')) {
+      element.textContent = (parseFloat(value) * 100).toFixed(0) + '%';
+    } else {
+      element.textContent = parseFloat(value).toFixed(1);
+    }
+  }
+}
+
+function updateStemGainDisplay(stemName) {
+  const displayId = stemName + 'GainValue';
+  const element = document.getElementById(displayId);
+  if (element) {
+    element.textContent = stemSeparationState.stemGains[stemName].toFixed(2);
+  }
+}
+
+function toggleStemMute(stemName) {
+  const muted = stemSeparationState.stemMutes[stemName];
+  setStemMute(stemName, !muted);
+
+  const btnId = stemName.charAt(0).toUpperCase() + stemName.slice(1) + 'Mute';
+  const btn = document.getElementById(btnId);
+  if (btn) {
+    btn.textContent = stemSeparationState.stemMutes[stemName] ? '🔇 Muted' : '🔊 Unmuted';
+  }
+}
+
 function playStemMix(startTime = 0) {
   if (!stemSeparationState.stems.vocals || !audioCtx) {
     console.error('Stems not separated yet');
@@ -9151,10 +9370,20 @@ function playStemMix(startTime = 0) {
     const source = audioCtx.createBufferSource();
     source.buffer = buffer;
 
+    // Initialize effect chain for this stem
+    const effectChain = createStemEffectChain(name);
+
     const gainNode = audioCtx.createGain();
     gainNode.gain.value = stemSeparationState.stemMutes[name] ? 0 : stemSeparationState.stemGains[name];
 
-    source.connect(gainNode);
+    // Connect: source → effect chain → gain → master
+    if (effectChain) {
+      source.connect(effectChain.input);
+      effectChain.output.connect(gainNode);
+    } else {
+      source.connect(gainNode);
+    }
+
     gainNode.connect(masterGain);
 
     stemSeparationState.stemSources[name] = source;
@@ -9229,6 +9458,91 @@ function exportStemAsWAV(stemName) {
   const a = document.createElement('a');
   a.href = url;
   a.download = `${stemName}-${Date.now()}.wav`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function setStemQuality(quality) {
+  stemSeparationState.separationQuality = quality;
+
+  const qualityButtons = ['quality-fast', 'quality-balanced', 'quality-hq'];
+  qualityButtons.forEach(btnId => {
+    const btn = document.getElementById(btnId);
+    if (btn) {
+      if (btnId === `quality-${quality}`) {
+        btn.style.backgroundColor = '#4CAF50';
+        btn.style.color = 'white';
+      } else {
+        btn.style.backgroundColor = '';
+        btn.style.color = '';
+      }
+    }
+  });
+
+  console.log(`Separation quality set to: ${quality}`);
+}
+
+function exportStemMix() {
+  const stemNames = ['vocals', 'drums', 'bass', 'other'];
+  let maxLength = 0;
+
+  for (const name of stemNames) {
+    if (!stemSeparationState.stems[name]) {
+      console.error(`Stem ${name} not found`);
+      return;
+    }
+    maxLength = Math.max(maxLength, stemSeparationState.stems[name].length);
+  }
+
+  const sampleRate = stemSeparationState.stems.vocals.sampleRate;
+  const mixedBuffer = audioCtx.createBuffer(1, maxLength, sampleRate);
+  const mixedData = mixedBuffer.getChannelData(0);
+
+  for (const stemName of stemNames) {
+    const stem = stemSeparationState.stems[stemName];
+    const stemData = stem.getChannelData(0);
+    const gain = stemSeparationState.stemMutes[stemName] ? 0 : stemSeparationState.stemGains[stemName];
+
+    for (let i = 0; i < stem.length; i++) {
+      mixedData[i] += stemData[i] * gain;
+    }
+  }
+
+  const data = mixedData;
+  const buffer = new ArrayBuffer(44 + data.length * 2);
+  const view = new DataView(buffer);
+
+  const writeString = (offset, string) => {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  };
+
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + data.length * 2, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, data.length * 2, true);
+
+  let offset = 44;
+  for (let i = 0; i < data.length; i++) {
+    view.setInt16(offset, data[i] < 1 ? data[i] * 0x7FFF : 0x7FFF, true);
+    offset += 2;
+  }
+
+  const blob = new Blob([buffer], { type: 'audio/wav' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `stem-mix-${Date.now()}.wav`;
   a.click();
   URL.revokeObjectURL(url);
 }
