@@ -1030,7 +1030,20 @@ body::before {
           <!-- Modulation Matrix -->
           <div style="margin-bottom:12px;padding:8px;background:rgba(136,68,255,0.1);border-radius:4px">
             <div style="font-size:10px;color:var(--purple);font-weight:600;margin-bottom:8px">🔗 Modulation Matrix (6×4)</div>
-            <div id="modulationMatrixGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;max-height:120px;overflow-y:auto"></div>
+            <div id="modulationMatrixContainer" style="overflow-x:auto;overflow-y:auto;max-height:180px;position:relative">
+              <table id="modulationMatrixTable" style="border-collapse:collapse;font-size:8px;width:100%">
+                <thead>
+                  <tr>
+                    <th style="width:50px;padding:2px;text-align:center;background:rgba(136,68,255,0.2);border:1px solid rgba(136,68,255,0.3)"></th>
+                    <th id="targetHeader_0" style="width:45px;padding:2px;text-align:center;background:rgba(0,200,255,0.2);border:1px solid rgba(0,200,255,0.3);cursor:help" title="Filter Cutoff"></th>
+                    <th id="targetHeader_1" style="width:45px;padding:2px;text-align:center;background:rgba(0,200,255,0.2);border:1px solid rgba(0,200,255,0.3);cursor:help" title="Delay Feedback"></th>
+                    <th id="targetHeader_2" style="width:45px;padding:2px;text-align:center;background:rgba(0,200,255,0.2);border:1px solid rgba(0,200,255,0.3);cursor:help" title="Reverb Wet"></th>
+                    <th id="targetHeader_3" style="width:45px;padding:2px;text-align:center;background:rgba(0,200,255,0.2);border:1px solid rgba(0,200,255,0.3);cursor:help" title="Distortion Drive"></th>
+                  </tr>
+                </thead>
+                <tbody id="modulationMatrixGrid"></tbody>
+              </table>
+            </div>
           </div>
 
           <!-- Timeline Visualization -->
@@ -4056,6 +4069,7 @@ function togglePlay() {
     initBeatViz();
     initParametricEQ();
     initWavetables();
+    initModulationMatrixUI();
   }
   isPlaying = !isPlaying;
   const btn = document.getElementById('playBtn');
@@ -7664,7 +7678,31 @@ function updateLFOAmplitude(lfoId, amplitude) {
   if (lfo) lfo.amplitude = parseFloat(amplitude);
 }
 
-// Phase 24.3: Modulation Matrix UI (~50 lines)
+// Phase 24.3: Modulation Matrix UI Refinement (~120 lines)
+function initModulationMatrixUI() {
+  // Initialize default targets if not present
+  if (effectsAutomationState.modulationMatrix.targets.length === 0) {
+    effectsAutomationState.modulationMatrix.targets = [
+      { id: 'filter_cutoff', param: 'filterCutoff', label: 'Filter', tooltip: 'Filter Cutoff (20Hz–20kHz)' },
+      { id: 'delay_feedback', param: 'delayFeedback', label: 'D.Fbk', tooltip: 'Delay Feedback (0–1)' },
+      { id: 'reverb_wet', param: 'reverbWet', label: 'Rev.W', tooltip: 'Reverb Wet Mix (0–1)' },
+      { id: 'distortion_drive', param: 'distortionDrive', label: 'Dist', tooltip: 'Distortion Drive (0–1)' }
+    ];
+  }
+
+  // Update target headers
+  const targets = effectsAutomationState.modulationMatrix.targets;
+  for (let i = 0; i < targets.length; i++) {
+    const header = document.getElementById(`targetHeader_${i}`);
+    if (header) {
+      header.textContent = targets[i].label;
+      header.title = targets[i].tooltip;
+    }
+  }
+
+  updateModulationMatrixGrid();
+}
+
 function updateModulationMatrixGrid() {
   const container = document.getElementById('modulationMatrixGrid');
   if (!container) return;
@@ -7672,33 +7710,48 @@ function updateModulationMatrixGrid() {
   const sources = effectsAutomationState.modulationMatrix.sources;
   const targets = effectsAutomationState.modulationMatrix.targets;
 
-  // Initialize default targets if not present
-  if (targets.length === 0) {
-    effectsAutomationState.modulationMatrix.targets = [
-      { id: 'filter_cutoff', param: 'filterCutoff', label: 'Filter' },
-      { id: 'delay_feedback', param: 'delayFeedback', label: 'D.Feedback' },
-      { id: 'reverb_wet', param: 'reverbWet', label: 'Rev.Wet' },
-      { id: 'distortion_drive', param: 'distortionDrive', label: 'Distortion' }
-    ];
-  }
+  const sourceTypeLabels = {
+    'lfo': '〰️ LFO',
+    'envelope': '📦 Env',
+    'velocity': '🎹 Vel',
+    'slice_energy': '⚡ SE',
+    'spectral': '🌊 Spec',
+    'automation': '🔄 Auto'
+  };
 
   let html = '';
-  for (const target of effectsAutomationState.modulationMatrix.targets) {
-    html += `<div style="padding:4px;background:rgba(136,68,255,0.15);border-radius:3px;font-size:8px"><strong>${target.label}</strong>`;
 
-    for (const source of sources) {
+  // Create rows for each source
+  for (const source of sources) {
+    const sourceLabel = sourceTypeLabels[source.type] || source.label;
+    const sourceTitle = `${source.label} (${source.type}) - Value: ${source.value?.toFixed(2) || '0.00'}`;
+
+    html += `<tr>
+      <td style="width:50px;padding:2px;background:rgba(200,100,255,0.1);border:1px solid rgba(136,68,255,0.3);text-align:center;font-weight:600;white-space:nowrap" title="${sourceTitle}">${sourceLabel}</td>`;
+
+    // Create cells for each target
+    for (const target of targets) {
       const mapping = effectsAutomationState.modulationMatrix.mappings.find(
         m => m.sourceId === source.id && m.targetId === target.id
       );
-      const amount = mapping ? mapping.amount : 0;
+      const amount = mapping ? parseFloat(mapping.amount) : 0;
+      const isActive = amount > 0;
+      const bgColor = isActive ? `rgba(0,255,100,${0.2 + amount * 0.3})` : 'rgba(100,100,200,0.1)';
+      const borderColor = isActive ? 'rgba(0,255,100,0.5)' : 'rgba(100,100,200,0.2)';
 
-      html += `<div style="margin-top:2px">
-        <input type="range" min="0" max="1" value="${amount}" step="0.1" style="width:100%;height:12px"
-          oninput="updateModulationAmount('${source.id}', '${target.id}', this.value)">
-      </div>`;
+      html += `<td style="width:45px;padding:2px;background:${bgColor};border:1px solid ${borderColor};text-align:center;position:relative;cursor:pointer"
+        id="modMatrix_${source.id}_${target.id}"
+        oncontextmenu="deleteModulationMapping('${source.id}', '${target.id}'); event.preventDefault();"
+        title="Click to edit, right-click to delete (currently ${(amount * 100).toFixed(0)}%)">
+        <div style="display:flex;align-items:center;justify-content:center;height:24px;gap:2px">
+          <input type="range" min="0" max="1" value="${amount}" step="0.05" style="width:32px;height:10px;margin:0"
+            oninput="updateModulationAmount('${source.id}', '${target.id}', this.value); updateModulationMatrixCell('${source.id}', '${target.id}')">
+          ${isActive ? `<span style="font-size:7px;font-weight:600;color:var(--green);min-width:12px">${(amount * 100).toFixed(0)}%</span>` : ''}
+        </div>
+      </td>`;
     }
 
-    html += `</div>`;
+    html += `</tr>`;
   }
 
   container.innerHTML = html;
@@ -7709,16 +7762,57 @@ function updateModulationAmount(sourceId, targetId, amount) {
     m => m.sourceId === sourceId && m.targetId === targetId
   );
 
-  if (!mapping && amount > 0) {
-    mapping = { sourceId, targetId, amount: parseFloat(amount), mode: 'add' };
+  const amountValue = parseFloat(amount);
+
+  if (!mapping && amountValue > 0) {
+    mapping = { sourceId, targetId, amount: amountValue, mode: 'add' };
     effectsAutomationState.modulationMatrix.mappings.push(mapping);
   } else if (mapping) {
-    mapping.amount = parseFloat(amount);
+    mapping.amount = amountValue;
     if (mapping.amount === 0) {
       effectsAutomationState.modulationMatrix.mappings =
         effectsAutomationState.modulationMatrix.mappings.filter(m => m !== mapping);
     }
   }
+}
+
+// Phase 24.3: Visual feedback + deletion for modulation matrix
+function updateModulationMatrixCell(sourceId, targetId) {
+  const cell = document.getElementById(`modMatrix_${sourceId}_${targetId}`);
+  if (!cell) return;
+
+  const mapping = effectsAutomationState.modulationMatrix.mappings.find(
+    m => m.sourceId === sourceId && m.targetId === targetId
+  );
+  const amount = mapping ? parseFloat(mapping.amount) : 0;
+  const isActive = amount > 0;
+  const bgColor = isActive ? `rgba(0,255,100,${0.2 + amount * 0.3})` : 'rgba(100,100,200,0.1)';
+  const borderColor = isActive ? 'rgba(0,255,100,0.5)' : 'rgba(100,100,200,0.2)';
+
+  cell.style.background = bgColor;
+  cell.style.borderColor = borderColor;
+  cell.title = `Click to edit, right-click to delete (currently ${(amount * 100).toFixed(0)}%)`;
+
+  // Update percentage display
+  const percentSpan = cell.querySelector('span');
+  if (isActive && !percentSpan) {
+    const newSpan = document.createElement('span');
+    newSpan.style.cssText = 'font-size:7px;font-weight:600;color:var(--green);min-width:12px';
+    newSpan.textContent = `${(amount * 100).toFixed(0)}%`;
+    cell.appendChild(newSpan);
+  } else if (percentSpan && isActive) {
+    percentSpan.textContent = `${(amount * 100).toFixed(0)}%`;
+  } else if (percentSpan && !isActive) {
+    percentSpan.remove();
+  }
+}
+
+function deleteModulationMapping(sourceId, targetId) {
+  effectsAutomationState.modulationMatrix.mappings =
+    effectsAutomationState.modulationMatrix.mappings.filter(
+      m => !(m.sourceId === sourceId && m.targetId === targetId)
+    );
+  updateModulationMatrixGrid();
 }
 
 // === PHASE 24.2: AUTOMATION RECORDING & PLAYBACK ===
