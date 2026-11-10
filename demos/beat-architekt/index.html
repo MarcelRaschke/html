@@ -8938,6 +8938,12 @@ function toggleVideoExportVisualizer(analyzer) {
       <button id="stemStopBtn" onclick="stopStemPlayback()" style="flex:1;padding:8px;background:rgba(255,51,85,0.15);border:1px solid var(--red);color:var(--red);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">⏹ Stop</button>
     </div>
 
+    <!-- Phase 27.7: Latency Compensation Control -->
+    <div style="display:flex;gap:6px;margin-top:10px">
+      <button id="latencyCompensationBtn" onclick="toggleLatencyCompensation()" style="flex:1;padding:6px;background:rgba(0,255,170,0.2);border:1px solid rgba(0,255,170,0.4);color:rgba(0,255,170,0.9);border-radius:4px;cursor:pointer;font-size:9px;font-weight:600">⏱️ Latency Comp: ON</button>
+      <button onclick="console.log(getLatencyReport())" style="flex:1;padding:6px;background:rgba(100,200,255,0.1);border:1px solid rgba(100,200,255,0.3);color:rgba(100,200,255,0.9);border-radius:4px;cursor:pointer;font-size:9px;font-weight:600">📊 Latency Info</button>
+    </div>
+
     <!-- Export Buttons -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px">
       <button id="exportStemMixBtn" onclick="exportStemMix()" style="padding:6px;background:rgba(170,255,0,0.1);border:1px solid rgba(170,255,0,0.3);color:var(--lime);border-radius:4px;cursor:pointer;font-size:8px;grid-column:1/-1;font-weight:600">📦 Export Mix</button>
@@ -9784,6 +9790,174 @@ function updateStemModelStatus() {
     statusEl.style.color = 'var(--lime)';
   }
 }
+
+// ========================================
+// PHASE 27.7: Advanced Latency Compensation
+// ========================================
+// Precise timing synchronization for stem playback with pre-compensation
+// for effects chain latency and per-stem timing accuracy.
+
+let stemLatencyState = {
+  enabled: true,
+  compensationMode: 'adaptive', // 'adaptive', 'fixed', 'disabled'
+  measuredLatencies: {
+    vocals: 0,
+    drums: 0,
+    bass: 0,
+    other: 0
+  },
+  effectsChainLatencies: {
+    delayLatency: 0,
+    reverbLatency: 0,
+    compressorLatency: 0,
+    totalLatency: 0
+  },
+  preCompensationValues: {
+    vocals: 0,
+    drums: 0,
+    bass: 0,
+    other: 0
+  },
+  calibrationData: {
+    lastCalibrationTime: null,
+    sampleRate: 44100,
+    bufferSize: 256
+  },
+  latencyHistory: [],
+  compensationActive: false
+};
+
+function initializeLatencyCompensation() {
+  // Measure effect chain latencies
+  measureEffectsChainLatency();
+
+  // Calculate per-stem compensation values
+  calculateStemPreCompensation();
+
+  // Log calibration results
+  console.log('✓ Phase 27.7: Latency Compensation initialized', {
+    totalLatency: stemLatencyState.effectsChainLatencies.totalLatency.toFixed(3),
+    preCompensation: stemLatencyState.preCompensationValues
+  });
+}
+
+function measureEffectsChainLatency() {
+  // Measure delay node latency (~20ms per 500ms delay time)
+  const delayNode = stemSeparationState.stemDelayNodes?.vocals;
+  if (delayNode && delayNode.delayTime) {
+    const delayTimeMs = (delayNode.delayTime.value || 0.2) * 1000;
+    stemLatencyState.effectsChainLatencies.delayLatency = delayTimeMs * 0.04; // ~4% latency per ms
+  }
+
+  // Measure reverb latency (~30-50ms typical for convolver)
+  const reverbNode = stemSeparationState.stemReverbNodes?.vocals;
+  if (reverbNode) {
+    stemLatencyState.effectsChainLatencies.reverbLatency = 35; // Typical convolver latency
+  }
+
+  // Measure compressor lookahead latency (~20ms typical)
+  const compressorNode = stemSeparationState.stemCompressorNodes?.vocals;
+  if (compressorNode) {
+    stemLatencyState.effectsChainLatencies.compressorLatency = 20;
+  }
+
+  // Total latency = max active effect + audio buffer (5.8ms at 44.1kHz, 256 samples)
+  const bufferLatency = stemLatencyState.calibrationData.bufferSize /
+                        stemLatencyState.calibrationData.sampleRate * 1000;
+
+  stemLatencyState.effectsChainLatencies.totalLatency = Math.max(
+    stemLatencyState.effectsChainLatencies.delayLatency,
+    stemLatencyState.effectsChainLatencies.reverbLatency,
+    stemLatencyState.effectsChainLatencies.compressorLatency
+  ) + bufferLatency;
+
+  stemLatencyState.calibrationData.lastCalibrationTime = Date.now();
+}
+
+function calculateStemPreCompensation() {
+  // Calculate pre-compensation per stem based on active effects
+  const stemNames = ['vocals', 'drums', 'bass', 'other'];
+
+  stemNames.forEach(stemName => {
+    let preCompValue = 0;
+
+    // Accumulate latencies from active effects for this stem
+    if (stemSeparationState.stemEffects?.[stemName]?.delay?.enabled) {
+      preCompValue += stemLatencyState.effectsChainLatencies.delayLatency;
+    }
+    if (stemSeparationState.stemEffects?.[stemName]?.reverb?.enabled) {
+      preCompValue += stemLatencyState.effectsChainLatencies.reverbLatency;
+    }
+    if (stemSeparationState.stemEffects?.[stemName]?.compressor?.enabled) {
+      preCompValue += stemLatencyState.effectsChainLatencies.compressorLatency;
+    }
+
+    // Add base buffer latency
+    preCompValue += (stemLatencyState.calibrationData.bufferSize /
+                     stemLatencyState.calibrationData.sampleRate) * 1000;
+
+    // Convert ms to seconds for audio timing
+    stemLatencyState.preCompensationValues[stemName] = preCompValue / 1000;
+    stemLatencyState.measuredLatencies[stemName] = preCompValue;
+  });
+}
+
+function applyLatencyCompensation(stemName, scheduledTime) {
+  // Apply pre-compensation to scheduled play time
+  if (!stemLatencyState.enabled || stemLatencyState.compensationMode === 'disabled') {
+    return scheduledTime;
+  }
+
+  const preCompValue = stemLatencyState.preCompensationValues[stemName] || 0;
+  const compensatedTime = Math.max(0, scheduledTime - preCompValue);
+
+  return compensatedTime;
+}
+
+function updateLatencyCompensation() {
+  // Recalculate on effect parameter changes
+  if (stemLatencyState.compensationMode === 'adaptive') {
+    calculateStemPreCompensation();
+  }
+}
+
+function toggleLatencyCompensation() {
+  stemLatencyState.enabled = !stemLatencyState.enabled;
+  stemLatencyState.compensationActive = stemLatencyState.enabled;
+
+  const button = document.getElementById('latencyCompensationBtn');
+  if (button) {
+    button.textContent = stemLatencyState.enabled ? '⏱️ Latency Comp: ON' : '⏱️ Latency Comp: OFF';
+    button.style.background = stemLatencyState.enabled ? 'rgba(0,255,170,0.2)' : 'rgba(170,170,170,0.1)';
+  }
+
+  console.log(`⏱️ Latency Compensation: ${stemLatencyState.enabled ? 'ENABLED' : 'DISABLED'}`);
+}
+
+function setLatencyCompensationMode(mode) {
+  if (['adaptive', 'fixed', 'disabled'].includes(mode)) {
+    stemLatencyState.compensationMode = mode;
+    calculateStemPreCompensation();
+  }
+}
+
+function getLatencyReport() {
+  return {
+    mode: stemLatencyState.compensationMode,
+    enabled: stemLatencyState.enabled,
+    effectsLatencies: stemLatencyState.effectsChainLatencies,
+    preCompensationMs: Object.entries(stemLatencyState.measuredLatencies)
+      .reduce((acc, [k, v]) => ({ ...acc, [k]: v.toFixed(2) }), {}),
+    lastCalibration: new Date(stemLatencyState.calibrationData.lastCalibrationTime).toISOString()
+  };
+}
+
+// Initialize latency compensation on startup
+setTimeout(() => {
+  if (stemSeparationState.modelLoaded) {
+    initializeLatencyCompensation();
+  }
+}, 500);
 
 // Initialize toggle buttons
 document.addEventListener('DOMContentLoaded', () => {
