@@ -9423,8 +9423,67 @@ function exportStemAsWAV(stemName) {
     return;
   }
 
-  const data = stem.getChannelData(0);
-  const buffer = new ArrayBuffer(44 + data.length * 2);
+  const rawData = stem.getChannelData(0);
+  const sampleRate = stem.sampleRate;
+  const quality = stemSeparationState.separationQuality || 'balanced';
+
+  // Step 1: Normalize audio with headroom to prevent clipping
+  const normResult = normalizeAudio(rawData, -3);
+  const processedData = normResult.normalized;
+
+  // Step 2: Encode with quality-aware settings (handles dithering + soft clipping)
+  const buffer = encodeWAV(processedData, sampleRate, quality);
+
+  // Step 3: Download as WAV file
+  const blob = new Blob([buffer], { type: 'audio/wav' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${stemName}-${Date.now()}.wav`;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  console.log(`Exported ${stemName} stem (quality: ${quality}, peak: ${normResult.peakDb?.toFixed(1)}dB, scale: ${normResult.scale?.toFixed(3)})`);
+}
+
+function ditherAudio(sample) {
+  const noise = (Math.random() - 0.5) * (1 / 32768);
+  return sample + noise;
+}
+
+function softClip(sample, threshold = 0.95) {
+  if (sample > threshold) {
+    return threshold + (1 - threshold) * Math.tanh((sample - threshold) / (1 - threshold));
+  } else if (sample < -threshold) {
+    return -threshold + (1 + threshold) * Math.tanh((sample + threshold) / (1 + threshold));
+  }
+  return sample;
+}
+
+function normalizeAudio(audioData, headroomDb = -3) {
+  let maxAbsolute = 0;
+  for (let i = 0; i < audioData.length; i++) {
+    maxAbsolute = Math.max(maxAbsolute, Math.abs(audioData[i]));
+  }
+
+  if (maxAbsolute === 0) return { scale: 1, normalized: audioData };
+
+  const headroomLinear = Math.pow(10, headroomDb / 20);
+  const targetPeak = 0.95 * headroomLinear;
+  const scale = maxAbsolute > targetPeak ? targetPeak / maxAbsolute : 1;
+
+  const normalized = new Float32Array(audioData.length);
+  for (let i = 0; i < audioData.length; i++) {
+    normalized[i] = audioData[i] * scale;
+  }
+
+  return { scale, normalized, peakDb: 20 * Math.log10(maxAbsolute) };
+}
+
+function encodeWAV(audioData, sampleRate, useQuality = 'balanced') {
+  const bitDepth = useQuality === 'hq' ? 24 : 16;
+  const bytesPerSample = bitDepth / 8;
+  const buffer = new ArrayBuffer(44 + audioData.length * bytesPerSample);
   const view = new DataView(buffer);
 
   const writeString = (offset, string) => {
@@ -9434,32 +9493,40 @@ function exportStemAsWAV(stemName) {
   };
 
   writeString(0, 'RIFF');
-  view.setUint32(4, 36 + data.length * 2, true);
+  view.setUint32(4, 36 + audioData.length * bytesPerSample, true);
   writeString(8, 'WAVE');
   writeString(12, 'fmt ');
   view.setUint32(16, 16, true);
   view.setUint16(20, 1, true);
   view.setUint16(22, 1, true);
-  view.setUint32(24, stem.sampleRate, true);
-  view.setUint32(28, stem.sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * bytesPerSample, true);
+  view.setUint16(32, bytesPerSample, true);
+  view.setUint16(34, bitDepth, true);
   writeString(36, 'data');
-  view.setUint32(40, data.length * 2, true);
+  view.setUint32(40, audioData.length * bytesPerSample, true);
 
   let offset = 44;
-  for (let i = 0; i < data.length; i++) {
-    view.setInt16(offset, data[i] < 1 ? data[i] * 0x7FFF : 0x7FFF, true);
-    offset += 2;
+  const maxValue = Math.pow(2, bitDepth - 1) - 1;
+  const useAppliedDithering = useQuality === 'hq';
+
+  for (let i = 0; i < audioData.length; i++) {
+    const sample = useAppliedDithering ? ditherAudio(audioData[i]) : audioData[i];
+    const clipped = softClip(sample);
+    const pcm = Math.round(clipped * maxValue);
+
+    if (bitDepth === 24) {
+      view.setInt8(offset, pcm & 0xFF);
+      view.setInt8(offset + 1, (pcm >> 8) & 0xFF);
+      view.setInt8(offset + 2, (pcm >> 16) & 0xFF);
+      offset += 3;
+    } else {
+      view.setInt16(offset, pcm, true);
+      offset += 2;
+    }
   }
 
-  const blob = new Blob([buffer], { type: 'audio/wav' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${stemName}-${Date.now()}.wav`;
-  a.click();
-  URL.revokeObjectURL(url);
+  return buffer;
 }
 
 function setStemQuality(quality) {
@@ -9495,9 +9562,10 @@ function exportStemMix() {
   }
 
   const sampleRate = stemSeparationState.stems.vocals.sampleRate;
-  const mixedBuffer = audioCtx.createBuffer(1, maxLength, sampleRate);
-  const mixedData = mixedBuffer.getChannelData(0);
+  const quality = stemSeparationState.separationQuality || 'balanced';
 
+  // Step 1: Mix stems with per-stem gain/mute controls
+  const mixedData = new Float32Array(maxLength);
   for (const stemName of stemNames) {
     const stem = stemSeparationState.stems[stemName];
     const stemData = stem.getChannelData(0);
@@ -9508,36 +9576,14 @@ function exportStemMix() {
     }
   }
 
-  const data = mixedData;
-  const buffer = new ArrayBuffer(44 + data.length * 2);
-  const view = new DataView(buffer);
+  // Step 2: Normalize mix with headroom to prevent clipping
+  const normResult = normalizeAudio(mixedData, -3);
+  const processedData = normResult.normalized;
 
-  const writeString = (offset, string) => {
-    for (let i = 0; i < string.length; i++) {
-      view.setUint8(offset + i, string.charCodeAt(i));
-    }
-  };
+  // Step 3: Encode with quality-aware settings (handles dithering + soft clipping)
+  const buffer = encodeWAV(processedData, sampleRate, quality);
 
-  writeString(0, 'RIFF');
-  view.setUint32(4, 36 + data.length * 2, true);
-  writeString(8, 'WAVE');
-  writeString(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  writeString(36, 'data');
-  view.setUint32(40, data.length * 2, true);
-
-  let offset = 44;
-  for (let i = 0; i < data.length; i++) {
-    view.setInt16(offset, data[i] < 1 ? data[i] * 0x7FFF : 0x7FFF, true);
-    offset += 2;
-  }
-
+  // Step 4: Download as WAV file
   const blob = new Blob([buffer], { type: 'audio/wav' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -9545,6 +9591,8 @@ function exportStemMix() {
   a.download = `stem-mix-${Date.now()}.wav`;
   a.click();
   URL.revokeObjectURL(url);
+
+  console.log(`Exported stem mix (quality: ${quality}, peak: ${normResult.peakDb?.toFixed(1)}dB, scale: ${normResult.scale?.toFixed(3)})`);
 }
 
 // === PHASE 27.2: SPECTROGRAM VISUALIZATION ===
