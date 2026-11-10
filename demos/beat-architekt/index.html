@@ -1724,6 +1724,163 @@ let sliceSequencerState = {
   }
 };
 
+// === PHASE 29: MULTI-STEM SYNCHRONIZATION & ROUTING ===
+
+// Master stem synchronization state
+let stemSyncState = {
+  enabled: true,
+  masterPlayhead: 0.0,                    // Seconds, single source of truth
+  masterBPM: 120,                         // Reference tempo
+  stemOffsets: {                          // Per-stem timing compensation (seconds)
+    vocals: 0.0,
+    drums: 0.0,
+    bass: 0.0,
+    other: 0.0
+  },
+  stemPhaseShift: {                       // Sub-sample phase alignment (0–1 range)
+    vocals: 0.0,
+    drums: 0.0,
+    bass: 0.0,
+    other: 0.0
+  },
+  stemPlaybackPositions: {                // Track actual playback positions
+    vocals: 0.0,
+    drums: 0.0,
+    bass: 0.0,
+    other: 0.0
+  },
+  syncTolerance: 0.002,                   // Max acceptable drift: 2ms
+  syncTolerance2ms: 0.002,
+  driftThreshold: 0.003,                  // 3ms triggers auto-correction
+  lastSyncTime: null,
+  driftHistory: [],                       // Rolling window for trend analysis
+  autoSyncEnabled: true,
+  driftDetectionEnabled: true
+};
+
+// Cross-stem send/return routing
+let stemRoutingState = {
+  sendChannels: new Map(),                // stem → [targets]
+  sendGains: new Map(),                   // "vocals→reverbWet" → amplitude
+  sendFades: new Map(),                   // Smooth transitions
+
+  sidechainActive: {                      // Per-effect sidechain activation
+    reverbWet: true,
+    delayFeedback: false,
+    filterCutoff: false,
+    distortionDrive: false
+  },
+
+  sidechainConfig: {
+    threshold: 0.3,                       // dB
+    ratio: 4.0,                           // Compression ratio
+    attackMs: 5,
+    releaseMs: 100,
+    lookAheadMs: 10
+  },
+
+  sidechainMetrics: {},                   // Real-time sidechain energy
+  routingMatrix: {},                      // Full routing graph
+  crossFadeEnabled: true,
+  crossFadeDuration: 0.1                  // Seconds
+};
+
+// Phase coherence tracking
+let stemPhaseState = {
+  coherenceMatrix: {},                    // Cross-correlation between stems
+  targetCoherence: 0.95,
+  phaseCalibrationMode: false,
+  referenceStems: {                       // Which stem(s) to align to
+    primary: 'drums',
+    secondary: 'bass'
+  },
+  phaseAdjustmentLock: {},                // Prevent recomputation mid-playback
+  lastPhaseCalibration: null
+};
+
+// === PHASE 29.1: MASTER PLAYHEAD SYNCHRONIZATION ===
+
+// Update master playhead and track drift metrics
+function updateMasterPlayhead(deltaTime = 0.016) {
+  if (!stemSyncState.enabled) return;
+
+  stemSyncState.masterPlayhead += deltaTime;
+  stemSyncState.lastSyncTime = audioCtx?.currentTime || 0;
+
+  // Check for drift and correct if needed
+  checkDriftAndCorrect();
+}
+
+// Detect and auto-correct stem playback drift
+function checkDriftAndCorrect() {
+  if (!stemSyncState.driftDetectionEnabled) return;
+
+  const stems = ['vocals', 'drums', 'bass', 'other'];
+  let maxDrift = 0;
+  const driftMap = {};
+
+  for (const stem of stems) {
+    const actualPos = stemSyncState.stemPlaybackPositions[stem] || 0;
+    const expectedPos = stemSyncState.masterPlayhead + (stemSyncState.stemOffsets[stem] || 0);
+    const drift = Math.abs(actualPos - expectedPos);
+
+    driftMap[stem] = drift;
+    maxDrift = Math.max(maxDrift, drift);
+
+    // Auto-correct if drift exceeds threshold
+    if (drift > stemSyncState.driftThreshold && stemSyncState.autoSyncEnabled) {
+      stemSyncState.stemPlaybackPositions[stem] = expectedPos;
+    }
+  }
+
+  // Track drift history for trend analysis
+  stemSyncState.driftHistory.push({
+    timestamp: audioCtx?.currentTime || 0,
+    maxDrift: maxDrift,
+    perStem: driftMap
+  });
+
+  // Keep rolling window of last 60 drift measurements
+  if (stemSyncState.driftHistory.length > 60) {
+    stemSyncState.driftHistory.shift();
+  }
+
+  return maxDrift;
+}
+
+// Get actual playback position for a stem (updated during playback)
+function getActualPlaybackPosition(stem) {
+  return stemSyncState.stemPlaybackPositions[stem] || 0;
+}
+
+// Re-schedule stems to synchronize from master playhead
+function reScheduleStems(stemList = ['vocals', 'drums', 'bass', 'other']) {
+  // This function would stop current playback and restart from master playhead
+  // Implementation depends on existing playback mechanisms
+  for (const stem of stemList) {
+    stemSyncState.stemPlaybackPositions[stem] = stemSyncState.masterPlayhead + (stemSyncState.stemOffsets[stem] || 0);
+  }
+}
+
+// Get compensated time for stem playback (applies latency offsets)
+function getCompensatedPlaybackTime(stem, baseTime) {
+  if (!stemSyncState.enabled) return baseTime;
+
+  const offset = stemSyncState.stemOffsets[stem] || 0;
+  const phaseShift = stemSyncState.stemPhaseShift[stem] || 0;
+
+  // Apply offset compensation
+  let compensatedTime = baseTime + offset;
+
+  // Apply phase shift (convert fractional samples to seconds)
+  if (phaseShift !== 0 && audioCtx) {
+    const sampleDuration = 1 / audioCtx.sampleRate;
+    compensatedTime += phaseShift * sampleDuration;
+  }
+
+  return compensatedTime;
+}
+
 // Phase 23: Sample Library
 let sampleLibrary = [];
 let currentSampleId = null;
@@ -2870,6 +3027,10 @@ function startSequencer() {
 
   function scheduleStep(time) {
     currentStep = (currentStep + 1) % STEPS;
+
+    // Phase 29.1: Update master playhead for stem synchronization
+    const stepDuration = (60 / bpm) / 4;  // Quarter note duration in seconds
+    updateMasterPlayhead(stepDuration);
 
     // Phase 15c: Improved visual sync using audio context time for delay calculation
     const delayMs = Math.max(0, (time - getSchedulingTimestamp()) * 1000);
@@ -5357,6 +5518,21 @@ function playSound(track, velocity = 1.0, pan = 0) {
   const scaledVol = p.vol * Math.max(0.1, velocity);
   const stopTime = now + p.decay + 0.01;
 
+  // Phase 29.1: Track stem playback position for synchronization
+  const stemMap = {
+    'kick': 'drums',
+    'snare': 'drums',
+    'hihat': 'drums',
+    'clap': 'drums',
+    'bass': 'bass',
+    'synth': 'other',
+    'lead': 'vocals',
+    'pad': 'other',
+    'fx': 'other'
+  };
+  const stem = stemMap[track] || 'other';
+  stemSyncState.stemPlaybackPositions[stem] = now;
+
   // Get pooled nodes (reused, not allocated)
   const gain = getPooledNode(voicePool.gainNodes);
   const filter = getPooledNode(voicePool.filterNodes);
@@ -5929,6 +6105,13 @@ function playSlice(sliceId, time, velocity = 1.0, effectsOverrides = {}) {
   const startTime = slice.startSample / buffer.sampleRate;
   const duration = slice.duration;
 
+  // Phase 29.1: Apply master playhead synchronization compensation
+  const stem = sample.stem || 'other';  // Default to 'other' if stem not specified
+  const compensatedTime = getCompensatedPlaybackTime(stem, time);
+
+  // Update stem playback position for drift detection
+  stemSyncState.stemPlaybackPositions[stem] = compensatedTime;
+
   const source = audioCtx.createBufferSource();
   source.buffer = buffer;
 
@@ -5936,16 +6119,16 @@ function playSlice(sliceId, time, velocity = 1.0, effectsOverrides = {}) {
   source.playbackRate.value = stretchFactor;
 
   const gain = audioCtx.createGain();
-  gain.gain.setValueAtTime(velocity * 0.7, time);
-  gain.gain.exponentialRampToValueAtTime(0.001, time + duration - 0.01);
+  gain.gain.setValueAtTime(velocity * 0.7, compensatedTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, compensatedTime + duration - 0.01);
 
   source.connect(gain);
   gain.connect(audioCtx.destination);
 
-  source.start(time, startTime, duration);
-  source.stop(time + duration);
+  source.start(compensatedTime, startTime, duration);
+  source.stop(compensatedTime + duration);
 
-  sliceSequencerState.activeSlices.set(sliceId, {triggeredAt: time, endAt: time + duration});
+  sliceSequencerState.activeSlices.set(sliceId, {triggeredAt: compensatedTime, endAt: compensatedTime + duration});
 }
 
 // Phase 23h: Visual Timeline Rendering (~150 lines)
