@@ -4124,6 +4124,9 @@ function applyModulationToParameter(target, modValue, baseValue = 0) {
         voicePool.filterNodes.forEach(f => {
           if (f && f.frequency) f.frequency.setValueAtTime(frequency, audioCtx.currentTime);
         });
+        // Record automation if active
+        const normValue = (frequency - minFreq) / range;
+        recordAutomationFrame('filterCutoff', 'frequency', normValue);
       }
       break;
     case 'filterResonance':
@@ -4132,6 +4135,9 @@ function applyModulationToParameter(target, modValue, baseValue = 0) {
         voicePool.filterNodes.forEach(f => {
           if (f && f.Q) f.Q.setValueAtTime(q, audioCtx.currentTime);
         });
+        // Record automation if active
+        const normValue = (q - 0.1) / 39.9;
+        recordAutomationFrame('filterResonance', 'Q', normValue);
       }
       break;
     case 'volume':
@@ -4140,6 +4146,7 @@ function applyModulationToParameter(target, modValue, baseValue = 0) {
         voicePool.gainNodes.forEach(g => {
           if (g && g.gain) g.gain.setValueAtTime(gain, audioCtx.currentTime);
         });
+        recordAutomationFrame('volume', 'gain', gain);
       }
       break;
     case 'pan':
@@ -4148,6 +4155,8 @@ function applyModulationToParameter(target, modValue, baseValue = 0) {
         voicePool.pannerNodes.forEach(p => {
           if (p && p.pan) p.pan.setValueAtTime(panValue, audioCtx.currentTime);
         });
+        const normValue = (panValue + 1) / 2;
+        recordAutomationFrame('pan', 'value', normValue);
       }
       break;
   }
@@ -4226,6 +4235,9 @@ function startSequencer() {
         highlightCurrent();
       }, Math.round(delayMs));
     }
+
+    // Phase 24.2: Apply automation curves during playback
+    playbackAutomationForStep(currentStep, time);
 
     // Phase 23h: Slice playback (probability-based triggering)
     if (sliceSequencerState.sliceMode) {
@@ -5234,12 +5246,21 @@ function updateDelay(time, feedback, mix) {
   effectsNodes.delay.delayTime.setTargetAtTime(time, audioCtx.currentTime, 0.01);
   effectsNodes.delayFeedback.gain.setTargetAtTime(feedback, audioCtx.currentTime, 0.01);
   effectsNodes.delayWet.gain.setTargetAtTime(mix, audioCtx.currentTime, 0.01);
+
+  // Phase 24.2: Record automation if active
+  const normTime = (time - 0.05) / 0.45; // Normalize to 0-1
+  recordAutomationFrame('delayTime', 'time', Math.max(0, Math.min(1, normTime)));
+  recordAutomationFrame('delayFeedback', 'feedback', feedback);
+  recordAutomationFrame('delayWet', 'mix', mix);
 }
 
 function updateReverb(mix) {
   if (!effectsNodes.reverb) return;
   effectsParams.reverb = { mix };
   effectsNodes.reverbWet.gain.setTargetAtTime(mix, audioCtx.currentTime, 0.01);
+
+  // Phase 24.2: Record automation if active
+  recordAutomationFrame('reverbWet', 'mix', mix);
 }
 
 // Phase 16: Multi-tap delay controls
@@ -7545,57 +7566,46 @@ function evaluateModulationMatrix(playbackTimeSeconds) {
   return modulations;
 }
 
-// Phase 24.2: Automation Recording UI (~40 lines)
+// Phase 24.2: Automation Recording UI (~60 lines)
 function toggleAutomationRecording() {
-  const effectId = document.getElementById('automationEffectSelect').value;
-  if (!effectId) {
-    alert('Please select a target effect');
-    return;
-  }
-
   effectsAutomationState.recordingMode.active = !effectsAutomationState.recordingMode.active;
 
   if (effectsAutomationState.recordingMode.active) {
-    effectsAutomationState.recordingMode.effectId = effectId;
-    effectsAutomationState.recordingMode.startTime = audioCtx.currentTime;
-    effectsAutomationState.recordingMode.points = [];
+    // Clear previous tracks and start fresh
+    effectsAutomationState.automationTracks.clear();
+    effectsAutomationState.recordingMode.startTime = audioCtx ? audioCtx.currentTime : 0;
 
     const btn = document.getElementById('automationRecordBtn');
     if (btn) {
-      btn.style.background = 'var(--red)';
+      btn.style.background = '#ff3355';
       btn.style.color = '#fff';
       btn.textContent = '● Recording...';
     }
+
+    const pointCount = document.getElementById('automationPointCount');
+    if (pointCount) pointCount.textContent = 'Points: 0';
   } else {
+    // Finalize recording
     const btn = document.getElementById('automationRecordBtn');
     if (btn) {
-      btn.style.background = '';
-      btn.style.color = '';
-      btn.textContent = '● Record';
+      btn.style.background = '#444';
+      btn.style.color = '#0f0';
+      btn.textContent = '✓ Recording Complete';
     }
+
+    // Log recorded tracks
+    let totalPoints = 0;
+    for (const [trackKey, track] of effectsAutomationState.automationTracks.entries()) {
+      totalPoints += track.points.length;
+      console.log(`Saved automation: ${trackKey} with ${track.points.length} points`);
+    }
+    console.log(`Total automation points recorded: ${totalPoints}`);
   }
 }
 
 function stopAutomationRecording() {
   if (!effectsAutomationState.recordingMode.active) return;
-
-  const trackKey = effectsAutomationState.recordingMode.effectId;
-  const points = effectsAutomationState.recordingMode.points;
-
-  if (points.length > 0) {
-    effectsAutomationState.automationTracks.set(trackKey, points);
-    console.log(`Saved automation track: ${trackKey} with ${points.length} points`);
-  }
-
-  effectsAutomationState.recordingMode.active = false;
-  effectsAutomationState.recordingMode.points = [];
-
-  const btn = document.getElementById('automationRecordBtn');
-  if (btn) {
-    btn.style.background = '';
-    btn.style.color = '';
-    btn.textContent = '● Record';
-  }
+  toggleAutomationRecording(); // Toggle off
 }
 
 // Phase 24.1: LFO Pool Management (~50 lines)
@@ -7708,6 +7718,167 @@ function updateModulationAmount(sourceId, targetId, amount) {
       effectsAutomationState.modulationMatrix.mappings =
         effectsAutomationState.modulationMatrix.mappings.filter(m => m !== mapping);
     }
+  }
+}
+
+// === PHASE 24.2: AUTOMATION RECORDING & PLAYBACK ===
+
+function recordAutomationFrame(effectId, paramName, value) {
+  if (!effectsAutomationState.recordingMode.active) return;
+
+  const trackKey = `${effectId}_${paramName}`;
+  if (!effectsAutomationState.automationTracks.has(trackKey)) {
+    effectsAutomationState.automationTracks.set(trackKey, {
+      effectId,
+      paramName,
+      points: [],
+      minValue: value,
+      maxValue: value
+    });
+  }
+
+  const track = effectsAutomationState.automationTracks.get(trackKey);
+  const barDuration = (240 / bpm) || 2.0; // 4 beats per bar at current BPM
+  const now = getSchedulingTimestamp();
+  const barStartTime = Math.floor(now / barDuration) * barDuration;
+  const timeInBar = now - barStartTime;
+
+  // Add point if significantly different from last or first point
+  const lastPoint = track.points[track.points.length - 1];
+  if (!lastPoint || Math.abs(value - lastPoint.value) > 0.01 || track.points.length === 0) {
+    track.points.push({
+      time: timeInBar,
+      value: parseFloat(value),
+      curveType: 'linear'
+    });
+
+    // Update min/max for range
+    track.minValue = Math.min(track.minValue, value);
+    track.maxValue = Math.max(track.maxValue, value);
+
+    // Render recording preview waveform
+    updateRecordingWaveform(trackKey);
+  }
+
+  // Update point count display
+  const countEl = document.getElementById('automationPointCount');
+  if (countEl) {
+    const totalPoints = Array.from(effectsAutomationState.automationTracks.values())
+      .reduce((sum, t) => sum + t.points.length, 0);
+    countEl.textContent = `Points: ${totalPoints}`;
+  }
+}
+
+function updateRecordingWaveform(trackKey) {
+  const canvas = document.getElementById('automationTimelineCanvas');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  const track = effectsAutomationState.automationTracks.get(trackKey);
+  if (!track || track.points.length < 2) return;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = '#00f0ff';
+  ctx.lineWidth = 2;
+  ctx.fillStyle = 'rgba(0, 240, 255, 0.1)';
+
+  const barDuration = (240 / bpm) || 2.0;
+  const pixelsPerSecond = canvas.width / barDuration;
+  const valueRange = track.maxValue - track.minValue || 1;
+
+  ctx.beginPath();
+  for (let i = 0; i < track.points.length; i++) {
+    const point = track.points[i];
+    const x = point.time * pixelsPerSecond;
+    const y = canvas.height - ((point.value - track.minValue) / valueRange) * canvas.height;
+
+    if (i === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  }
+  ctx.stroke();
+}
+
+function playbackAutomationForStep(step, time) {
+  if (!effectsAutomationState.automationTracks || effectsAutomationState.automationTracks.size === 0) {
+    return;
+  }
+
+  const barDuration = (240 / bpm) || 2.0;
+  const barStartTime = Math.floor(time / barDuration) * barDuration;
+  const timeInBar = time - barStartTime;
+
+  for (const [trackKey, track] of effectsAutomationState.automationTracks.entries()) {
+    if (track.points.length === 0) continue;
+
+    const automatedValue = evaluateAutomationCurve(trackKey, timeInBar);
+    if (automatedValue === null) continue;
+
+    // Apply automation to effect parameter
+    applyAutomationToParameter(track.effectId, track.paramName, automatedValue);
+  }
+}
+
+function applyAutomationToParameter(effectId, paramName, value) {
+  if (!audioCtx) return;
+
+  // Map automation value (0-1) to effect parameter range
+  switch (effectId) {
+    case 'delayTime':
+      if (effectsNodes.delay && effectsNodes.delay.delayTime) {
+        const delayTime = 0.05 + (value * 0.45); // 0.05s to 0.5s
+        effectsNodes.delay.delayTime.setValueAtTime(delayTime, audioCtx.currentTime);
+      }
+      break;
+    case 'delayFeedback':
+      if (effectsNodes.delayFeedback && effectsNodes.delayFeedback.gain) {
+        effectsNodes.delayFeedback.gain.setValueAtTime(value, audioCtx.currentTime);
+      }
+      break;
+    case 'delayWet':
+      if (effectsNodes.delayWet && effectsNodes.delayWet.gain) {
+        effectsNodes.delayWet.gain.setValueAtTime(value, audioCtx.currentTime);
+      }
+      break;
+    case 'reverbWet':
+      if (effectsNodes.reverbWet && effectsNodes.reverbWet.gain) {
+        effectsNodes.reverbWet.gain.setValueAtTime(value, audioCtx.currentTime);
+      }
+      break;
+    case 'filterCutoff':
+      if (voicePool.filterNodes && voicePool.filterNodes.length > 0) {
+        const minFreq = 20;
+        const maxFreq = 20000;
+        const frequency = minFreq + (value * (maxFreq - minFreq));
+        voicePool.filterNodes.forEach(f => {
+          if (f && f.frequency) f.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+        });
+      }
+      break;
+    case 'filterQ':
+      if (voicePool.filterNodes && voicePool.filterNodes.length > 0) {
+        const q = 0.1 + (value * 39.9); // 0.1 to 40
+        voicePool.filterNodes.forEach(f => {
+          if (f && f.Q) f.Q.setValueAtTime(q, audioCtx.currentTime);
+        });
+      }
+      break;
+    case 'distortionDrive':
+      if (effectsNodes.distortion) {
+        effectsNodes.distortion.drive = value;
+      }
+      break;
+  }
+}
+
+function stopAutomationPlayback() {
+  effectsAutomationState.recordingMode.active = false;
+  const recordBtn = document.getElementById('automationRecordBtn');
+  if (recordBtn) {
+    recordBtn.textContent = '⏻ Start Recording';
+    recordBtn.style.background = '#ff3355';
   }
 }
 
@@ -8043,6 +8214,12 @@ function updateDelay(time, feedback, mix) {
   effectsNodes.delay.delayTime.setTargetAtTime(time, now, 0.01);
   effectsNodes.delayFeedback.gain.setTargetAtTime(feedback, now, 0.01);
   effectsNodes.delayWet.gain.setTargetAtTime(mix, now, 0.01);
+
+  // Phase 24.2: Record automation if active
+  const normTime = (time - 0.05) / 0.45;
+  recordAutomationFrame('delayTime', 'time', Math.max(0, Math.min(1, normTime)));
+  recordAutomationFrame('delayFeedback', 'feedback', feedback);
+  recordAutomationFrame('delayWet', 'mix', mix);
 }
 
 function updateReverb(mix) {
