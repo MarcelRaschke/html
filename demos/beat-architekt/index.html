@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -617,6 +617,60 @@ body::before {
 <script defer src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js"></script>
+
+<!-- Toggle Video Export Panel Button -->
+<style>
+#videoExportToggleBtn {
+  position: fixed;
+  bottom: 80px;
+  left: 20px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(255,136,0,0.2), rgba(255,51,85,0.2));
+  border: 2px solid var(--orange);
+  color: var(--orange);
+  font-size: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+  z-index: 899;
+  box-shadow: 0 0 20px rgba(255,136,0,0.2);
+}
+#videoExportToggleBtn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 30px rgba(255,136,0,0.4);
+}
+</style>
+
+<!-- Toggle Remix Panel Button -->
+<style>
+#remixToggleBtn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(0,240,255,0.2), rgba(255,0,170,0.2));
+  border: 2px solid var(--cyan);
+  color: var(--cyan);
+  font-size: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+  z-index: 899;
+  box-shadow: 0 0 20px rgba(0,240,255,0.2);
+}
+#remixToggleBtn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 30px rgba(0,240,255,0.4);
+}
+</style>
 </head>
 <body>
 
@@ -830,7 +884,7 @@ body::before {
         <textarea id="aiPrompt" placeholder="e.g., 'Techno 4-on-floor with off-beat snare and dense hi-hats'" maxlength="500" style="width:100%;height:60px;padding:8px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;font-size:11px;font-family:'JetBrains Mono',monospace;resize:vertical"></textarea>
         <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
           <button class="ai-pat-btn" onclick="generatePatternFromPrompt()" style="flex:1">Generate</button>
-          <span id="aiStatus" style="font-size:10px;color:var(--text-dim);display:none" id="aiStatusText"></span>
+          <span id="aiStatus" style="font-size:10px;color:var(--text-dim);display:none"></span>
         </div>
       </div>
 
@@ -904,7 +958,6 @@ body::before {
             <label>Load Sample Slices:</label>
             <select id="sliceSampleSelect" onchange="extractSlices(this.value)" style="width:100%;padding:4px;margin-top:4px;background:var(--bg-secondary);color:var(--magenta);border:1px solid var(--border);border-radius:4px;font-size:10px">
               <option value="">-- Select Sample --</option>
-              ${sampleLibrary.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
             </select>
           </div>
 
@@ -922,61 +975,6 @@ body::before {
       <!-- Effects Panel -->
       <div id="effectsPanel" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
         <div style="font-size:12px;color:var(--cyan);font-weight:600;margin-bottom:12px">🎛️ Master Effects</div>
-
-        <!-- Compressor -->
-        <div style="margin-bottom:12px;padding:10px;background:rgba(0,240,255,0.05);border-radius:4px">
-          <label style="display:flex;gap:8px;align-items:center;margin-bottom:6px;cursor:pointer">
-            <input type="checkbox" id="compressorEnabled" onchange="bypassEffect('compressor')">
-            <span style="font-size:11px;font-weight:600">Compressor</span>
-          </label>
-          <div id="compressorControls" style="display:none;margin-left:20px">
-            <div style="font-size:10px;margin-bottom:4px">Threshold: <input type="range" min="-40" max="0" value="-24" step="1" oninput="updateCompressor(this.value, 4)" style="width:80px;vertical-align:middle"></div>
-            <div style="font-size:10px">Ratio: <input type="range" min="1" max="20" value="4" step="0.1" oninput="updateCompressor(-24, this.value)" style="width:80px;vertical-align:middle"></div>
-          </div>
-        </div>
-
-        <!-- 3-Band EQ -->
-        <div style="margin-bottom:12px;padding:10px;background:rgba(0,240,255,0.05);border-radius:4px">
-          <label style="display:flex;gap:8px;align-items:center;margin-bottom:6px;cursor:pointer">
-            <input type="checkbox" id="eqEnabled" onchange="bypassEffect('eq')">
-            <span style="font-size:11px;font-weight:600">3-Band EQ</span>
-          </label>
-          <div id="eqControls" style="display:none;margin-left:20px">
-            <div style="font-size:10px;margin-bottom:4px">Bass: <input type="range" id="bassSlider" min="-12" max="12" value="0" step="1" oninput="updateEQ(this.value, document.getElementById('midSlider').value, document.getElementById('trebleSlider').value)" style="width:80px;vertical-align:middle"></div>
-            <div style="font-size:10px;margin-bottom:4px">Mid: <input type="range" id="midSlider" min="-12" max="12" value="0" step="1" oninput="updateEQ(document.getElementById('bassSlider').value, this.value, document.getElementById('trebleSlider').value)" style="width:80px;vertical-align:middle"></div>
-            <div style="font-size:10px">Treble: <input type="range" id="trebleSlider" min="-12" max="12" value="0" step="1" oninput="updateEQ(document.getElementById('bassSlider').value, document.getElementById('midSlider').value, this.value)" style="width:80px;vertical-align:middle"></div>
-          </div>
-        </div>
-
-        <!-- Delay -->
-        <div style="margin-bottom:12px;padding:10px;background:rgba(0,240,255,0.05);border-radius:4px">
-          <label style="display:flex;gap:8px;align-items:center;margin-bottom:6px;cursor:pointer">
-            <input type="checkbox" id="delayEnabled" onchange="bypassEffect('delay')">
-            <span style="font-size:11px;font-weight:600">Delay</span>
-          </label>
-          <div id="delayControls" style="display:none;margin-left:20px">
-            <div style="font-size:10px;margin-bottom:4px">Time: <input type="range" id="delayTimeSlider" min="0.1" max="2" value="0.5" step="0.05" oninput="updateDelay(this.value, document.getElementById('delayFeedbackSlider').value, document.getElementById('delayMixSlider').value)" style="width:80px;vertical-align:middle"></div>
-            <div style="font-size:10px;margin-bottom:4px">Feedback: <input type="range" id="delayFeedbackSlider" min="0" max="0.9" value="0.4" step="0.05" oninput="updateDelay(document.getElementById('delayTimeSlider').value, this.value, document.getElementById('delayMixSlider').value)" style="width:80px;vertical-align:middle"></div>
-            <div style="font-size:10px">Mix: <input type="range" id="delayMixSlider" min="0" max="1" value="0.3" step="0.05" oninput="updateDelay(document.getElementById('delayTimeSlider').value, document.getElementById('delayFeedbackSlider').value, this.value)" style="width:80px;vertical-align:middle"></div>
-          </div>
-        </div>
-
-        <!-- Reverb -->
-        <div style="margin-bottom:12px;padding:10px;background:rgba(0,240,255,0.05);border-radius:4px">
-          <label style="display:flex;gap:8px;align-items:center;margin-bottom:6px;cursor:pointer">
-            <input type="checkbox" id="reverbEnabled" onchange="bypassEffect('reverb')">
-            <span style="font-size:11px;font-weight:600">Reverb</span>
-          </label>
-          <div id="reverbControls" style="display:none;margin-left:20px">
-            <div style="font-size:10px;margin-bottom:6px">Mix: <input type="range" id="reverbMixSlider" min="0" max="1" value="0.2" step="0.05" oninput="updateReverb(this.value)" style="width:80px;vertical-align:middle"></div>
-            <div style="font-size:10px;margin-bottom:6px">Preset: <select id="impulsePreset" onchange="changeImpulsePreset(this.value)" style="font-size:9px;padding:2px;width:100px">
-              <option value="smallRoom">Small Room</option>
-              <option value="mediumHall" selected>Medium Hall</option>
-              <option value="largeCathedral">Cathedral</option>
-              <option value="ambient">Ambient</option>
-            </select></div>
-          </div>
-        </div>
 
         <!-- Phase 16: Multi-tap Delay -->
         <div style="margin-bottom:12px;padding:10px;background:rgba(0,240,255,0.05);border-radius:4px">
@@ -1073,31 +1071,6 @@ body::before {
           </div>
         </div>
 
-      <!-- MIDI Controller Panel -->
-      <div id="midiPanel" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
-        <div style="font-size:12px;color:var(--cyan);font-weight:600;margin-bottom:12px">🎛️ MIDI Controller</div>
-
-        <label style="display:flex;gap:8px;align-items:center;margin-bottom:10px;cursor:pointer">
-          <input type="checkbox" id="midiEnabled" onchange="toggleMIDI()">
-          <span style="font-size:11px">Enable MIDI Input</span>
-        </label>
-
-        <div id="midiStatus" style="font-size:11px;color:var(--text-secondary);margin-bottom:10px;padding:8px;background:rgba(0,240,255,0.05);border-radius:4px;min-height:20px">
-          Initializing...
-        </div>
-
-        <div style="font-size:10px;color:var(--text-dim);line-height:1.6;margin-bottom:10px">
-          <strong>Default Mapping:</strong><br>
-          • Pads C1–G#2: 16-step grid<br>
-          • CC#1 (Mod): BPM (60–180)<br>
-          • CC#2 (Breath): Swing<br>
-          • CC#7 (Volume): Master<br>
-          • CC#11 (Expr): Delay Mix<br>
-        </div>
-
-        <button class="ai-pat-btn" onclick="initMIDI()" style="width:100%;padding:6px;font-size:10px">Detect Controller</button>
-      </div>
-
       <!-- Phase 19a: Modulation Rack Panel -->
       <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
         <div style="font-size:12px;color:var(--lime);font-weight:600;margin-bottom:12px">⚙️ Modulation</div>
@@ -1118,11 +1091,11 @@ body::before {
           <label style="font-size:10px;font-weight:600;margin-bottom:8px;display:block">Quick LFO</label>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:9px">
             <div>
-              <label>Rate (Hz): <span id="lfoRateDisplay">1.0</span></label>
+              <label>Rate (Hz): <span>1.0</span></label>
               <input type="range" id="quickLfoRate" min="0.1" max="20" value="1.0" step="0.1" oninput="updateQuickLFO()" style="width:100%">
             </div>
             <div>
-              <label>Depth: <span id="lfoDepthDisplay">0.5</span></label>
+              <label>Depth: <span>0.5</span></label>
               <input type="range" id="quickLfoDepth" min="0" max="1" value="0.5" step="0.05" oninput="updateQuickLFO()" style="width:100%">
             </div>
           </div>
@@ -8342,17 +8315,17 @@ function toggleVideoExportVisualizer(analyzer) {
 </div>
 
 <!-- Phase 12: Effects Chain Panel -->
-<div id="effectsPanel" style="position:fixed;bottom:20px;left:430px;width:360px;background:var(--bg-card);border:1px solid rgba(170,255,0,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:70vh;overflow-y:auto;display:none">
+<div style="position:fixed;bottom:20px;left:430px;width:360px;background:var(--bg-card);border:1px solid rgba(170,255,0,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:70vh;overflow-y:auto;display:none">
   <div style="font-size:13px;font-weight:600;color:var(--lime);margin-bottom:12px">🎛️ Effects Chain</div>
 
   <!-- AI Pattern Generator -->
   <div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)">
     <div style="font-size:11px;font-weight:600;color:var(--cyan);margin-bottom:8px">🤖 AI Generate</div>
-    <textarea id="aiPrompt" placeholder="e.g. 'Techno 4-on-floor with tight hi-hat'" maxlength="200" style="width:100%;padding:8px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;font-size:10px;font-family:monospace;resize:vertical;height:50px;margin-bottom:8px"></textarea>
+    <textarea placeholder="e.g. 'Techno 4-on-floor with tight hi-hat'" maxlength="200" style="width:100%;padding:8px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;font-size:10px;font-family:monospace;resize:vertical;height:50px;margin-bottom:8px"></textarea>
     <button onclick="generatePatternFromPrompt()" style="width:100%;padding:8px;background:rgba(0,240,255,0.1);border:1px solid var(--cyan);color:var(--cyan);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;transition:all 0.2s">
       Generate Pattern
     </button>
-    <div id="aiStatus" style="display:none;font-size:10px;color:var(--text-secondary);margin-top:8px;text-align:center"></div>
+    <div style="display:none;font-size:10px;color:var(--text-secondary);margin-top:8px;text-align:center"></div>
   </div>
 
   <!-- Compressor -->
@@ -8364,11 +8337,11 @@ function toggleVideoExportVisualizer(analyzer) {
     <div id="compressorControls" style="display:none;margin-left:20px;gap:10px;font-size:10px">
       <div style="margin-bottom:8px">
         <div style="color:var(--text-secondary);margin-bottom:4px">Threshold: <span style="color:var(--cyan)">-24dB</span></div>
-        <input type="range" min="-40" max="0" value="-24" step="1" oninput="updateCompressor(this.value, document.getElementById('compressorRatio').value)" style="width:100%;cursor:pointer">
+        <input type="range" id="compressorThreshold" min="-40" max="0" value="-24" step="1" oninput="updateCompressor(this.value, document.getElementById('compressorRatio').value)" style="width:100%;cursor:pointer">
       </div>
       <div>
         <div style="color:var(--text-secondary);margin-bottom:4px">Ratio: <span style="color:var(--cyan)" id="ratioDisplay">4:1</span></div>
-        <input type="range" min="1" max="20" value="4" step="0.1" id="compressorRatio" oninput="document.getElementById('ratioDisplay').textContent = (this.value + ':1'); updateCompressor(document.querySelector('input[min=\\\"-40\\\"]').value, this.value)" style="width:100%;cursor:pointer">
+        <input type="range" min="1" max="20" value="4" step="0.1" id="compressorRatio" oninput="document.getElementById('ratioDisplay').textContent = (this.value + ':1'); updateCompressor(document.getElementById('compressorThreshold').value, this.value)" style="width:100%;cursor:pointer">
       </div>
     </div>
   </div>
@@ -8866,59 +8839,6 @@ function toggleVideoExportVisualizer(analyzer) {
   </button>
 </div>
 
-<!-- Toggle Video Export Panel Button -->
-<style>
-#videoExportToggleBtn {
-  position: fixed;
-  bottom: 80px;
-  left: 20px;
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, rgba(255,136,0,0.2), rgba(255,51,85,0.2));
-  border: 2px solid var(--orange);
-  color: var(--orange);
-  font-size: 24px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s;
-  z-index: 899;
-  box-shadow: 0 0 20px rgba(255,136,0,0.2);
-}
-#videoExportToggleBtn:hover {
-  transform: scale(1.1);
-  box-shadow: 0 0 30px rgba(255,136,0,0.4);
-}
-</style>
-
-<!-- Toggle Remix Panel Button (add to Beat Architekt controls) -->
-<style>
-#remixToggleBtn {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, rgba(0,240,255,0.2), rgba(255,0,170,0.2));
-  border: 2px solid var(--cyan);
-  color: var(--cyan);
-  font-size: 24px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s;
-  z-index: 899;
-  box-shadow: 0 0 20px rgba(0,240,255,0.2);
-}
-#remixToggleBtn:hover {
-  transform: scale(1.1);
-  box-shadow: 0 0 30px rgba(0,240,255,0.4);
-}
-</style>
 
 <script>
 // Initialize toggle buttons
