@@ -9510,6 +9510,58 @@ document.addEventListener('DOMContentLoaded', () => {
     initAutomationVisualizers();
     startAutomationAnimation();
   }, 150);
+
+  // Phase 27.1: Neural Stem Separation toggle button
+  const stemSeparationToggleBtn = document.createElement('button');
+  stemSeparationToggleBtn.id = 'stemSeparationToggleBtn';
+  stemSeparationToggleBtn.textContent = '🎼';
+  stemSeparationToggleBtn.title = 'Neural Stem Separation (Phase 27.1)';
+  stemSeparationToggleBtn.onclick = () => {
+    const panel = document.getElementById('stemSeparationPanel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  };
+  stemSeparationToggleBtn.style.cssText = `
+    position: fixed;
+    bottom: 380px;
+    left: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(170,255,0,0.2), rgba(170,255,0,0.1));
+    border: 2px solid var(--lime);
+    color: var(--lime);
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    z-index: 899;
+    box-shadow: 0 0 20px rgba(170,255,0,0.2);
+  `;
+  stemSeparationToggleBtn.onmouseover = () => {
+    stemSeparationToggleBtn.style.transform = 'scale(1.1)';
+    stemSeparationToggleBtn.style.boxShadow = '0 0 30px rgba(170,255,0,0.4)';
+  };
+  stemSeparationToggleBtn.onmouseout = () => {
+    stemSeparationToggleBtn.style.transform = 'scale(1)';
+    stemSeparationToggleBtn.style.boxShadow = '0 0 20px rgba(170,255,0,0.2)';
+  };
+  document.body.appendChild(stemSeparationToggleBtn);
+
+  // Phase 27.1: Initialize Neural Stem Separation Engine
+  initializeStemSeparation().then(() => {
+    console.log('✅ Stem Separation Engine initialized');
+    populateStemSampleSelect();
+  }).catch(err => {
+    console.error('❌ Stem Separation initialization failed:', err);
+    const statusEl = document.getElementById('stemModelStatus');
+    if (statusEl) {
+      statusEl.textContent = '❌ Model loading failed. Check console.';
+      statusEl.style.borderLeftColor = 'rgba(255,51,85,0.5)';
+      statusEl.style.color = 'rgba(255,51,85,0.8)';
+    }
+  });
 });
 </script>
 
