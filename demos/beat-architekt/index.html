@@ -996,6 +996,51 @@ body::before {
         </div>
       </div>
 
+      <!-- Phase 24: Automation & Modulation Panel -->
+      <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--purple);font-weight:600;margin-bottom:12px">⚙️ Phase 24: Automation & Modulation</div>
+        <div style="padding:10px;background:rgba(136,68,255,0.05);border-radius:4px">
+
+          <!-- Recording Controls -->
+          <div style="margin-bottom:12px;padding:8px;background:rgba(136,68,255,0.1);border-radius:4px">
+            <div style="font-size:10px;color:var(--purple);font-weight:600;margin-bottom:8px">📝 Automation Recording</div>
+            <div style="display:flex;gap:8px;margin-bottom:8px">
+              <button id="automationRecordBtn" class="ai-pat-btn" style="flex:1;font-size:9px;padding:6px" onclick="toggleAutomationRecording()">● Record</button>
+              <button id="automationStopBtn" class="ai-pat-btn" style="flex:1;font-size:9px;padding:6px;opacity:0.5" onclick="stopAutomationRecording()">⬜ Stop</button>
+            </div>
+            <div style="font-size:9px">
+              <label>Target Effect:</label>
+              <select id="automationEffectSelect" style="width:100%;padding:4px;margin-top:4px;background:var(--bg-secondary);color:var(--purple);border:1px solid var(--border);border-radius:4px;font-size:9px">
+                <option value="">-- Select Effect --</option>
+                <option value="delay">Delay Time</option>
+                <option value="reverb">Reverb Mix</option>
+                <option value="filter">Filter Cutoff</option>
+                <option value="distortion">Distortion Drive</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- LFO Pool -->
+          <div style="margin-bottom:12px;padding:8px;background:rgba(136,68,255,0.1);border-radius:4px">
+            <div style="font-size:10px;color:var(--purple);font-weight:600;margin-bottom:8px">〰️ LFO Sources</div>
+            <button class="ai-pat-btn" style="width:100%;font-size:9px;margin-bottom:8px" onclick="addLFOToPool()">+ Add LFO</button>
+            <div id="lfoPoolDisplay" style="max-height:100px;overflow-y:auto;font-size:9px"></div>
+          </div>
+
+          <!-- Modulation Matrix -->
+          <div style="margin-bottom:12px;padding:8px;background:rgba(136,68,255,0.1);border-radius:4px">
+            <div style="font-size:10px;color:var(--purple);font-weight:600;margin-bottom:8px">🔗 Modulation Matrix (6×4)</div>
+            <div id="modulationMatrixGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;max-height:120px;overflow-y:auto"></div>
+          </div>
+
+          <!-- Timeline Visualization -->
+          <div style="font-size:10px">
+            <div style="color:var(--purple);font-weight:600;margin-bottom:4px">📈 Automation Timeline</div>
+            <canvas id="automationTimelineCanvas" style="width:100%;height:60px;border:1px solid var(--border);border-radius:4px;background:rgba(0,0,0,0.3)"></canvas>
+          </div>
+        </div>
+      </div>
+
       <!-- Effects Panel -->
       <div id="effectsPanel" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
         <div style="font-size:12px;color:var(--cyan);font-weight:600;margin-bottom:12px">🎛️ Master Effects</div>
@@ -2990,6 +3035,39 @@ function initPhase30() {
   console.log('Phase 30: Master Output & Distribution Pipeline initialized');
 }
 
+// Phase 24: Effects Automation & Modulation Matrix
+let effectsAutomationState = {
+  automationTracks: new Map(), // effectId → [{ time, value, curve }, ...]
+  recordingMode: {
+    active: false,
+    effectId: null,
+    paramName: null,
+    startTime: null,
+    points: []
+  },
+  modulationMatrix: {
+    sources: [], // [{ id, type, label, value }, ...]
+    targets: [], // [{ id, param, label }, ...]
+    mappings: [] // [{ sourceId, targetId, amount, mode }, ...]
+  },
+  lfoPool: [], // [{ id, waveform, rateSync, rateBPM, phase, amplitude, value }, ...]
+  envelopeFollower: {
+    id: 'env_follower_main',
+    source: null,
+    attack: 0.01,
+    release: 0.1,
+    smoothValue: 0,
+    value: 0
+  },
+  lfoWavetables: {
+    sine: [],
+    triangle: [],
+    square: [],
+    saw: []
+  },
+  lastUpdateTime: 0
+};
+
 // Phase 19a: LFO Oscillator Class
 class LFOOscillator {
   constructor(frequency = 1.0, waveshape = 'sine') {
@@ -3977,6 +4055,7 @@ function togglePlay() {
     initVoicePool();
     initBeatViz();
     initParametricEQ();
+    initWavetables();
   }
   isPlaying = !isPlaying;
   const btn = document.getElementById('playBtn');
@@ -7285,6 +7364,350 @@ function toggleSliceMode() {
   if (btn) {
     btn.style.background = sliceSequencerState.sliceMode ? 'var(--lime)' : 'var(--border)';
     btn.style.color = sliceSequencerState.sliceMode ? '#000' : 'var(--text-primary)';
+  }
+}
+
+// ===== PHASE 24: EFFECTS AUTOMATION & MODULATION MATRIX =====
+
+// Phase 24.1: LFO Engine - Wavetable Initialization (~30 lines)
+function initWavetables() {
+  const size = 256;
+
+  // Sine wave
+  effectsAutomationState.lfoWavetables.sine = new Array(size);
+  for (let i = 0; i < size; i++) {
+    effectsAutomationState.lfoWavetables.sine[i] = Math.sin((i / size) * 2 * Math.PI);
+  }
+
+  // Triangle wave
+  effectsAutomationState.lfoWavetables.triangle = new Array(size);
+  for (let i = 0; i < size; i++) {
+    const normalized = i / size;
+    effectsAutomationState.lfoWavetables.triangle[i] = normalized < 0.5
+      ? 4 * normalized - 1
+      : 3 - 4 * normalized;
+  }
+
+  // Square wave
+  effectsAutomationState.lfoWavetables.square = new Array(size);
+  for (let i = 0; i < size; i++) {
+    effectsAutomationState.lfoWavetables.square[i] = (i / size) < 0.5 ? 1 : -1;
+  }
+
+  // Sawtooth wave
+  effectsAutomationState.lfoWavetables.saw = new Array(size);
+  for (let i = 0; i < size; i++) {
+    effectsAutomationState.lfoWavetables.saw[i] = (i / size) * 2 - 1;
+  }
+}
+
+// Phase 24.1: LFO Engine - Update LFO Value (~60 lines)
+function updateLFOValue(lfoId, playbackTimeSeconds) {
+  const lfo = effectsAutomationState.lfoPool.find(l => l.id === lfoId);
+  if (!lfo) return 0;
+
+  let frequency = lfo.rateSync ? (bpm / 60) * lfo.rateBPM : lfo.rateBPM;
+  const wavetable = effectsAutomationState.lfoWavetables[lfo.waveform] || effectsAutomationState.lfoWavetables.sine;
+
+  // Phase accumulation
+  const phaseDelta = frequency * playbackTimeSeconds;
+  lfo.phase = (lfo.phase + phaseDelta) % 1.0;
+
+  // Wavetable lookup
+  const tableIndex = Math.floor(lfo.phase * wavetable.length) % wavetable.length;
+  const baseValue = wavetable[tableIndex];
+
+  lfo.value = baseValue * lfo.amplitude;
+  return lfo.value;
+}
+
+// Phase 24.1: Envelope Follower - Update Envelope Value (~40 lines)
+function updateEnvelopeFollower(analyserNode, playbackTimeSeconds) {
+  const follower = effectsAutomationState.envelopeFollower;
+
+  if (!analyserNode) {
+    follower.value = 0;
+    return 0;
+  }
+
+  const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
+  analyserNode.getByteFrequencyData(dataArray);
+
+  // Calculate current energy level (0-1)
+  let sum = 0;
+  for (let i = 0; i < dataArray.length; i++) {
+    sum += dataArray[i] / 256;
+  }
+  const currentLevel = sum / dataArray.length;
+
+  // Apply attack/release smoothing
+  const timeDelta = playbackTimeSeconds - effectsAutomationState.lastUpdateTime;
+  const isAttacking = currentLevel > follower.smoothValue;
+  const timeConstant = isAttacking ? follower.attack : follower.release;
+
+  const alpha = Math.exp(-timeDelta / (timeConstant + 0.001));
+  follower.smoothValue = alpha * follower.smoothValue + (1 - alpha) * currentLevel;
+  follower.value = Math.max(0, Math.min(1, follower.smoothValue));
+
+  return follower.value;
+}
+
+// Phase 24.2: Automation Curve Evaluation (~50 lines)
+function evaluateAutomationCurve(trackKey, timeInBar) {
+  const track = effectsAutomationState.automationTracks.get(trackKey);
+  if (!track || track.length === 0) return null;
+
+  let before = null;
+  let after = null;
+
+  for (const point of track) {
+    if (point.time <= timeInBar) before = point;
+    if (point.time >= timeInBar && !after) {
+      after = point;
+      break;
+    }
+  }
+
+  if (!before) return track[0].value;
+  if (!after) return before.value;
+  if (before.time === after.time) return before.value;
+
+  const t = (timeInBar - before.time) / (after.time - before.time);
+  const curve = before.curve || 'linear';
+
+  let easing = t;
+  switch (curve) {
+    case 'ease-in':
+      easing = t * t;
+      break;
+    case 'ease-out':
+      easing = 1 - (1 - t) * (1 - t);
+      break;
+    case 'ease-in-out':
+      easing = t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) * (1 - t);
+      break;
+    case 'exponential':
+      easing = (Math.pow(2, t * 10) - 1) / (1023);
+      break;
+  }
+
+  return before.value + (after.value - before.value) * easing;
+}
+
+// Phase 24.3: Modulation Matrix Evaluation (~50 lines)
+function evaluateModulationMatrix(playbackTimeSeconds) {
+  const sources = effectsAutomationState.modulationMatrix.sources;
+  const targets = effectsAutomationState.modulationMatrix.targets;
+  const mappings = effectsAutomationState.modulationMatrix.mappings;
+
+  const sourceValues = {};
+
+  for (const source of sources) {
+    switch (source.type) {
+      case 'lfo':
+        sourceValues[source.id] = updateLFOValue(source.id, playbackTimeSeconds);
+        break;
+      case 'envelope-follower':
+        sourceValues[source.id] = effectsAutomationState.envelopeFollower.value;
+        break;
+      case 'velocity':
+        sourceValues[source.id] = source.value || 0;
+        break;
+      case 'slice-energy':
+        sourceValues[source.id] = source.value || 0;
+        break;
+      case 'spectral-centroid':
+        sourceValues[source.id] = source.value || 0;
+        break;
+      case 'automation':
+        const trackKey = source.trackKey;
+        const barTime = (playbackTimeSeconds % (240 / bpm)); // Time within bar
+        const automated = evaluateAutomationCurve(trackKey, barTime);
+        sourceValues[source.id] = automated !== null ? automated : source.value || 0;
+        break;
+    }
+  }
+
+  const modulations = {};
+  for (const mapping of mappings) {
+    const sourceValue = sourceValues[mapping.sourceId] || 0;
+    const targetId = mapping.targetId;
+
+    if (!modulations[targetId]) modulations[targetId] = [];
+
+    const modAmount = sourceValue * mapping.amount;
+    modulations[targetId].push({
+      amount: modAmount,
+      mode: mapping.mode || 'add'
+    });
+  }
+
+  return modulations;
+}
+
+// Phase 24.2: Automation Recording UI (~40 lines)
+function toggleAutomationRecording() {
+  const effectId = document.getElementById('automationEffectSelect').value;
+  if (!effectId) {
+    alert('Please select a target effect');
+    return;
+  }
+
+  effectsAutomationState.recordingMode.active = !effectsAutomationState.recordingMode.active;
+
+  if (effectsAutomationState.recordingMode.active) {
+    effectsAutomationState.recordingMode.effectId = effectId;
+    effectsAutomationState.recordingMode.startTime = audioCtx.currentTime;
+    effectsAutomationState.recordingMode.points = [];
+
+    const btn = document.getElementById('automationRecordBtn');
+    if (btn) {
+      btn.style.background = 'var(--red)';
+      btn.style.color = '#fff';
+      btn.textContent = '● Recording...';
+    }
+  } else {
+    const btn = document.getElementById('automationRecordBtn');
+    if (btn) {
+      btn.style.background = '';
+      btn.style.color = '';
+      btn.textContent = '● Record';
+    }
+  }
+}
+
+function stopAutomationRecording() {
+  if (!effectsAutomationState.recordingMode.active) return;
+
+  const trackKey = effectsAutomationState.recordingMode.effectId;
+  const points = effectsAutomationState.recordingMode.points;
+
+  if (points.length > 0) {
+    effectsAutomationState.automationTracks.set(trackKey, points);
+    console.log(`Saved automation track: ${trackKey} with ${points.length} points`);
+  }
+
+  effectsAutomationState.recordingMode.active = false;
+  effectsAutomationState.recordingMode.points = [];
+
+  const btn = document.getElementById('automationRecordBtn');
+  if (btn) {
+    btn.style.background = '';
+    btn.style.color = '';
+    btn.textContent = '● Record';
+  }
+}
+
+// Phase 24.1: LFO Pool Management (~50 lines)
+function addLFOToPool() {
+  const lfo = {
+    id: 'lfo_' + Date.now(),
+    waveform: 'sine',
+    rateSync: true,
+    rateBPM: 1.0,
+    phase: 0,
+    amplitude: 0.5,
+    value: 0
+  };
+
+  effectsAutomationState.lfoPool.push(lfo);
+  updateLFOPoolDisplay();
+
+  // Also add to modulation matrix sources
+  effectsAutomationState.modulationMatrix.sources.push({
+    id: lfo.id,
+    type: 'lfo',
+    label: `LFO ${effectsAutomationState.lfoPool.length}`,
+    value: 0
+  });
+  updateModulationMatrixGrid();
+}
+
+function updateLFOPoolDisplay() {
+  const container = document.getElementById('lfoPoolDisplay');
+  if (!container) return;
+
+  container.innerHTML = effectsAutomationState.lfoPool.map((lfo, idx) => `
+    <div style="padding:4px;background:rgba(136,68,255,0.2);margin-bottom:4px;border-radius:3px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span>LFO ${idx + 1}: ${lfo.waveform}</span>
+        <button class="ai-pat-btn" style="font-size:8px;padding:2px 6px" onclick="removeLFOFromPool('${lfo.id}')">×</button>
+      </div>
+      <div style="font-size:8px;margin-top:2px">
+        <div>Rate: <span id="lfoRate_${lfo.id}">${lfo.rateBPM.toFixed(1)}</span> ${lfo.rateSync ? '(BPM sync)' : '(Hz)'}</div>
+        <div>Amp: <input type="range" min="0" max="1" value="${lfo.amplitude}" step="0.05" style="width:60px" oninput="updateLFOAmplitude('${lfo.id}', this.value)"></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function removeLFOFromPool(lfoId) {
+  effectsAutomationState.lfoPool = effectsAutomationState.lfoPool.filter(l => l.id !== lfoId);
+  effectsAutomationState.modulationMatrix.sources = effectsAutomationState.modulationMatrix.sources.filter(s => s.id !== lfoId);
+  effectsAutomationState.modulationMatrix.mappings = effectsAutomationState.modulationMatrix.mappings.filter(m => m.sourceId !== lfoId);
+  updateLFOPoolDisplay();
+  updateModulationMatrixGrid();
+}
+
+function updateLFOAmplitude(lfoId, amplitude) {
+  const lfo = effectsAutomationState.lfoPool.find(l => l.id === lfoId);
+  if (lfo) lfo.amplitude = parseFloat(amplitude);
+}
+
+// Phase 24.3: Modulation Matrix UI (~50 lines)
+function updateModulationMatrixGrid() {
+  const container = document.getElementById('modulationMatrixGrid');
+  if (!container) return;
+
+  const sources = effectsAutomationState.modulationMatrix.sources;
+  const targets = effectsAutomationState.modulationMatrix.targets;
+
+  // Initialize default targets if not present
+  if (targets.length === 0) {
+    effectsAutomationState.modulationMatrix.targets = [
+      { id: 'filter_cutoff', param: 'filterCutoff', label: 'Filter' },
+      { id: 'delay_feedback', param: 'delayFeedback', label: 'D.Feedback' },
+      { id: 'reverb_wet', param: 'reverbWet', label: 'Rev.Wet' },
+      { id: 'distortion_drive', param: 'distortionDrive', label: 'Distortion' }
+    ];
+  }
+
+  let html = '';
+  for (const target of effectsAutomationState.modulationMatrix.targets) {
+    html += `<div style="padding:4px;background:rgba(136,68,255,0.15);border-radius:3px;font-size:8px"><strong>${target.label}</strong>`;
+
+    for (const source of sources) {
+      const mapping = effectsAutomationState.modulationMatrix.mappings.find(
+        m => m.sourceId === source.id && m.targetId === target.id
+      );
+      const amount = mapping ? mapping.amount : 0;
+
+      html += `<div style="margin-top:2px">
+        <input type="range" min="0" max="1" value="${amount}" step="0.1" style="width:100%;height:12px"
+          oninput="updateModulationAmount('${source.id}', '${target.id}', this.value)">
+      </div>`;
+    }
+
+    html += `</div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+function updateModulationAmount(sourceId, targetId, amount) {
+  let mapping = effectsAutomationState.modulationMatrix.mappings.find(
+    m => m.sourceId === sourceId && m.targetId === targetId
+  );
+
+  if (!mapping && amount > 0) {
+    mapping = { sourceId, targetId, amount: parseFloat(amount), mode: 'add' };
+    effectsAutomationState.modulationMatrix.mappings.push(mapping);
+  } else if (mapping) {
+    mapping.amount = parseFloat(amount);
+    if (mapping.amount === 0) {
+      effectsAutomationState.modulationMatrix.mappings =
+        effectsAutomationState.modulationMatrix.mappings.filter(m => m !== mapping);
+    }
   }
 }
 
