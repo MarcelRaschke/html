@@ -8878,6 +8878,13 @@ function toggleVideoExportVisualizer(analyzer) {
         <div style="margin-bottom:4px"><strong>🔄 Feedback:</strong> <input type="range" min="0" max="1" step="0.05" value="0.3" id="vocalDelayFeedback" oninput="setStemDelay('vocals', document.getElementById('vocalDelayTime').value, this.value, document.getElementById('vocalDelayWet').value); updateStemEffectDisplay('vocal', 'DelayFeedback', this.value)" style="width:60%;height:2px;vertical-align:middle"> <span style="font-size:8px" id="vocalDelayFeedbackValue">30%</span></div>
         <div style="margin-bottom:4px"><strong>💧 Reverb:</strong> <input type="range" min="0" max="1" step="0.05" value="0.3" id="vocalDelayWet" oninput="setStemReverb('vocals', this.value); updateStemEffectDisplay('vocal', 'Reverb', this.value)" style="width:60%;height:2px;vertical-align:middle"> <span style="font-size:8px" id="vocalReverbValue">30%</span></div>
         <div><strong>🔫 Comp:</strong> T:<input type="range" min="-48" max="0" step="1" value="-24" id="vocalCompThreshold" oninput="setStemCompressor('vocals', this.value, document.getElementById('vocalCompRatio').value, 0.003, 0.25)" style="width:35%;height:2px;vertical-align:middle"> R:<input type="range" min="1" max="16" step="1" value="4" id="vocalCompRatio" oninput="setStemCompressor('vocals', document.getElementById('vocalCompThreshold').value, this.value, 0.003, 0.25)" style="width:35%;height:2px;vertical-align:middle"></div>
+        <!-- Phase 28: Per-Stem Modulation Controls -->
+        <div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(0,240,255,0.15);display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:8px">
+          <button id="vocalAddLFOBtn" onclick="addPerStemLFOSource('vocals', {waveform: 'sine', frequency: 1, amplitude: 0.5})" style="padding:4px;background:rgba(0,240,255,0.1);border:1px solid rgba(0,240,255,0.3);color:var(--cyan);border-radius:3px;cursor:pointer">〰️ Add LFO</button>
+          <button id="vocalCrossStemBtn" onclick="showCrossStemRoutingModal('vocals')" style="padding:4px;background:rgba(0,240,255,0.1);border:1px solid rgba(0,240,255,0.3);color:var(--cyan);border-radius:3px;cursor:pointer">↔️ X-Stem</button>
+          <button id="vocalRecordModulationBtn" onclick="recordPerStemModulationCurve('vocals', 'delayTime')" style="padding:4px;background:rgba(0,240,255,0.1);border:1px solid rgba(0,240,255,0.3);color:var(--cyan);border-radius:3px;cursor:pointer">⏺️ Record</button>
+          <button id="vocalModulationPanel" onclick="togglePerStemModulationPanel('vocals')" style="padding:4px;background:rgba(0,240,255,0.1);border:1px solid rgba(0,240,255,0.3);color:var(--cyan);border-radius:3px;cursor:pointer">⚙️ Mods</button>
+        </div>
       </div>
     </div>
 
@@ -8895,6 +8902,13 @@ function toggleVideoExportVisualizer(analyzer) {
         <div style="margin-bottom:4px"><strong>🔄 Feedback:</strong> <input type="range" min="0" max="1" step="0.05" value="0.25" id="drumDelayFeedback" oninput="setStemDelay('drums', document.getElementById('drumDelayTime').value, this.value, document.getElementById('drumDelayWet').value); updateStemEffectDisplay('drum', 'DelayFeedback', this.value)" style="width:60%;height:2px;vertical-align:middle"> <span style="font-size:8px" id="drumDelayFeedbackValue">25%</span></div>
         <div style="margin-bottom:4px"><strong>💧 Reverb:</strong> <input type="range" min="0" max="1" step="0.05" value="0.2" id="drumDelayWet" oninput="setStemReverb('drums', this.value); updateStemEffectDisplay('drum', 'Reverb', this.value)" style="width:60%;height:2px;vertical-align:middle"> <span style="font-size:8px" id="drumReverbValue">20%</span></div>
         <div><strong>🔫 Comp:</strong> T:<input type="range" min="-48" max="0" step="1" value="-20" id="drumCompThreshold" oninput="setStemCompressor('drums', this.value, document.getElementById('drumCompRatio').value, 0.003, 0.25)" style="width:35%;height:2px;vertical-align:middle"> R:<input type="range" min="1" max="16" step="1" value="6" id="drumCompRatio" oninput="setStemCompressor('drums', document.getElementById('drumCompThreshold').value, this.value, 0.003, 0.25)" style="width:35%;height:2px;vertical-align:middle"></div>
+        <!-- Phase 28: Per-Stem Modulation Controls -->
+        <div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,51,85,0.15);display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:8px">
+          <button id="drumAddLFOBtn" onclick="addPerStemLFOSource('drums', {waveform: 'sine', frequency: 1, amplitude: 0.5})" style="padding:4px;background:rgba(255,51,85,0.1);border:1px solid rgba(255,51,85,0.3);color:var(--red);border-radius:3px;cursor:pointer">〰️ Add LFO</button>
+          <button id="drumCrossStemBtn" onclick="showCrossStemRoutingModal('drums')" style="padding:4px;background:rgba(255,51,85,0.1);border:1px solid rgba(255,51,85,0.3);color:var(--red);border-radius:3px;cursor:pointer">↔️ X-Stem</button>
+          <button id="drumRecordModulationBtn" onclick="recordPerStemModulationCurve('drums', 'delayTime')" style="padding:4px;background:rgba(255,51,85,0.1);border:1px solid rgba(255,51,85,0.3);color:var(--red);border-radius:3px;cursor:pointer">⏺️ Record</button>
+          <button id="drumModulationPanel" onclick="togglePerStemModulationPanel('drums')" style="padding:4px;background:rgba(255,51,85,0.1);border:1px solid rgba(255,51,85,0.3);color:var(--red);border-radius:3px;cursor:pointer">⚙️ Mods</button>
+        </div>
       </div>
     </div>
 
@@ -8912,6 +8926,13 @@ function toggleVideoExportVisualizer(analyzer) {
         <div style="margin-bottom:4px"><strong>🔄 Feedback:</strong> <input type="range" min="0" max="1" step="0.05" value="0.35" id="bassDelayFeedback" oninput="setStemDelay('bass', document.getElementById('bassDelayTime').value, this.value, document.getElementById('bassReverbWet').value); updateStemEffectDisplay('bass', 'DelayFeedback', this.value)" style="width:60%;height:2px;vertical-align:middle"> <span style="font-size:8px" id="bassDelayFeedbackValue">35%</span></div>
         <div style="margin-bottom:4px"><strong>💧 Reverb:</strong> <input type="range" min="0" max="1" step="0.05" value="0.1" id="bassReverbWet" oninput="setStemReverb('bass', this.value); updateStemEffectDisplay('bass', 'Reverb', this.value)" style="width:60%;height:2px;vertical-align:middle"> <span style="font-size:8px" id="bassReverbValue">10%</span></div>
         <div><strong>🔫 Comp:</strong> T:<input type="range" min="-48" max="0" step="1" value="-18" id="bassCompThreshold" oninput="setStemCompressor('bass', this.value, document.getElementById('bassCompRatio').value, 0.005, 0.3)" style="width:35%;height:2px;vertical-align:middle"> R:<input type="range" min="1" max="16" step="1" value="8" id="bassCompRatio" oninput="setStemCompressor('bass', document.getElementById('bassCompThreshold').value, this.value, 0.005, 0.3)" style="width:35%;height:2px;vertical-align:middle"></div>
+        <!-- Phase 28: Per-Stem Modulation Controls -->
+        <div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,204,0,0.15);display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:8px">
+          <button id="bassAddLFOBtn" onclick="addPerStemLFOSource('bass', {waveform: 'sine', frequency: 1, amplitude: 0.5})" style="padding:4px;background:rgba(255,204,0,0.1);border:1px solid rgba(255,204,0,0.3);color:var(--gold);border-radius:3px;cursor:pointer">〰️ Add LFO</button>
+          <button id="bassCrossStemBtn" onclick="showCrossStemRoutingModal('bass')" style="padding:4px;background:rgba(255,204,0,0.1);border:1px solid rgba(255,204,0,0.3);color:var(--gold);border-radius:3px;cursor:pointer">↔️ X-Stem</button>
+          <button id="bassRecordModulationBtn" onclick="recordPerStemModulationCurve('bass', 'delayTime')" style="padding:4px;background:rgba(255,204,0,0.1);border:1px solid rgba(255,204,0,0.3);color:var(--gold);border-radius:3px;cursor:pointer">⏺️ Record</button>
+          <button id="bassModulationPanel" onclick="togglePerStemModulationPanel('bass')" style="padding:4px;background:rgba(255,204,0,0.1);border:1px solid rgba(255,204,0,0.3);color:var(--gold);border-radius:3px;cursor:pointer">⚙️ Mods</button>
+        </div>
       </div>
     </div>
 
@@ -8929,6 +8950,13 @@ function toggleVideoExportVisualizer(analyzer) {
         <div style="margin-bottom:4px"><strong>🔄 Feedback:</strong> <input type="range" min="0" max="1" step="0.05" value="0.3" id="otherDelayFeedback" oninput="setStemDelay('other', document.getElementById('otherDelayTime').value, this.value, document.getElementById('otherReverbWet').value); updateStemEffectDisplay('other', 'DelayFeedback', this.value)" style="width:60%;height:2px;vertical-align:middle"> <span style="font-size:8px" id="otherDelayFeedbackValue">30%</span></div>
         <div style="margin-bottom:4px"><strong>💧 Reverb:</strong> <input type="range" min="0" max="1" step="0.05" value="0.25" id="otherReverbWet" oninput="setStemReverb('other', this.value); updateStemEffectDisplay('other', 'Reverb', this.value)" style="width:60%;height:2px;vertical-align:middle"> <span style="font-size:8px" id="otherReverbValue">25%</span></div>
         <div><strong>🔫 Comp:</strong> T:<input type="range" min="-48" max="0" step="1" value="-22" id="otherCompThreshold" oninput="setStemCompressor('other', this.value, document.getElementById('otherCompRatio').value, 0.003, 0.25)" style="width:35%;height:2px;vertical-align:middle"> R:<input type="range" min="1" max="16" step="1" value="4" id="otherCompRatio" oninput="setStemCompressor('other', document.getElementById('otherCompThreshold').value, this.value, 0.003, 0.25)" style="width:35%;height:2px;vertical-align:middle"></div>
+        <!-- Phase 28: Per-Stem Modulation Controls -->
+        <div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,0,170,0.15);display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:8px">
+          <button id="otherAddLFOBtn" onclick="addPerStemLFOSource('other', {waveform: 'sine', frequency: 1, amplitude: 0.5})" style="padding:4px;background:rgba(255,0,170,0.1);border:1px solid rgba(255,0,170,0.3);color:var(--magenta);border-radius:3px;cursor:pointer">〰️ Add LFO</button>
+          <button id="otherCrossStemBtn" onclick="showCrossStemRoutingModal('other')" style="padding:4px;background:rgba(255,0,170,0.1);border:1px solid rgba(255,0,170,0.3);color:var(--magenta);border-radius:3px;cursor:pointer">↔️ X-Stem</button>
+          <button id="otherRecordModulationBtn" onclick="recordPerStemModulationCurve('other', 'delayTime')" style="padding:4px;background:rgba(255,0,170,0.1);border:1px solid rgba(255,0,170,0.3);color:var(--magenta);border-radius:3px;cursor:pointer">⏺️ Record</button>
+          <button id="otherModulationPanel" onclick="togglePerStemModulationPanel('other')" style="padding:4px;background:rgba(255,0,170,0.1);border:1px solid rgba(255,0,170,0.3);color:var(--magenta);border-radius:3px;cursor:pointer">⚙️ Mods</button>
+        </div>
       </div>
     </div>
 
@@ -9958,6 +9986,272 @@ setTimeout(() => {
     initializeLatencyCompensation();
   }
 }, 500);
+
+// PHASE 28: Advanced Per-Stem Modulation Chains
+let stemPerStemModulationState = {
+  perStemLFOPool: {
+    vocals: [],
+    drums: [],
+    bass: [],
+    other: []
+  },
+  perStemEnvelopes: {
+    vocals: { attack: 0.01, release: 0.1, current: 0 },
+    drums: { attack: 0.005, release: 0.05, current: 0 },
+    bass: { attack: 0.02, release: 0.15, current: 0 },
+    other: { attack: 0.01, release: 0.1, current: 0 }
+  },
+  crossStemModulation: {
+    enabled: true,
+    routingMatrix: {},
+    falloffStrength: 1.0
+  },
+  sidechainMetrics: {
+    energyProfile: {},
+    spectralProfile: {},
+    dynamicsEnvelope: {}
+  },
+  perStemModulationRecording: {
+    vocals: [],
+    drums: [],
+    bass: [],
+    other: []
+  },
+  perStemModulationProbabilities: {
+    vocals: 1.0,
+    drums: 1.0,
+    bass: 1.0,
+    other: 1.0
+  }
+};
+
+function initializePerStemModulation() {
+  const stems = ['vocals', 'drums', 'bass', 'other'];
+
+  stems.forEach(stem => {
+    stemPerStemModulationState.perStemLFOPool[stem] = [];
+    stemPerStemModulationState.sidechainMetrics.energyProfile[stem] = 0;
+    stemPerStemModulationState.sidechainMetrics.spectralProfile[stem] = [];
+    stemPerStemModulationState.sidechainMetrics.dynamicsEnvelope[stem] = { peak: 0, rms: 0, crest: 0 };
+  });
+
+  console.log('✅ Per-stem modulation chains initialized');
+}
+
+function addPerStemLFOSource(stemName, lfoConfig) {
+  if (!stemPerStemModulationState.perStemLFOPool[stemName]) {
+    return null;
+  }
+
+  const lfoId = `lfo_${stemName}_${Date.now()}`;
+  const lfo = {
+    id: lfoId,
+    stemName: stemName,
+    waveform: lfoConfig.waveform || 'sine',
+    rate: lfoConfig.rate || 1.0,
+    amplitude: lfoConfig.amplitude || 0.5,
+    phase: 0,
+    tempoSync: lfoConfig.tempoSync !== false,
+    target: lfoConfig.target || null
+  };
+
+  stemPerStemModulationState.perStemLFOPool[stemName].push(lfo);
+  return lfoId;
+}
+
+function removePerStemLFOSource(stemName, lfoId) {
+  if (!stemPerStemModulationState.perStemLFOPool[stemName]) {
+    return false;
+  }
+
+  const index = stemPerStemModulationState.perStemLFOPool[stemName].findIndex(l => l.id === lfoId);
+  if (index > -1) {
+    stemPerStemModulationState.perStemLFOPool[stemName].splice(index, 1);
+    return true;
+  }
+  return false;
+}
+
+function updatePerStemLFOValue(stemName, lfoId, time) {
+  const lfoArray = stemPerStemModulationState.perStemLFOPool[stemName];
+  if (!lfoArray) return 0;
+
+  const lfo = lfoArray.find(l => l.id === lfoId);
+  if (!lfo) return 0;
+
+  const frequency = lfo.tempoSync ? (bpm / 60) * lfo.rate : lfo.rate;
+  const phase = (time * frequency * 2 * Math.PI + lfo.phase) % (2 * Math.PI);
+
+  let value = 0;
+  switch (lfo.waveform) {
+    case 'sine':
+      value = Math.sin(phase);
+      break;
+    case 'triangle':
+      value = Math.asin(Math.sin(phase)) * (2 / Math.PI);
+      break;
+    case 'square':
+      value = Math.sin(phase) > 0 ? 1 : -1;
+      break;
+    case 'saw':
+      value = 2 * (phase / (2 * Math.PI) - Math.floor(phase / (2 * Math.PI) + 0.5));
+      break;
+    default:
+      value = Math.sin(phase);
+  }
+
+  return value * lfo.amplitude;
+}
+
+function getPerStemLFOValue(stemName, lfoId) {
+  const lfoArray = stemPerStemModulationState.perStemLFOPool[stemName];
+  if (!lfoArray) return 0;
+
+  const lfo = lfoArray.find(l => l.id === lfoId);
+  return lfo ? lfo.current || 0 : 0;
+}
+
+function routePerStemModulation(sourceStem, sourceMetric, targetStem, targetParam, amount) {
+  const routeKey = `${sourceStem}->${targetStem}`;
+
+  if (!stemPerStemModulationState.crossStemModulation.routingMatrix[routeKey]) {
+    stemPerStemModulationState.crossStemModulation.routingMatrix[routeKey] = [];
+  }
+
+  const route = {
+    id: `route_${Date.now()}`,
+    source: sourceMetric,
+    target: targetParam,
+    amount: amount,
+    falloff: 1.0
+  };
+
+  stemPerStemModulationState.crossStemModulation.routingMatrix[routeKey].push(route);
+  return route.id;
+}
+
+function analyzeSidechainImpact(sourceStem, targetStem) {
+  const sourceEnergy = stemPerStemModulationState.sidechainMetrics.energyProfile[sourceStem] || 0;
+  const targetDynamics = stemPerStemModulationState.sidechainMetrics.dynamicsEnvelope[targetStem] || {};
+
+  return {
+    sourceEnergy: sourceEnergy,
+    targetPeak: targetDynamics.peak || 0,
+    targetRMS: targetDynamics.rms || 0,
+    modulationStrength: sourceEnergy * (targetDynamics.peak / Math.max(targetDynamics.peak, 0.001)),
+    falloff: stemPerStemModulationState.crossStemModulation.falloffStrength
+  };
+}
+
+function recordPerStemModulationCurve(stemName, paramName, startTime) {
+  if (!stemPerStemModulationState.perStemModulationRecording[stemName]) {
+    return null;
+  }
+
+  const recordingId = `rec_${stemName}_${paramName}_${Date.now()}`;
+  const recording = {
+    id: recordingId,
+    stemName: stemName,
+    paramName: paramName,
+    startTime: startTime,
+    points: [],
+    isRecording: true
+  };
+
+  stemPerStemModulationState.perStemModulationRecording[stemName].push(recording);
+  return recordingId;
+}
+
+function playbackPerStemModulationCurve(stemName, paramName, time) {
+  const recordings = stemPerStemModulationState.perStemModulationRecording[stemName] || [];
+  const recording = recordings.find(r => r.paramName === paramName && !r.isRecording);
+
+  if (!recording || recording.points.length === 0) return 0;
+
+  const relativeTime = time - recording.startTime;
+
+  for (let i = 0; i < recording.points.length - 1; i++) {
+    const p1 = recording.points[i];
+    const p2 = recording.points[i + 1];
+
+    if (relativeTime >= p1.time && relativeTime <= p2.time) {
+      const t = (relativeTime - p1.time) / (p2.time - p1.time);
+      return p1.value + (p2.value - p1.value) * t;
+    }
+  }
+
+  return recording.points[recording.points.length - 1].value;
+}
+
+function clearPerStemModulationRecording(stemName, paramName) {
+  if (!stemPerStemModulationState.perStemModulationRecording[stemName]) {
+    return false;
+  }
+
+  const index = stemPerStemModulationState.perStemModulationRecording[stemName].findIndex(
+    r => r.paramName === paramName
+  );
+
+  if (index > -1) {
+    stemPerStemModulationState.perStemModulationRecording[stemName].splice(index, 1);
+    return true;
+  }
+  return false;
+}
+
+function setPerStemModulationProbability(stemName, probability) {
+  if (stemPerStemModulationState.perStemModulationProbabilities.hasOwnProperty(stemName)) {
+    stemPerStemModulationState.perStemModulationProbabilities[stemName] = Math.max(0, Math.min(1, probability));
+    return true;
+  }
+  return false;
+}
+
+function getPerStemModulationProbability(stemName) {
+  return stemPerStemModulationState.perStemModulationProbabilities[stemName] || 1.0;
+}
+
+function applyProbabilisticPerStemModulation(stemName, effect) {
+  const probability = getPerStemModulationProbability(stemName);
+  const roll = Math.random();
+  return roll < probability;
+}
+
+function updatePerStemModulation(stemName, time) {
+  if (!stemPerStemModulationState.perStemLFOPool[stemName]) {
+    return;
+  }
+
+  // Update LFO values for this stem
+  stemPerStemModulationState.perStemLFOPool[stemName].forEach(lfo => {
+    lfo.current = updatePerStemLFOValue(stemName, lfo.id, time);
+  });
+
+  // Update envelope follower for this stem
+  const envelope = stemPerStemModulationState.perStemEnvelopes[stemName];
+  if (envelope && stemSeparationState.stems?.[stemName]) {
+    const buffer = stemSeparationState.stems[stemName];
+    let peak = 0;
+    for (let i = 0; i < Math.min(buffer.length, 4410); i++) {
+      peak = Math.max(peak, Math.abs(buffer[i]));
+    }
+
+    if (peak > envelope.current) {
+      envelope.current += (peak - envelope.current) * (1 - Math.exp(-2 * envelope.attack));
+    } else {
+      envelope.current *= Math.exp(-2 * envelope.release);
+    }
+
+    stemPerStemModulationState.sidechainMetrics.energyProfile[stemName] = envelope.current;
+  }
+}
+
+// Initialize per-stem modulation on startup
+setTimeout(() => {
+  if (stemSeparationState.modelLoaded) {
+    initializePerStemModulation();
+  }
+}, 750);
 
 // Initialize toggle buttons
 document.addEventListener('DOMContentLoaded', () => {
