@@ -1598,13 +1598,10 @@ let effectsParams = {
   delay: { time: 0.5, feedback: 0.4, mix: 0 },
   reverb: { mix: 0 }
 };
-let anthropicApiKey = null;
 let aiPatternGeneration = false;
 
 // Phase 13: MIDI Controller Support
-let midiAccess = null;
 let midiInputs = [];
-let midiEnabled = false;
 let midiStatus = { connected: false, lastMessage: null };
 let midiMapping = {
   pads: {}, // MIDI note → {track, step}
@@ -1769,6 +1766,167 @@ let stemPhaseState = {
   },
   phaseAdjustmentLock: {},                // Prevent recomputation mid-playback
   lastPhaseCalibration: null
+};
+
+// === PHASE 30: MASTER OUTPUT & DISTRIBUTION PIPELINE ===
+
+// Phase 30.1: Mastering Suite & Loudness Metering
+let masteringState = {
+  enabled: true,
+
+  // Real-time metering
+  meters: {
+    loudness: {
+      value: -18.0,           // Current LUFS
+      target: -14.0,          // Platform target (Spotify default)
+      unit: 'LUFS',
+      status: 'low'           // 'meeting', 'high', 'low'
+    },
+    truePeak: {
+      value: -6.0,            // True peak dBFS
+      max: 0.0,               // Absolute max allowed
+      status: 'ok'            // 'ok', 'clipped'
+    },
+    dynamicRange: {
+      value: 0.0,             // RMS dynamic range
+      min: 8.0,               // Minimum for musicality
+      status: 'unknown'
+    },
+    correlation: {
+      value: 0.0,             // Stereo correlation (-1 to 1)
+      range: [-1, 1],
+      status: 'unknown'       // 'mono_like', 'stereo_ok', 'phase_issue'
+    },
+    crestFactor: {
+      value: 0.0,             // Peak-to-RMS ratio (dB)
+      headroom: 0.0           // dB to clip
+    }
+  },
+
+  // Metering modes
+  meteringMode: 'momentary', // 'momentary', 'short_term', 'integrated'
+  integrationWindow: 400,     // ms for short-term, Inf for integrated
+
+  // Reference standards
+  standards: {
+    spotify: {name: 'Spotify', target: -14.0, unit: 'LUFS', truePeakMax: -1.0},
+    appleMusic: {name: 'Apple Music', target: -16.0, unit: 'LKFS', truePeakMax: -1.0},
+    youtube: {name: 'YouTube', target: -13.0, unit: 'LUFS', truePeakMax: 0.0},
+    broadcast: {name: 'EBU R128', target: -23.0, unit: 'LUFS', truePeakMax: -1.0},
+    reference: {name: 'Reference', target: -18.0, unit: 'LUFS', truePeakMax: 0.0}
+  },
+
+  activeStandard: 'spotify',
+
+  // Limiter for auto-loudness normalization
+  limiter: {
+    enabled: false,
+    threshold: -0.5,          // dB
+    release: 50,              // ms
+    lookahead: 5              // ms
+  },
+
+  // Analyser nodes for metering
+  analyser: null,
+  analyserIntegrated: null
+};
+
+// Phase 30.2: Multi-Format Export
+let exportState = {
+  presets: {
+    spotify: {
+      name: 'Spotify',
+      format: 'mp3',
+      bitrate: 320,
+      sampleRate: 44100,
+      loudness: -14.0,
+      normalizeToLoudness: true
+    },
+    appleMusic: {
+      name: 'Apple Music',
+      format: 'aac',
+      bitrate: 256,
+      sampleRate: 48000,
+      loudness: -16.0,
+      normalizeToLoudness: true
+    },
+    youtube: {
+      name: 'YouTube Music',
+      format: 'wav',
+      bitrate: null,
+      sampleRate: 48000,
+      bitDepth: 24,
+      loudness: -13.0
+    },
+    archiveQuality: {
+      name: 'Archive (Lossless)',
+      format: 'aiff',
+      bitrate: null,
+      sampleRate: 96000,
+      compressionLevel: 8,
+      loudness: -18.0
+    }
+  },
+
+  activePreset: 'spotify',
+  queue: []
+};
+
+// Phase 30.3: Distribution Platform Integration
+let distributionState = {
+  platforms: {
+    spotify: {
+      name: 'Spotify',
+      enabled: true,
+      authenticated: false,
+      apiEndpoint: 'https://api.spotify.com/v1/me',
+      requirements: {
+        format: 'mp3',
+        bitrate: 320,
+        loudness: -14.0,
+        coverArtMin: [3000, 3000],
+        fileSize: '< 5GB'
+      }
+    },
+    appleMusic: {
+      name: 'Apple Music',
+      enabled: true,
+      authenticated: false,
+      apiEndpoint: 'https://api.music.apple.com/v1/catalog',
+      requirements: {
+        format: 'aac',
+        bitrate: 256,
+        loudness: -16.0,
+        coverArtMin: [1500, 1500],
+        fileSize: '< 5GB'
+      }
+    },
+    youtube: {
+      name: 'YouTube Music',
+      enabled: true,
+      authenticated: false,
+      apiEndpoint: 'https://www.googleapis.com/youtube/v3',
+      requirements: {
+        format: 'wav',
+        loudness: -13.0,
+        coverArtMin: [1280, 720],
+        fileSize: '< 500MB'
+      }
+    }
+  },
+
+  releaseMetadata: {
+    title: '',
+    artist: '',
+    album: '',
+    genre: '',
+    releaseDate: new Date(),
+    isrc: '',
+    upc: '',
+    coverArt: null
+  },
+
+  deliveryHistory: []
 };
 
 // === PHASE 29.1: MASTER PLAYHEAD SYNCHRONIZATION ===
@@ -2196,6 +2354,254 @@ function applyPhaseShift(buffer, phaseShift) {
   }
 
   return delayed;
+}
+
+// === PHASE 30.1: MASTERING SUITE & LOUDNESS METERING ===
+
+// Initialize mastering meters with analyser nodes
+function initMasteringMeters() {
+  if (!audioCtx) return;
+
+  // Create momentary analyser (400ms window)
+  masteringState.analyser = audioCtx.createAnalyser();
+  masteringState.analyser.fftSize = 2048;
+  masteringState.analyser.smoothingTimeConstant = 0.1;
+
+  // Create integrated analyser (longer window)
+  masteringState.analyserIntegrated = audioCtx.createAnalyser();
+  masteringState.analyserIntegrated.fftSize = 8192;
+  masteringState.analyserIntegrated.smoothingTimeConstant = 0.3;
+
+  console.log('✓ Mastering meters initialized');
+}
+
+// Calculate loudness in LUFS using ITU-R BS.1770-4
+function updateLoudnessMeter(audioBuffer) {
+  if (!audioCtx || !audioBuffer || audioBuffer.length === 0) return;
+
+  const sampleRate = audioCtx.sampleRate;
+  const channels = audioBuffer.numberOfChannels;
+
+  if (channels === 0) return;
+
+  // K-weighting filter coefficients (simplified)
+  const highShelf_gain = 4.0; // dB (approximation)
+
+  let sumSquared = 0;
+  let sampleCount = 0;
+
+  // Calculate RMS per channel
+  for (let ch = 0; ch < channels; ch++) {
+    const data = audioBuffer.getChannelData(ch);
+    for (let i = 0; i < data.length; i++) {
+      const sample = data[i];
+      sumSquared += sample * sample;
+      sampleCount++;
+    }
+  }
+
+  // Calculate LUFS: -0.691 + 10 * log10(mean_square)
+  const meanSquare = sumSquared / sampleCount;
+  const loudnessLUFS = meanSquare > 0 ? -0.691 + 10 * Math.log10(meanSquare) : -Infinity;
+
+  // Update meter
+  masteringState.meters.loudness.value = Math.max(-80, Math.min(loudnessLUFS, 0));
+
+  // Check compliance with active standard
+  const standard = masteringState.standards[masteringState.activeStandard];
+  const diff = masteringState.meters.loudness.value - standard.target;
+
+  if (Math.abs(diff) < 0.5) {
+    masteringState.meters.loudness.status = 'meeting';
+  } else if (diff > 0.5) {
+    masteringState.meters.loudness.status = 'high';
+  } else {
+    masteringState.meters.loudness.status = 'low';
+  }
+}
+
+// Analyze audio metrics (dynamic range, correlation, crest factor)
+function analyzeAudioMetrics(audioBuffer) {
+  if (!audioBuffer) return;
+
+  const channels = audioBuffer.numberOfChannels;
+  if (channels === 0) return;
+
+  let peakValue = 0;
+  let rmsValue = 0;
+  let sumSquared = 0;
+  let sampleCount = 0;
+
+  // Per-channel analysis
+  for (let ch = 0; ch < channels; ch++) {
+    const data = audioBuffer.getChannelData(ch);
+    for (let i = 0; i < data.length; i++) {
+      const sample = Math.abs(data[i]);
+      peakValue = Math.max(peakValue, sample);
+      sumSquared += data[i] * data[i];
+      sampleCount++;
+    }
+  }
+
+  rmsValue = Math.sqrt(sumSquared / sampleCount);
+
+  // Dynamic range = 20 * log10(peak / RMS)
+  const dynamicRange = rmsValue > 0 ? 20 * Math.log10(peakValue / rmsValue) : 0;
+  masteringState.meters.dynamicRange.value = dynamicRange;
+  masteringState.meters.dynamicRange.status = dynamicRange >= 8 ? 'good' : 'low';
+
+  // Crest factor
+  const peakdB = 20 * Math.log10(peakValue || 1e-6);
+  masteringState.meters.truePeak.value = peakdB;
+  masteringState.meters.truePeak.status = peakdB <= 0 ? 'ok' : 'clipped';
+  masteringState.meters.crestFactor.value = peakValue / rmsValue;
+  masteringState.meters.crestFactor.headroom = 0 - peakdB;
+
+  // Stereo correlation (channels 0 and 1)
+  if (channels >= 2) {
+    const left = audioBuffer.getChannelData(0);
+    const right = audioBuffer.getChannelData(1);
+
+    let dotProduct = 0;
+    let leftEnergy = 0;
+    let rightEnergy = 0;
+
+    for (let i = 0; i < Math.min(left.length, right.length); i++) {
+      dotProduct += left[i] * right[i];
+      leftEnergy += left[i] * left[i];
+      rightEnergy += right[i] * right[i];
+    }
+
+    const correlation = leftEnergy > 0 && rightEnergy > 0
+      ? dotProduct / Math.sqrt(leftEnergy * rightEnergy)
+      : 0;
+
+    masteringState.meters.correlation.value = correlation;
+
+    if (correlation > 0.9) {
+      masteringState.meters.correlation.status = 'mono_like';
+    } else if (correlation > 0.7) {
+      masteringState.meters.correlation.status = 'stereo_ok';
+    } else {
+      masteringState.meters.correlation.status = 'phase_issue';
+    }
+  }
+}
+
+// Update metering display canvas (30 FPS)
+function updateMeteringDisplay() {
+  const canvas = document.getElementById('masteringMeterCanvas');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+
+  // Clear canvas
+  ctx.fillStyle = 'rgba(15,21,32,0.8)';
+  ctx.fillRect(0, 0, width, height);
+
+  // Draw loudness meter
+  const loudness = masteringState.meters.loudness.value;
+  const loudnessNorm = (loudness + 60) / 60; // Normalize -60 to 0 LUFS to 0-1
+  const meterWidth = Math.max(0, Math.min(loudnessNorm * (width - 20), width - 20));
+
+  // Color based on status
+  let meterColor = '#ff5555'; // red (low)
+  if (masteringState.meters.loudness.status === 'meeting') {
+    meterColor = '#aaff00'; // green
+  } else if (masteringState.meters.loudness.status === 'high') {
+    meterColor = '#ffaa00'; // orange
+  }
+
+  ctx.fillStyle = meterColor;
+  ctx.fillRect(10, 10, meterWidth, 30);
+
+  // Draw border
+  ctx.strokeStyle = meterColor;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(10, 10, width - 20, 30);
+
+  // Draw text
+  ctx.fillStyle = meterColor;
+  ctx.font = '12px monospace';
+  ctx.fillText(`${loudness.toFixed(1)} LUFS (Target: ${masteringState.standards[masteringState.activeStandard].target})`, 15, height - 10);
+}
+
+// Apply soft limiter for loudness normalization
+function applySoftLimiter(audioBuffer, threshold, lookahead) {
+  if (!audioBuffer || !masteringState.limiter.enabled) return audioBuffer;
+
+  const output = new Float32Array(audioBuffer.length);
+  const channels = audioBuffer.numberOfChannels;
+
+  if (channels === 0) return audioBuffer;
+
+  // Simple peak detection with lookahead
+  const lookaheadSamples = Math.round((lookahead / 1000) * audioCtx.sampleRate);
+  const releaseSamples = Math.round((masteringState.limiter.release / 1000) * audioCtx.sampleRate);
+
+  // Get peak values with lookahead
+  for (let i = 0; i < audioBuffer.length; i++) {
+    let peak = 0;
+
+    // Check forward lookahead window
+    for (let la = 0; la < lookaheadSamples && i + la < audioBuffer.length; la++) {
+      for (let ch = 0; ch < channels; ch++) {
+        const sample = audioBuffer.getChannelData(ch)[i + la];
+        peak = Math.max(peak, Math.abs(sample));
+      }
+    }
+
+    // Calculate gain reduction
+    const peakDb = 20 * Math.log10(peak || 1e-6);
+    let gainDb = 0;
+
+    if (peakDb > threshold) {
+      gainDb = threshold - peakDb; // Soft knee approximation
+    }
+
+    const gainLinear = Math.pow(10, gainDb / 20);
+
+    // Apply gain to all channels
+    for (let ch = 0; ch < channels; ch++) {
+      const sample = audioBuffer.getChannelData(ch)[i];
+      output[i] = (output[i] || 0) + sample * gainLinear / channels;
+    }
+  }
+
+  return output;
+}
+
+// === PHASE 30.2: MULTI-FORMAT EXPORT (STUBS) ===
+
+// Placeholder for export functions (to be implemented)
+function resampleAudio(buffer, targetSampleRate) {
+  // Stub: actual resampling would use OfflineAudioContext
+  return buffer;
+}
+
+function normalizeToLoudness(buffer, targetLUFS) {
+  // Stub: actual loudness normalization would calculate and apply gain
+  return buffer;
+}
+
+function encodeToFormat(buffer, format, bitrate, metadata) {
+  // Stub: actual encoding would use wasm libraries
+  return new Blob([buffer], {type: 'audio/wav'});
+}
+
+// === PHASE 30.3: DISTRIBUTION INTEGRATION (STUBS) ===
+
+// Placeholder for distribution functions (to be implemented)
+function authenticatePlatform(platform, credentials) {
+  // Stub: actual OAuth2 flow
+  console.log(`Authenticating ${platform}...`);
+}
+
+function validateReleaseMetadata(metadata, platform) {
+  // Stub: actual validation
+  return {valid: true, errors: []};
 }
 
 // Phase 23: Sample Library
@@ -9596,6 +10002,55 @@ document.addEventListener('DOMContentLoaded', () => {
 
   setTimeout(initPhase29, 200);
 
+  // Phase 30 Initialization
+  const initPhase30 = () => {
+    initMasteringMeters();
+    console.log('✓ Phase 30 initialized: Mastering suite');
+
+    // Update metering during playback
+    setInterval(() => {
+      if (playbackState.playing) {
+        // Get current audio buffer for metering
+        // This would need to be connected to the actual audio output
+        updateMeteringDisplay();
+      }
+    }, 33.33); // ~30 FPS
+  };
+
+  setTimeout(initPhase30, 250);
+
+  // Phase 30: Mastering Panel toggle button
+  const masteringToggleBtn = document.createElement('button');
+  masteringToggleBtn.id = 'masteringToggleBtn';
+  masteringToggleBtn.textContent = '🎚️';
+  masteringToggleBtn.title = 'Mastering Suite (Phase 30)';
+  masteringToggleBtn.onclick = () => {
+    const panel = document.getElementById('masteringPanel');
+    if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  };
+  masteringToggleBtn.style.cssText = `
+    position: fixed;
+    bottom: 320px;
+    left: 80px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(170,255,0,0.2), rgba(170,255,0,0.1));
+    border: 2px solid #aaff00;
+    color: #aaff00;
+    font-size: 24px;
+    cursor: pointer;
+    z-index: 1000;
+    transition: all 0.3s;
+  `;
+  masteringToggleBtn.onmouseover = () => {
+    masteringToggleBtn.style.background = 'linear-gradient(135deg, rgba(170,255,0,0.3), rgba(170,255,0,0.2))';
+  };
+  masteringToggleBtn.onmouseout = () => {
+    masteringToggleBtn.style.background = 'linear-gradient(135deg, rgba(170,255,0,0.2), rgba(170,255,0,0.1))';
+  };
+  document.body.appendChild(masteringToggleBtn);
+
   // Phase 29: Cross-Stem Routing Panel toggle button
   const crossStemToggleBtn = document.createElement('button');
   crossStemToggleBtn.id = 'crossStemToggleBtn';
@@ -9702,7 +10157,27 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     };
   }
+
+  // Phase 30: Event handlers for mastering suite
+  const standardSelector = document.getElementById('standardSelector');
+  if (standardSelector) {
+    standardSelector.onchange = () => {
+      masteringState.activeStandard = standardSelector.value;
+      const standard = masteringState.standards[masteringState.activeStandard];
+      masteringState.meters.loudness.target = standard.target;
+      console.log(`✓ Mastering standard changed to: ${standard.name} (Target: ${standard.target})`);
+    };
+  }
+
+  const limiterEnable = document.getElementById('limiterEnable');
+  if (limiterEnable) {
+    limiterEnable.onchange = () => {
+      masteringState.limiter.enabled = limiterEnable.checked;
+      console.log(`✓ Soft limiter ${limiterEnable.checked ? 'enabled' : 'disabled'}`);
+    };
+  }
 });
+
 </script>
 
 <!-- === PHASE 29: CROSS-STEM ROUTING PANEL ===-->
@@ -9768,6 +10243,51 @@ document.addEventListener('DOMContentLoaded', () => {
       <p style="margin:0">No routes configured</p>
     </div>
   </div>
+</div>
+
+<!-- === PHASE 30: MASTERING SUITE PANEL ===-->
+<div id="masteringPanel" style="position:fixed;bottom:20px;right:810px;width:380px;background:var(--bg-card);border:1px solid rgba(170,255,0,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:75vh;overflow-y:auto;display:none">
+  <h3 style="margin-top:0;color:#aaff00;font-size:1.1em">🎚️ Mastering Suite</h3>
+
+  <canvas id="masteringMeterCanvas" width="300" height="80" style="width:100%;border:1px solid rgba(170,255,0,0.2);border-radius:6px;margin:12px 0;display:block"></canvas>
+
+  <table style="width:100%;font-size:0.85em;margin:12px 0;border-collapse:collapse">
+    <tr style="border-bottom:1px solid #1a2438">
+      <td style="padding:6px;color:#fff">Loudness</td>
+      <td style="padding:6px;text-align:right;color:#00ff00" id="loudnessReadout">-18.0 LUFS</td>
+      <td style="padding:6px;text-align:right;font-size:0.8em;color:#aaff00" id="loudnessStatus">Low</td>
+    </tr>
+    <tr style="border-bottom:1px solid #1a2438">
+      <td style="padding:6px;color:#fff">True Peak</td>
+      <td style="padding:6px;text-align:right;color:#00ff00" id="truePeakReadout">-6.0 dBFS</td>
+      <td style="padding:6px;text-align:right;font-size:0.8em;color:#00ff00" id="truePeakStatus">OK</td>
+    </tr>
+    <tr style="border-bottom:1px solid #1a2438">
+      <td style="padding:6px;color:#fff">DR</td>
+      <td style="padding:6px;text-align:right;color:#aaa" id="drReadout">— dB</td>
+      <td style="padding:6px;text-align:right;font-size:0.8em;color:#aaa" id="drStatus">—</td>
+    </tr>
+    <tr>
+      <td style="padding:6px;color:#fff">Correlation</td>
+      <td style="padding:6px;text-align:right;color:#aaa" id="corrReadout">—</td>
+      <td style="padding:6px;text-align:right;font-size:0.8em;color:#aaa" id="corrStatus">—</td>
+    </tr>
+  </table>
+
+  <label style="display:block;margin:12px 0;color:#fff;font-size:0.9em">
+    Standard:
+    <select id="standardSelector" style="padding:4px;background:rgba(0,0,0,0.3);border:1px solid #aaff00;color:#aaff00;border-radius:4px;font-size:0.9em;cursor:pointer">
+      <option value="spotify">Spotify (-14 LUFS)</option>
+      <option value="appleMusic">Apple Music (-16 LKFS)</option>
+      <option value="youtube">YouTube (-13 LUFS)</option>
+      <option value="broadcast">EBU R128 (-23 LUFS)</option>
+      <option value="reference">Reference (-18 LUFS)</option>
+    </select>
+  </label>
+
+  <label style="display:flex;align-items:center;margin:12px 0;color:#fff;font-size:0.9em;cursor:pointer">
+    <input type="checkbox" id="limiterEnable" style="margin-right:8px;cursor:pointer"> Enable Soft Limiter
+  </label>
 </div>
 
 </body>
