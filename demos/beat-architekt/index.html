@@ -1625,13 +1625,10 @@ let effectsParams = {
   delay: { time: 0.5, feedback: 0.4, mix: 0 },
   reverb: { mix: 0 }
 };
-let anthropicApiKey = null;
 let aiPatternGeneration = false;
 
 // Phase 13: MIDI Controller Support
-let midiAccess = null;
 let midiInputs = [];
-let midiEnabled = false;
 let midiStatus = { connected: false, lastMessage: null };
 let midiMapping = {
   pads: {}, // MIDI note → {track, step}
