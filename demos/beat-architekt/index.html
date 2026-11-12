@@ -1914,6 +1914,23 @@ let performanceState = {
   profiling: false
 };
 
+// Phase 32: Advanced Analytics & Post-Release Tracking
+let postReleaseAnalyticsState = {
+  trackedReleases: [],
+  streamingMetrics: {
+    spotify: { streams: [], saves: [], playlists: [], popularity: [] },
+    appleMusic: { plays: [], chartPos: [], demographics: [], engagement: [] },
+    youtube: { views: [], engagement: [], subscribers: [], likes: [] }
+  },
+  chartHistory: [],
+  insights: [],
+  benchmarks: {},
+  metricsUpdateInterval: null,
+  lastFetch: null,
+  isMonitoring: false,
+  refreshRate: 3600000 // 1 hour default
+};
+
 // Phase 30.2: Resampling using OfflineAudioContext
 function resampleAudio(buffer, targetSampleRate) {
   if (!buffer || buffer.sampleRate === targetSampleRate) return buffer;
@@ -9730,6 +9747,49 @@ function toggleVideoExportVisualizer(analyzer) {
   </div>
 </div>
 
+<!-- Phase 32: Advanced Analytics & Post-Release Tracking Panel -->
+<div id="phase32AnalyticsPanel" style="position:fixed;bottom:600px;right:480px;width:520px;background:var(--bg-card);border:1px solid rgba(0,200,255,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:75vh;overflow-y:auto;display:none">
+  <div style="font-size:13px;font-weight:700;color:rgba(0,200,255,1);margin-bottom:12px">📊 Phase 32: Advanced Analytics</div>
+
+  <!-- Streaming Metrics -->
+  <div style="margin-bottom:16px;padding:12px;background:rgba(0,150,200,0.1);border-radius:8px;border-left:3px solid rgba(0,200,255,0.8)">
+    <div style="font-size:11px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;margin-bottom:8px">Streaming Metrics</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:12px">
+      <div style="background:rgba(0,100,150,0.2);padding:8px;border-radius:4px">
+        <div style="color:rgba(100,200,255,0.7);font-size:10px">Spotify Streams</div>
+        <div id="spotifyStreamsDisplay" style="font-weight:700;color:rgba(0,200,255,1)">0</div>
+      </div>
+      <div style="background:rgba(0,100,150,0.2);padding:8px;border-radius:4px">
+        <div style="color:rgba(100,200,255,0.7);font-size:10px">Apple Music Plays</div>
+        <div id="appleMusicPlayDisplay" style="font-weight:700;color:rgba(0,200,255,1)">0</div>
+      </div>
+      <div style="background:rgba(0,100,150,0.2);padding:8px;border-radius:4px">
+        <div style="color:rgba(100,200,255,0.7);font-size:10px">YouTube Views</div>
+        <div id="youtubeViewsDisplay" style="font-weight:700;color:rgba(0,200,255,1)">0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Insights -->
+  <div style="margin-bottom:16px;padding:12px;background:rgba(0,150,200,0.1);border-radius:8px;border-left:3px solid rgba(0,200,255,0.8)">
+    <div style="font-size:11px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;margin-bottom:8px">AI-Powered Insights</div>
+    <div id="insightsDisplay" style="font-size:10px;color:var(--text-secondary)">
+      No insights yet. Track a release to see recommendations.
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+    <button onclick="updatePhase32Dashboard()" style="padding:8px;background:rgba(0,200,255,0.2);border:1px solid rgba(0,200,255,0.5);color:rgba(0,200,255,1);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">🔄 Refresh Metrics</button>
+    <button onclick="document.getElementById('phase32AnalyticsPanel').style.display='none'" style="padding:8px;background:rgba(100,120,140,0.1);border:1px solid var(--border);color:var(--text-secondary);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">✕ Close</button>
+  </div>
+
+  <!-- Release Tracking Info -->
+  <div style="font-size:10px;color:var(--text-secondary);padding:8px;background:rgba(100,100,100,0.1);border-radius:4px">
+    📌 Tracked Releases: <span id="trackedReleasesCount">0</span> | Last Update: <span id="lastUpdateTime">Never</span>
+  </div>
+</div>
+
 <script>
 // === PHASE 27.1: NEURAL STEM SEPARATION ENGINE ===
 
@@ -12015,11 +12075,343 @@ function updatePhase31Dashboard() {
     `WebGL: ${gpuInfo.webgl ? 'Available' : 'Not available'} | WebGPU: ${gpuInfo.webgpu ? 'Available' : 'Not available'} | Vendor: ${gpuInfo.vendor}`;
 }
 
+// === PHASE 32: ADVANCED ANALYTICS & POST-RELEASE TRACKING ===
+
+// Function 1: Fetch Spotify metrics
+function fetchSpotifyMetrics(trackId) {
+  // Simulate Spotify API call (mock for demo)
+  const metrics = {
+    streams: Math.floor(Math.random() * 50000) + 1000,
+    saves: Math.floor(Math.random() * 5000) + 100,
+    playlists: Math.floor(Math.random() * 500) + 10,
+    popularity: Math.floor(Math.random() * 100)
+  };
+
+  postReleaseAnalyticsState.streamingMetrics.spotify.streams.push({
+    trackId, value: metrics.streams, timestamp: Date.now()
+  });
+  postReleaseAnalyticsState.streamingMetrics.spotify.saves.push({
+    trackId, value: metrics.saves, timestamp: Date.now()
+  });
+  postReleaseAnalyticsState.streamingMetrics.spotify.playlists.push({
+    trackId, value: metrics.playlists, timestamp: Date.now()
+  });
+  postReleaseAnalyticsState.streamingMetrics.spotify.popularity.push({
+    trackId, value: metrics.popularity, timestamp: Date.now()
+  });
+
+  return metrics;
+}
+
+// Function 2: Fetch Apple Music metrics
+function fetchAppleMusicMetrics(trackId) {
+  // Simulate Apple Music API call (mock for demo)
+  const metrics = {
+    plays: Math.floor(Math.random() * 30000) + 500,
+    chartPos: Math.floor(Math.random() * 200) + 1,
+    demographics: {
+      us: Math.floor(Math.random() * 40),
+      uk: Math.floor(Math.random() * 30),
+      other: Math.floor(Math.random() * 30)
+    },
+    engagement: Math.floor(Math.random() * 100)
+  };
+
+  postReleaseAnalyticsState.streamingMetrics.appleMusic.plays.push({
+    trackId, value: metrics.plays, timestamp: Date.now()
+  });
+  postReleaseAnalyticsState.streamingMetrics.appleMusic.chartPos.push({
+    trackId, value: metrics.chartPos, timestamp: Date.now()
+  });
+  postReleaseAnalyticsState.streamingMetrics.appleMusic.engagement.push({
+    trackId, value: metrics.engagement, timestamp: Date.now()
+  });
+
+  return metrics;
+}
+
+// Function 3: Fetch YouTube metrics
+function fetchYouTubeMetrics(trackId) {
+  // Simulate YouTube API call (mock for demo)
+  const metrics = {
+    views: Math.floor(Math.random() * 100000) + 5000,
+    engagement: Math.floor(Math.random() * 10000) + 100,
+    subscribers: Math.floor(Math.random() * 50000) + 1000,
+    likes: Math.floor(Math.random() * 5000) + 100
+  };
+
+  postReleaseAnalyticsState.streamingMetrics.youtube.views.push({
+    trackId, value: metrics.views, timestamp: Date.now()
+  });
+  postReleaseAnalyticsState.streamingMetrics.youtube.engagement.push({
+    trackId, value: metrics.engagement, timestamp: Date.now()
+  });
+  postReleaseAnalyticsState.streamingMetrics.youtube.subscribers.push({
+    trackId, value: metrics.subscribers, timestamp: Date.now()
+  });
+  postReleaseAnalyticsState.streamingMetrics.youtube.likes.push({
+    trackId, value: metrics.likes, timestamp: Date.now()
+  });
+
+  return metrics;
+}
+
+// Function 4: Analyze chart performance
+function analyzeChartPerformance(trackId) {
+  const history = postReleaseAnalyticsState.chartHistory;
+  const filtered = history.filter(h => h.trackId === trackId);
+
+  if (filtered.length === 0) return null;
+
+  const positions = filtered.map(h => h.chartPos || 0);
+  const momentum = positions.length > 1 ? positions[0] - positions[positions.length - 1] : 0;
+
+  return {
+    trackId,
+    highestPos: Math.min(...positions),
+    lowestPos: Math.max(...positions),
+    currentPos: positions[0] || 0,
+    momentum: momentum > 0 ? 'ascending' : momentum < 0 ? 'descending' : 'stable',
+    daysTracked: filtered.length
+  };
+}
+
+// Function 5: Generate AI insights
+function generateInsights(trackId) {
+  const spotify = postReleaseAnalyticsState.streamingMetrics.spotify;
+  const apple = postReleaseAnalyticsState.streamingMetrics.appleMusic;
+  const youtube = postReleaseAnalyticsState.streamingMetrics.youtube;
+
+  const insights = [];
+
+  // Total streams insight
+  const totalStreams = (spotify.streams[spotify.streams.length - 1]?.value || 0) +
+                       (apple.plays[apple.plays.length - 1]?.value || 0);
+
+  if (totalStreams > 50000) {
+    insights.push({
+      type: 'success',
+      message: 'Strong streaming performance! Your track is gaining momentum across platforms.',
+      metric: totalStreams,
+      recommendation: 'Consider promoting on social media to capitalize on this growth.'
+    });
+  } else if (totalStreams > 10000) {
+    insights.push({
+      type: 'neutral',
+      message: 'Steady streaming performance detected.',
+      metric: totalStreams,
+      recommendation: 'Try targeted playlist pitching to increase visibility.'
+    });
+  }
+
+  // Platform balance
+  const spotifyShare = spotify.streams[spotify.streams.length - 1]?.value || 0;
+  const appleShare = apple.plays[apple.plays.length - 1]?.value || 0;
+
+  if (spotifyShare > appleShare * 2) {
+    insights.push({
+      type: 'info',
+      message: 'Spotify is your dominant platform.',
+      recommendation: 'Maximize Spotify playlisting efforts and leverage their analytics dashboard.'
+    });
+  }
+
+  // Playlist adds
+  const playlists = spotify.playlists[spotify.playlists.length - 1]?.value || 0;
+  if (playlists > 50) {
+    insights.push({
+      type: 'success',
+      message: 'Excellent playlist coverage!',
+      metric: playlists,
+      recommendation: 'Your track appeals to curators. Maintain this momentum.'
+    });
+  }
+
+  return insights;
+}
+
+// Function 6: Benchmark against similar tracks
+function benchmarkAgainstSimilar(trackId, genre, region = 'us') {
+  // Simulate benchmarking (in real implementation, would fetch genre-specific averages)
+  const benchmark = {
+    trackId,
+    genre,
+    region,
+    avgStreamsPerTrack: Math.floor(Math.random() * 100000) + 10000,
+    avgSavesPerTrack: Math.floor(Math.random() * 10000) + 500,
+    avgPlaylistsPerTrack: Math.floor(Math.random() * 300) + 20,
+    percentile: Math.floor(Math.random() * 100),
+    comparison: []
+  };
+
+  // Generate comparison data
+  const yourStreams = postReleaseAnalyticsState.streamingMetrics.spotify.streams[
+    postReleaseAnalyticsState.streamingMetrics.spotify.streams.length - 1
+  ]?.value || 0;
+
+  const comparison = {
+    yourPerformance: yourStreams,
+    genreAverage: benchmark.avgStreamsPerTrack,
+    percentileRank: benchmark.percentile,
+    status: yourStreams > benchmark.avgStreamsPerTrack ? 'above_average' : 'below_average'
+  };
+
+  benchmark.comparison.push(comparison);
+  postReleaseAnalyticsState.benchmarks[trackId] = benchmark;
+
+  return benchmark;
+}
+
+// Function 7: Generate performance report
+function generatePerformanceReport(trackId, days = 30) {
+  const spotify = postReleaseAnalyticsState.streamingMetrics.spotify;
+  const apple = postReleaseAnalyticsState.streamingMetrics.appleMusic;
+  const youtube = postReleaseAnalyticsState.streamingMetrics.youtube;
+
+  // Aggregate metrics
+  const totalStreams = spotify.streams.reduce((sum, s) => sum + (s.value || 0), 0);
+  const totalPlays = apple.plays.reduce((sum, p) => sum + (p.value || 0), 0);
+  const totalViews = youtube.views.reduce((sum, v) => sum + (v.value || 0), 0);
+  const avgDailyStreams = spotify.streams.length > 0 ? totalStreams / Math.max(spotify.streams.length, 1) : 0;
+
+  const report = {
+    trackId,
+    generatedAt: new Date().toISOString(),
+    period: `Last ${days} days`,
+    summary: {
+      totalStreams,
+      totalPlays,
+      totalViews,
+      avgDailyStreams: Math.round(avgDailyStreams),
+      topPlatform: totalStreams > totalPlays ? 'Spotify' : totalPlays > totalViews ? 'Apple Music' : 'YouTube',
+      growthTrend: 'positive'
+    },
+    recommendations: [
+      'Continue releasing consistently to maintain listener engagement',
+      'Engage with top playlist curators on your best-performing platform',
+      'Analyze listener demographics to tailor future releases',
+      'Collaborate with artists in your genre to expand reach'
+    ]
+  };
+
+  return report;
+}
+
+// Function 8: Track release success prediction
+function predictReleaseSuccess(releaseMetadata) {
+  // Simple ML-style prediction based on metadata
+  let successScore = 0;
+
+  // Genre factor
+  const supportedGenres = ['house', 'techno', 'deep house', 'progressive', 'electro', 'drum and bass'];
+  if (supportedGenres.includes((releaseMetadata.genre || '').toLowerCase())) {
+    successScore += 15;
+  }
+
+  // Artist factor
+  if (releaseMetadata.artistName && releaseMetadata.artistName.length > 2) {
+    successScore += 20;
+  }
+
+  // Collaboration factor
+  if (releaseMetadata.featuring && releaseMetadata.featuring.length > 0) {
+    successScore += 25;
+  }
+
+  // Release timing factor
+  if (releaseMetadata.releaseDate) {
+    const day = new Date(releaseMetadata.releaseDate).getDay();
+    if (day === 5 || day === 6) { // Friday or Saturday
+      successScore += 15;
+    }
+  }
+
+  // Playlist pitching factor
+  if (releaseMetadata.playlistPitching) {
+    successScore += 20;
+  }
+
+  // Add randomness for demo
+  successScore += Math.random() * 20;
+
+  return {
+    prediction: Math.min(100, Math.max(0, successScore)),
+    confidence: 0.65 + Math.random() * 0.25,
+    factors: {
+      genre: 15,
+      artist: 20,
+      collaboration: releaseMetadata.featuring ? 25 : 0,
+      timing: 15,
+      pitching: releaseMetadata.playlistPitching ? 20 : 0,
+      uncertainty: Math.round(Math.random() * 20)
+    },
+    recommendation: successScore > 75 ? 'Very promising release' : successScore > 50 ? 'Good potential' : 'Consider improvements'
+  };
+}
+
+// Initialize Phase 32 monitoring
+function initPhase32Analytics() {
+  postReleaseAnalyticsState.lastFetch = Date.now();
+  postReleaseAnalyticsState.isMonitoring = true;
+
+  // Start periodic metric updates (every hour by default)
+  postReleaseAnalyticsState.metricsUpdateInterval = setInterval(() => {
+    if (postReleaseAnalyticsState.trackedReleases.length > 0) {
+      postReleaseAnalyticsState.trackedReleases.forEach(release => {
+        fetchSpotifyMetrics(release.id);
+        fetchAppleMusicMetrics(release.id);
+        fetchYouTubeMetrics(release.id);
+      });
+      updatePhase32Dashboard();
+    }
+  }, postReleaseAnalyticsState.refreshRate);
+
+  console.log('✓ Phase 32 Advanced Analytics initialized');
+}
+
+// Update Phase 32 dashboard
+function updatePhase32Dashboard() {
+  const panel = document.getElementById('phase32AnalyticsPanel');
+  if (!panel) return;
+
+  const spotify = postReleaseAnalyticsState.streamingMetrics.spotify;
+  const apple = postReleaseAnalyticsState.streamingMetrics.appleMusic;
+  const youtube = postReleaseAnalyticsState.streamingMetrics.youtube;
+
+  // Calculate totals
+  const latestSpotifyStreams = spotify.streams[spotify.streams.length - 1]?.value || 0;
+  const latestApplePlay = apple.plays[apple.plays.length - 1]?.value || 0;
+  const latestYouTubeViews = youtube.views[youtube.views.length - 1]?.value || 0;
+
+  document.getElementById('spotifyStreamsDisplay').textContent =
+    latestSpotifyStreams.toLocaleString();
+  document.getElementById('appleMusicPlayDisplay').textContent =
+    latestApplePlay.toLocaleString();
+  document.getElementById('youtubeViewsDisplay').textContent =
+    latestYouTubeViews.toLocaleString();
+
+  // Update insights
+  if (postReleaseAnalyticsState.trackedReleases.length > 0) {
+    const trackId = postReleaseAnalyticsState.trackedReleases[0].id;
+    const insights = generateInsights(trackId);
+
+    let insightsHTML = '';
+    insights.slice(0, 3).forEach(insight => {
+      insightsHTML += `<div style="padding:8px;margin:4px 0;background:rgba(${insight.type === 'success' ? '100,255,100' : insight.type === 'info' ? '100,100,255' : '255,100,100'},0.1);border-left:3px solid rgba(${insight.type === 'success' ? '100,255,100' : insight.type === 'info' ? '100,100,255' : '255,100,100'},0.8);font-size:11px">
+        <strong>${insight.type.toUpperCase()}</strong>: ${insight.message}
+      </div>`;
+    });
+
+    document.getElementById('insightsDisplay').innerHTML = insightsHTML || '<div style="padding:8px;color:var(--text-secondary);font-size:11px">No insights yet. Track a release to see recommendations.</div>';
+  }
+}
+
 // Initialize toggle buttons
 document.addEventListener('DOMContentLoaded', () => {
   initPhase30Distribution();
   initPhase30Analytics();
   initPhase31Performance();
+  initPhase32Analytics();
 
   // Distribution toggle button (Phase 30.3)
   const distributionToggleBtn = document.createElement('button');
@@ -12169,6 +12561,42 @@ document.addEventListener('DOMContentLoaded', () => {
     performanceToggleBtn.style.boxShadow = '0 0 20px rgba(255,200,0,0.2)';
   };
   document.body.appendChild(performanceToggleBtn);
+
+  // Analytics toggle button (Phase 32)
+  const analyticsToggle32Btn = document.createElement('button');
+  analyticsToggle32Btn.id = 'phase32AnalyticsToggleBtn';
+  analyticsToggle32Btn.textContent = '📊';
+  analyticsToggle32Btn.title = 'Advanced Analytics & Post-Release Tracking (Phase 32)';
+  analyticsToggle32Btn.onclick = () => {
+    const panel = document.getElementById('phase32AnalyticsPanel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    updatePhase32Dashboard();
+  };
+  analyticsToggle32Btn.style.cssText = `
+    position: fixed;
+    bottom: 500px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(0,200,255,0.3), rgba(0,200,255,0.1));
+    border: 2px solid rgba(0,200,255,0.5);
+    color: rgba(0,200,255,1);
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: 0 0 20px rgba(0,200,255,0.2);
+    z-index: 800;
+    transition: all 0.3s ease;
+  `;
+  analyticsToggle32Btn.onmouseover = () => {
+    analyticsToggle32Btn.style.transform = 'scale(1.1)';
+    analyticsToggle32Btn.style.boxShadow = '0 0 30px rgba(0,200,255,0.4)';
+  };
+  analyticsToggle32Btn.onmouseout = () => {
+    analyticsToggle32Btn.style.transform = 'scale(1)';
+    analyticsToggle32Btn.style.boxShadow = '0 0 20px rgba(0,200,255,0.2)';
+  };
+  document.body.appendChild(analyticsToggle32Btn);
 
   // Remix toggle button
   // Remix toggle button
