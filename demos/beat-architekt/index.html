@@ -1633,13 +1633,6 @@ let performanceHistory = {
   maxSamples: 60  // Keep 60 samples (1 per second at 60fps)
 };
 
-let performanceState = {
-  enabled: false,
-  monitoring: false,
-  warningThreshold: 80,  // CPU % that triggers warning
-  criticalThreshold: 95  // CPU % that triggers critical warning
-};
-
 // Phase 23f: Adaptive BPM Syncing to Hardware
 let sampleBPMCache = {
   buffer: null,
