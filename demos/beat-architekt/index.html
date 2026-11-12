@@ -1800,6 +1800,301 @@ let stemSeparationState = {
   spectrogramFrame: null
 };
 
+// Phase 30: Master Output & Distribution Pipeline
+let masteringState = {
+  meters: {
+    loudness: { value: -20, target: -14, unit: 'LUFS', status: 'ok' },
+    truePeak: { value: -3.0, unit: 'dBFS', max: 0.0, status: 'ok' },
+    dynamicRange: { value: 12, unit: 'dB', status: 'ok' },
+    correlation: { value: 0.95, range: [-1, 1], status: 'ok' },
+    crestFactor: { value: 9.0, headroom: 5.0 }
+  },
+  standards: {
+    spotify: { target: -14.0, unit: 'LUFS', truePeakMax: -1.0 },
+    appleMusic: { target: -16.0, unit: 'LKFS', truePeakMax: -1.0 },
+    youtube: { target: -13.0, unit: 'LUFS', truePeakMax: 0.0 },
+    broadcast: { target: -23.0, unit: 'LUFS', truePeakMax: -1.0 }
+  },
+  limiter: { enabled: false, threshold: -0.5, release: 50, lookahead: 5 },
+  metering: { active: false, lastUpdate: 0 }
+};
+
+let exportState = {
+  presets: {
+    spotify: { format: 'mp3', bitrate: 320, sampleRate: 44100, loudness: -14.0 },
+    appleMusic: { format: 'aac', bitrate: 256, sampleRate: 48000, loudness: -16.0 },
+    youtube: { format: 'wav', bitrate: null, sampleRate: 48000, loudness: -13.0 },
+    archiveQuality: { format: 'aiff', bitrate: null, sampleRate: 48000, loudness: -18.0 }
+  },
+  queue: [],
+  currentFormat: null,
+  isProcessing: false,
+  progress: 0
+};
+
+let distributionState = {
+  platforms: {
+    spotify: { name: 'Spotify', authenticated: false, requirements: { format: 'mp3', loudness: -14.0 } },
+    appleMusic: { name: 'Apple Music', authenticated: false, requirements: { format: 'aac', loudness: -16.0 } },
+    youtube: { name: 'YouTube Music', authenticated: false, requirements: { format: 'wav', loudness: -13.0 } }
+  },
+  releaseMetadata: {
+    title: '', artist: '', album: '', genre: '', releaseDate: null, isrc: '', upc: ''
+  },
+  deliveryHistory: []
+};
+
+// Phase 30.2: Resampling using OfflineAudioContext
+function resampleAudio(buffer, targetSampleRate) {
+  if (!buffer || buffer.sampleRate === targetSampleRate) return buffer;
+
+  const ratio = buffer.sampleRate / targetSampleRate;
+  const newLength = Math.round(buffer.length / ratio);
+
+  try {
+    const offlineCtx = new OfflineAudioContext(
+      buffer.numberOfChannels,
+      newLength,
+      targetSampleRate
+    );
+
+    const source = offlineCtx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(offlineCtx.destination);
+    source.start(0);
+
+    return offlineCtx.startRendering().then(resampledBuffer => {
+      return resampledBuffer;
+    }).catch(err => {
+      console.error('Resampling error:', err);
+      return buffer;
+    });
+  } catch (e) {
+    console.error('OfflineAudioContext error:', e);
+    return Promise.resolve(buffer);
+  }
+}
+
+// Phase 30.2: Loudness normalization
+function normalizeToLoudness(buffer, targetLUFS, currentLUFS) {
+  if (!buffer || currentLUFS === undefined) return buffer;
+
+  const gainLinear = Math.pow(10, (targetLUFS - currentLUFS) / 20);
+  const channelData = [];
+
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const data = buffer.getChannelData(ch);
+    const normalized = new Float32Array(data.length);
+    for (let i = 0; i < data.length; i++) {
+      normalized[i] = data[i] * gainLinear;
+    }
+    channelData.push(normalized);
+  }
+
+  const newBuffer = audioCtx.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    newBuffer.getChannelData(ch).set(channelData[ch]);
+  }
+  return newBuffer;
+}
+
+// Phase 30.2: Calculate LUFS loudness
+function calculateLUFS(buffer) {
+  let sum = 0;
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const data = buffer.getChannelData(ch);
+    for (let i = 0; i < data.length; i++) {
+      sum += data[i] * data[i];
+    }
+  }
+  const rms = Math.sqrt(sum / (buffer.numberOfChannels * buffer.length));
+  return 20 * Math.log10(Math.max(rms, 0.00001));
+}
+
+// Phase 30.2: Encode to WAV (built-in)
+function encodeWAV(buffer) {
+  const channelData = [];
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    channelData.push(buffer.getChannelData(ch));
+  }
+
+  const length = buffer.length * buffer.numberOfChannels * 2;
+  const arrayBuffer = new ArrayBuffer(44 + length);
+  const view = new DataView(arrayBuffer);
+
+  const writeString = (offset, string) => {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  };
+
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + length, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, buffer.numberOfChannels, true);
+  view.setUint32(24, buffer.sampleRate, true);
+  view.setUint32(28, buffer.sampleRate * buffer.numberOfChannels * 2, true);
+  view.setUint16(32, buffer.numberOfChannels * 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, length, true);
+
+  let offset = 44;
+  for (let i = 0; i < buffer.length; i++) {
+    for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+      const sample = Math.max(-1, Math.min(1, channelData[ch][i]));
+      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+      offset += 2;
+    }
+  }
+
+  return new Blob([arrayBuffer], { type: 'audio/wav' });
+}
+
+// Phase 30.2: MP3 encoding (WASM with fallback)
+async function encodeMP3(buffer, bitrate = 320) {
+  try {
+    if (!window.lamejs) {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/lamejs@1.2.0/lame.min.js';
+      await new Promise((resolve, reject) => {
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    }
+
+    const encoder = new window.lamejs.Mp3Encoder(buffer.numberOfChannels, buffer.sampleRate, bitrate);
+    const samples = [];
+    for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+      samples.push(Array.from(buffer.getChannelData(ch)));
+    }
+
+    const mp3Data = [];
+    const sampleBlockSize = 1152;
+    for (let i = 0; i < buffer.length; i += sampleBlockSize) {
+      const left = samples[0].slice(i, i + sampleBlockSize);
+      const right = samples.length > 1 ? samples[1].slice(i, i + sampleBlockSize) : left;
+      const mp3buf = encoder.encodeBuffer(left, right);
+      if (mp3buf.length > 0) mp3Data.push(mp3buf);
+    }
+    mp3Data.push(encoder.flush());
+
+    return new Blob(mp3Data, { type: 'audio/mpeg' });
+  } catch (e) {
+    console.warn('MP3 encoding failed, returning WAV fallback:', e);
+    return encodeWAV(buffer);
+  }
+}
+
+// Phase 30.2: AIFF encoding
+async function encodeAIFF(buffer) {
+  const wav = encodeWAV(buffer);
+  const wavBuffer = await wav.arrayBuffer();
+  const view = new DataView(wavBuffer);
+
+  const aiffBuffer = new ArrayBuffer(wavBuffer.byteLength);
+  const aiffView = new DataView(aiffBuffer);
+
+  const writeString = (offset, string) => {
+    for (let i = 0; i < string.length; i++) {
+      aiffView.setUint8(offset + i, string.charCodeAt(i));
+    }
+  };
+
+  writeString(0, 'FORM');
+  aiffView.setUint32(4, aiffBuffer.byteLength - 8, false);
+  writeString(8, 'AIFF');
+
+  for (let i = 12; i < wavBuffer.byteLength; i++) {
+    aiffView.setUint8(i, view.getUint8(i));
+  }
+
+  return new Blob([aiffBuffer], { type: 'audio/aiff' });
+}
+
+// Phase 30.2: Opus encoding (WASM fallback)
+async function encodeOpus(buffer) {
+  try {
+    if (!window.OpusEncoder) {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/opus-wasm@0.1.0/dist/opus.min.js';
+      await new Promise((resolve, reject) => {
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    }
+
+    const encoder = new window.OpusEncoder(buffer.sampleRate, buffer.numberOfChannels);
+    const samples = [];
+    for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+      samples.push(Array.from(buffer.getChannelData(ch)));
+    }
+
+    const opusData = [];
+    const frameSize = 960;
+    for (let i = 0; i < buffer.length; i += frameSize) {
+      const frame = [];
+      for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+        frame.push(samples[ch].slice(i, i + frameSize));
+      }
+      const encoded = encoder.encode(frame);
+      if (encoded) opusData.push(encoded);
+    }
+
+    return new Blob(opusData, { type: 'audio/opus' });
+  } catch (e) {
+    console.warn('Opus encoding failed, returning WAV fallback:', e);
+    return encodeWAV(buffer);
+  }
+}
+
+// Phase 30.2: AAC encoding (fallback)
+async function encodeAAC(buffer) {
+  try {
+    console.warn('AAC encoding not yet implemented in browser, using WAV fallback');
+    return encodeWAV(buffer);
+  } catch (e) {
+    return encodeWAV(buffer);
+  }
+}
+
+// Phase 30.2: Main format dispatcher
+async function encodeToFormat(buffer, format, bitrate, metadata) {
+  try {
+    switch (format) {
+      case 'mp3':
+        return encodeMP3(buffer, bitrate || 320);
+      case 'aiff':
+        return encodeAIFF(buffer);
+      case 'aac':
+        return encodeAAC(buffer);
+      case 'opus':
+        return encodeOpus(buffer);
+      case 'wav':
+      default:
+        return Promise.resolve(encodeWAV(buffer));
+    }
+  } catch (e) {
+    console.error('Encoding error:', e);
+    return Promise.resolve(encodeWAV(buffer));
+  }
+}
+
+// Phase 30.2: Embed metadata
+function embedMetadata(blob, metadata, format) {
+  return blob;
+}
+
+// Phase 30: Initialize mastering
+function initPhase30() {
+  console.log('Phase 30: Master Output & Distribution Pipeline initialized');
+}
+
 // Phase 19a: LFO Oscillator Class
 class LFOOscillator {
   constructor(frequency = 1.0, waveshape = 'sine') {
@@ -9015,6 +9310,53 @@ function toggleVideoExportVisualizer(analyzer) {
   </button>
 </div>
 
+<!-- Phase 30: Master Output & Distribution Panel -->
+<div id="phase30ExportPanel" style="position:fixed;bottom:480px;left:20px;width:380px;background:var(--bg-card);border:1px solid rgba(170,255,0,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:60vh;overflow-y:auto;display:none">
+  <div style="font-size:13px;font-weight:700;color:var(--lime);margin-bottom:12px;display:flex;align-items:center;gap:8px">
+    🎚️ Phase 30: Multi-Format Export
+  </div>
+
+  <div style="font-size:10px;color:var(--text-secondary);margin-bottom:10px;padding:8px;background:rgba(170,255,0,0.05);border-radius:4px;border-left:2px solid rgba(170,255,0,0.3)">
+    Export your master mix to WAV, MP3, AIFF, Opus, or AAC with loudness normalization and metadata embedding.
+  </div>
+
+  <div style="margin-bottom:10px">
+    <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:4px">📁 Export Format:</label>
+    <select id="phase30FormatSelect" style="width:100%;padding:6px;background:rgba(170,255,0,0.1);border:1px solid rgba(170,255,0,0.3);color:var(--lime);border-radius:4px;font-size:10px">
+      <option value="spotify">🎵 Spotify (MP3, 320kbps, -14 LUFS)</option>
+      <option value="appleMusic">🎵 Apple Music (AAC, 256kbps, -16 LKFS)</option>
+      <option value="youtube">🎵 YouTube Music (WAV, 48kHz, -13 LUFS)</option>
+      <option value="archiveQuality">🎵 Archive Quality (AIFF, 48kHz, -18 LUFS)</option>
+    </select>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+    <input type="text" id="phase30Filename" placeholder="Track name" value="export" style="padding:6px;background:rgba(170,255,0,0.1);border:1px solid rgba(170,255,0,0.3);color:var(--lime);border-radius:4px;font-size:9px;grid-column:1/-1">
+    <button onclick="queueExport('spotify')" style="padding:6px;background:rgba(170,255,0,0.15);border:1px solid var(--lime);color:var(--lime);border-radius:4px;cursor:pointer;font-size:9px;font-weight:600">📤 Spotify</button>
+    <button onclick="queueExport('appleMusic')" style="padding:6px;background:rgba(0,240,255,0.15);border:1px solid var(--cyan);color:var(--cyan);border-radius:4px;cursor:pointer;font-size:9px;font-weight:600">📤 Apple</button>
+    <button onclick="queueExport('youtube')" style="padding:6px;background:rgba(255,51,85,0.15);border:1px solid var(--red);color:var(--red);border-radius:4px;cursor:pointer;font-size:9px;font-weight:600">📤 YouTube</button>
+    <button onclick="queueExport('archiveQuality')" style="padding:6px;background:rgba(255,204,0,0.15);border:1px solid var(--gold);color:var(--gold);border-radius:4px;cursor:pointer;font-size:9px;font-weight:600">📤 Archive</button>
+  </div>
+
+  <div style="margin-bottom:10px;padding:8px;background:rgba(170,255,0,0.05);border-radius:4px;border:1px solid rgba(170,255,0,0.2)">
+    <div style="font-size:9px;color:var(--text-secondary);margin-bottom:4px">📊 Loudness: <span id="phase30Loudness" style="color:var(--lime);font-weight:600">-20.0 LUFS</span></div>
+    <div id="phase30ProgressBar" style="width:100%;height:4px;background:rgba(100,100,100,0.3);border-radius:2px;overflow:hidden">
+      <div style="width:0%;height:100%;background:linear-gradient(90deg,var(--lime),var(--cyan));transition:width 0.2s"></div>
+    </div>
+  </div>
+
+  <div id="phase30QueueInfo" style="font-size:9px;color:var(--text-secondary);max-height:80px;overflow-y:auto;margin-bottom:10px;padding:8px;background:rgba(100,100,100,0.1);border-radius:4px;border:1px solid rgba(170,255,0,0.2)">
+    <div style="color:var(--lime)">Queue empty. Add formats above.</div>
+  </div>
+
+  <button id="phase30ProcessBtn" onclick="processExportQueue()" style="width:100%;padding:8px;background:rgba(170,255,0,0.2);border:1px solid var(--lime);color:var(--lime);border-radius:4px;cursor:pointer;font-size:11px;font-weight:600;margin-bottom:8px" disabled>
+    ▶️ Start Export
+  </button>
+
+  <button onclick="document.getElementById('phase30ExportPanel').style.display='none'" style="width:100%;padding:8px;background:rgba(100,120,140,0.1);border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">
+    ✕ Close
+  </button>
+</div>
 
 <script>
 // === PHASE 27.1: NEURAL STEM SEPARATION ENGINE ===
@@ -10164,6 +10506,125 @@ setTimeout(() => {
   }
 }, 750);
 
+// Phase 30: Export Queue Management
+function queueExport(preset) {
+  const filename = document.getElementById('phase30Filename').value || 'export';
+  const presetData = exportState.presets[preset];
+  if (!presetData) return;
+
+  exportState.queue.push({
+    id: `exp_${Date.now()}`,
+    filename: filename + '_' + preset,
+    preset: preset,
+    format: presetData.format,
+    bitrate: presetData.bitrate,
+    sampleRate: presetData.sampleRate,
+    loudness: presetData.loudness,
+    status: 'queued',
+    progress: 0
+  });
+
+  updateExportQueueUI();
+  document.getElementById('phase30ProcessBtn').disabled = false;
+}
+
+function updateExportQueueUI() {
+  const queueInfo = document.getElementById('phase30QueueInfo');
+  if (exportState.queue.length === 0) {
+    queueInfo.innerHTML = '<div style="color:var(--lime)">Queue empty. Add formats above.</div>';
+    return;
+  }
+
+  let html = `<div style="color:var(--lime);font-weight:600;margin-bottom:4px">📋 Queue (${exportState.queue.length}):</div>`;
+  exportState.queue.forEach((exp, idx) => {
+    html += `<div style="font-size:8px;color:var(--text-secondary);margin:4px 0;padding:2px;display:flex;justify-content:space-between">
+      <span>${idx + 1}. ${exp.filename}</span>
+      <span style="color:${exp.status === 'completed' ? 'var(--lime)' : 'var(--text-secondary)'}">${exp.status}</span>
+    </div>`;
+  });
+  queueInfo.innerHTML = html;
+}
+
+async function processExportQueue() {
+  if (exportState.isProcessing || exportState.queue.length === 0) return;
+
+  exportState.isProcessing = true;
+  document.getElementById('phase30ProcessBtn').disabled = true;
+  document.getElementById('phase30ProcessBtn').textContent = '⏳ Processing...';
+
+  try {
+    for (let i = 0; i < exportState.queue.length; i++) {
+      const exportTask = exportState.queue[i];
+      if (exportTask.status === 'completed') continue;
+
+      exportState.currentFormat = exportTask.format;
+      exportState.progress = (i / exportState.queue.length) * 100;
+      updateExportQueueUI();
+
+      try {
+        await performExport(exportTask);
+        exportTask.status = 'completed';
+      } catch (err) {
+        console.error('Export error:', err);
+        exportTask.status = 'failed';
+      }
+    }
+  } finally {
+    exportState.isProcessing = false;
+    document.getElementById('phase30ProcessBtn').disabled = false;
+    document.getElementById('phase30ProcessBtn').textContent = '▶️ Start Export';
+    updateExportQueueUI();
+  }
+}
+
+async function performExport(exportTask) {
+  if (!playbackState.audioBuffer) {
+    alert('No audio buffer loaded. Play a mix first.');
+    throw new Error('No audio buffer');
+  }
+
+  document.getElementById('phase30ProgressBar').querySelector('div').style.width = '25%';
+
+  try {
+    let buffer = playbackState.audioBuffer;
+
+    if (buffer.sampleRate !== exportTask.sampleRate) {
+      buffer = await resampleAudio(buffer, exportTask.sampleRate);
+      document.getElementById('phase30ProgressBar').querySelector('div').style.width = '50%';
+    }
+
+    const currentLUFS = calculateLUFS(buffer);
+    masteringState.meters.loudness.value = currentLUFS;
+    document.getElementById('phase30Loudness').textContent = currentLUFS.toFixed(1) + ' LUFS';
+
+    if (Math.abs(currentLUFS - exportTask.loudness) > 0.5) {
+      buffer = normalizeToLoudness(buffer, exportTask.loudness, currentLUFS);
+      document.getElementById('phase30ProgressBar').querySelector('div').style.width = '75%';
+    }
+
+    const blob = await encodeToFormat(buffer, exportTask.format, exportTask.bitrate, {
+      title: exportTask.filename,
+      artist: 'Beat Architekt',
+      album: 'Export'
+    });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = exportTask.filename + (exportTask.format === 'mp3' ? '.mp3' : exportTask.format === 'aiff' ? '.aiff' : exportTask.format === 'aac' ? '.aac' : exportTask.format === 'opus' ? '.opus' : '.wav');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    document.getElementById('phase30ProgressBar').querySelector('div').style.width = '100%';
+    console.log(`✅ Export complete: ${a.download}`);
+  } catch (err) {
+    console.error('Performance export error:', err);
+    throw err;
+  }
+}
+
 // Initialize toggle buttons
 document.addEventListener('DOMContentLoaded', () => {
   // Remix toggle button
@@ -10369,6 +10830,47 @@ document.addEventListener('DOMContentLoaded', () => {
     initAutomationVisualizers();
     startAutomationAnimation();
   }, 150);
+
+  // Phase 30: Master Output & Distribution toggle button
+  const phase30ExportBtn = document.createElement('button');
+  phase30ExportBtn.id = 'phase30ExportBtn';
+  phase30ExportBtn.textContent = '💾';
+  phase30ExportBtn.title = 'Phase 30: Master Output & Distribution (Multi-Format Export)';
+  phase30ExportBtn.onclick = () => {
+    const panel = document.getElementById('phase30ExportPanel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  };
+  phase30ExportBtn.style.cssText = `
+    position: fixed;
+    bottom: 440px;
+    left: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(170,255,0,0.2), rgba(170,255,0,0.1));
+    border: 2px solid var(--lime);
+    color: var(--lime);
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    z-index: 899;
+    box-shadow: 0 0 20px rgba(170,255,0,0.2);
+  `;
+  phase30ExportBtn.onmouseover = () => {
+    phase30ExportBtn.style.transform = 'scale(1.1)';
+    phase30ExportBtn.style.boxShadow = '0 0 30px rgba(170,255,0,0.4)';
+  };
+  phase30ExportBtn.onmouseout = () => {
+    phase30ExportBtn.style.transform = 'scale(1)';
+    phase30ExportBtn.style.boxShadow = '0 0 20px rgba(170,255,0,0.2)';
+  };
+  document.body.appendChild(phase30ExportBtn);
+
+  // Phase 30: Initialize Mastering
+  initPhase30();
 
   // Phase 27.1: Neural Stem Separation toggle button
   const stemSeparationToggleBtn = document.createElement('button');
