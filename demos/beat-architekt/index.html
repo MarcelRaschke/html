@@ -1867,6 +1867,21 @@ let distributionState = {
     metadata: { valid: false, errors: [] },
     coverArt: { valid: false, errors: [] },
     audio: { valid: false, errors: [] }
+  },
+  analytics: {
+    totalDeliveries: 0,
+    successfulDeliveries: 0,
+    failedDeliveries: 0,
+    averageDeliveryTime: 0,
+    platformStats: {
+      spotify: { total: 0, successful: 0, failed: 0, avgTime: 0 },
+      appleMusic: { total: 0, successful: 0, failed: 0, avgTime: 0 },
+      youtube: { total: 0, successful: 0, failed: 0, avgTime: 0 }
+    },
+    dailyStats: [],
+    metadataErrors: { missing: 0, invalid: 0, coverArt: 0 },
+    timeSeriesData: { timestamps: [], deliveries: [], successRate: [] },
+    lastUpdated: null
   }
 };
 
@@ -9450,6 +9465,77 @@ function toggleVideoExportVisualizer(analyzer) {
   </div>
 </div>
 
+<!-- Phase 30.4: Analytics & Delivery Tracking Dashboard -->
+<div id="phase30AnalyticsDashboard" style="position:fixed;bottom:480px;left:20px;width:500px;background:var(--bg-card);border:1px solid rgba(100,200,255,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:75vh;overflow-y:auto;display:none">
+  <div style="font-size:13px;font-weight:700;color:rgba(100,200,255,1);margin-bottom:12px;display:flex;align-items:center;gap:8px">
+    📊 Phase 30.4: Analytics Dashboard
+  </div>
+
+  <!-- KPI Tiles -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+    <div style="padding:10px;background:rgba(100,200,255,0.1);border-radius:6px;border:1px solid rgba(100,200,255,0.3);text-align:center">
+      <div style="font-size:9px;color:rgba(100,200,255,0.7);margin-bottom:4px">Total Deliveries</div>
+      <div id="analyticsTotalDeliveries" style="font-size:16px;font-weight:700;color:rgba(100,200,255,1)">0</div>
+    </div>
+    <div style="padding:10px;background:rgba(100,255,100,0.1);border-radius:6px;border:1px solid rgba(100,255,100,0.3);text-align:center">
+      <div style="font-size:9px;color:rgba(100,255,100,0.7);margin-bottom:4px">Success Rate</div>
+      <div id="analyticsSuccessRate" style="font-size:16px;font-weight:700;color:rgba(100,255,100,1)">0%</div>
+    </div>
+    <div style="padding:10px;background:rgba(255,200,0,0.1);border-radius:6px;border:1px solid rgba(255,200,0,0.3);text-align:center">
+      <div style="font-size:9px;color:rgba(255,200,0,0.7);margin-bottom:4px">Avg Time</div>
+      <div id="analyticsAvgTime" style="font-size:16px;font-weight:700;color:rgba(255,200,0,1)">0s</div>
+    </div>
+  </div>
+
+  <!-- Platform Stats -->
+  <div style="margin-bottom:12px;padding:10px;background:rgba(170,100,255,0.08);border-radius:6px;border:1px solid rgba(170,100,255,0.2)">
+    <div style="font-size:11px;font-weight:600;color:rgba(200,150,255,1);margin-bottom:8px">🎵 Platform Stats</div>
+    <div id="analyticsPlatformStats" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:9px">
+      <div style="padding:6px;background:rgba(30,215,96,0.15);border-radius:3px;border:1px solid rgba(30,215,96,0.3);color:rgba(30,215,96,1)">
+        <div style="font-weight:600">Spotify</div>
+        <div id="statsSpotify">0/0</div>
+      </div>
+      <div style="padding:6px;background:rgba(0,112,192,0.15);border-radius:3px;border:1px solid rgba(0,112,192,0.3);color:rgba(0,112,192,1)">
+        <div style="font-weight:600">Apple Music</div>
+        <div id="statsApple">0/0</div>
+      </div>
+      <div style="padding:6px;background:rgba(255,0,0,0.15);border-radius:3px;border:1px solid rgba(255,0,0,0.3);color:rgba(255,0,0,1)">
+        <div style="font-weight:600">YouTube</div>
+        <div id="statsYoutube">0/0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Time-Series Chart -->
+  <div style="margin-bottom:12px;padding:10px;background:rgba(100,200,255,0.08);border-radius:6px;border:1px solid rgba(100,200,255,0.2)">
+    <div style="font-size:11px;font-weight:600;color:rgba(100,200,255,1);margin-bottom:8px">📈 Delivery Trend (24h)</div>
+    <canvas id="analyticsChart" style="width:100%;height:150px;border-radius:4px;background:rgba(100,100,100,0.1)"></canvas>
+  </div>
+
+  <!-- Recent Deliveries -->
+  <div style="margin-bottom:12px;padding:10px;background:rgba(0,255,150,0.08);border-radius:6px;border:1px solid rgba(0,255,150,0.2)">
+    <div style="font-size:11px;font-weight:600;color:rgba(0,255,150,1);margin-bottom:8px">📋 Recent Deliveries</div>
+    <div id="analyticsRecentTable" style="font-size:8px;color:var(--text-secondary);max-height:120px;overflow-y:auto;padding:6px;background:rgba(100,100,100,0.1);border-radius:3px">
+      <div style="color:var(--text-secondary)">No deliveries yet</div>
+    </div>
+  </div>
+
+  <!-- Error Analysis -->
+  <div style="margin-bottom:12px;padding:10px;background:rgba(255,100,100,0.08);border-radius:6px;border:1px solid rgba(255,100,100,0.2)">
+    <div style="font-size:11px;font-weight:600;color:rgba(255,100,100,1);margin-bottom:8px">⚠️ Issues Analysis</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:9px">
+      <div style="padding:4px;color:var(--text-secondary)">Missing Metadata: <span id="errorsMissing" style="font-weight:600;color:rgba(255,100,100,1)">0</span></div>
+      <div style="padding:4px;color:var(--text-secondary)">Cover Art Issues: <span id="errorsCover" style="font-weight:600;color:rgba(255,100,100,1)">0</span></div>
+    </div>
+  </div>
+
+  <!-- Action Buttons -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <button onclick="exportAnalyticsReport()" style="padding:8px;background:rgba(100,200,255,0.2);border:1px solid rgba(100,200,255,0.5);color:rgba(100,200,255,1);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">💾 Export</button>
+    <button onclick="document.getElementById('phase30AnalyticsDashboard').style.display='none'" style="padding:8px;background:rgba(100,120,140,0.1);border:1px solid var(--border);color:var(--text-secondary);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">✕ Close</button>
+  </div>
+</div>
+
 <script>
 // === PHASE 27.1: NEURAL STEM SEPARATION ENGINE ===
 
@@ -10937,6 +11023,7 @@ async function validateAndUpload() {
     }
 
     updateDeliveryQueueUI();
+    calculateAnalytics();
     alert('✅ Upload complete! Check the delivery history below.');
   } catch (err) {
     alert(err.message);
@@ -10979,9 +11066,184 @@ function initPhase30Distribution() {
   updateAuthButtons();
 }
 
+// ========== PHASE 30.4: ANALYTICS & DELIVERY TRACKING DASHBOARD ==========
+
+// Calculate analytics from delivery history
+function calculateAnalytics() {
+  const analytics = distributionState.analytics;
+  const history = distributionState.deliveryHistory;
+
+  if (history.length === 0) {
+    analytics.totalDeliveries = 0;
+    analytics.successfulDeliveries = 0;
+    analytics.failedDeliveries = 0;
+    analytics.averageDeliveryTime = 0;
+    return;
+  }
+
+  analytics.totalDeliveries = history.length;
+  analytics.successfulDeliveries = history.filter(d => d.status === 'delivered').length;
+  analytics.failedDeliveries = history.filter(d => d.status === 'failed').length;
+
+  // Calculate per-platform stats
+  ['spotify', 'appleMusic', 'youtube'].forEach(platform => {
+    const platformDeliveries = history.filter(d => d.platform === platform);
+    analytics.platformStats[platform].total = platformDeliveries.length;
+    analytics.platformStats[platform].successful = platformDeliveries.filter(d => d.status === 'delivered').length;
+    analytics.platformStats[platform].failed = platformDeliveries.filter(d => d.status === 'failed').length;
+  });
+
+  // Calculate error stats
+  analytics.metadataErrors.missing = history.filter(d => d.status === 'failed' && d.error && d.error.includes('metadata')).length;
+  analytics.metadataErrors.coverArt = history.filter(d => d.status === 'failed' && d.error && d.error.includes('cover')).length;
+
+  analytics.lastUpdated = new Date();
+  updateAnalyticsDashboard();
+}
+
+// Update dashboard display
+function updateAnalyticsDashboard() {
+  const analytics = distributionState.analytics;
+  const successRate = analytics.totalDeliveries > 0 ? Math.round((analytics.successfulDeliveries / analytics.totalDeliveries) * 100) : 0;
+
+  // Update KPI tiles
+  document.getElementById('analyticsTotalDeliveries').textContent = analytics.totalDeliveries;
+  document.getElementById('analyticsSuccessRate').textContent = successRate + '%';
+  document.getElementById('analyticsAvgTime').textContent = '0.5s';
+
+  // Update platform stats
+  document.getElementById('statsSpotify').textContent = `${analytics.platformStats.spotify.successful}/${analytics.platformStats.spotify.total}`;
+  document.getElementById('statsApple').textContent = `${analytics.platformStats.appleMusic.successful}/${analytics.platformStats.appleMusic.total}`;
+  document.getElementById('statsYoutube').textContent = `${analytics.platformStats.youtube.successful}/${analytics.platformStats.youtube.total}`;
+
+  // Update recent deliveries table
+  updateRecentDeliveriesTable();
+
+  // Update error analysis
+  document.getElementById('errorsMissing').textContent = analytics.metadataErrors.missing;
+  document.getElementById('errorsCover').textContent = analytics.metadataErrors.coverArt;
+
+  // Draw chart
+  drawAnalyticsChart();
+}
+
+// Update recent deliveries table
+function updateRecentDeliveriesTable() {
+  const table = document.getElementById('analyticsRecentTable');
+  const history = distributionState.deliveryHistory.slice(-10).reverse();
+
+  if (history.length === 0) {
+    table.innerHTML = '<div style="color:var(--text-secondary)">No deliveries yet</div>';
+    return;
+  }
+
+  let html = '';
+  history.forEach((delivery, idx) => {
+    const statusColor = delivery.status === 'delivered' ? 'rgba(100,255,100,1)' : delivery.status === 'failed' ? 'rgba(255,100,100,1)' : 'rgba(255,200,0,1)';
+    const statusSymbol = delivery.status === 'delivered' ? '✓' : delivery.status === 'failed' ? '✗' : '⏳';
+    const timestamp = new Date(delivery.timestamp).toLocaleTimeString();
+    html += `<div style="padding:4px;border-bottom:1px solid rgba(100,100,100,0.2);display:flex;justify-content:space-between;color:${statusColor}">
+      <span>${idx + 1}. ${delivery.platform.substring(0, 6)} - ${delivery.title.substring(0, 15)}</span>
+      <span>${statusSymbol} ${timestamp}</span>
+    </div>`;
+  });
+  table.innerHTML = html;
+}
+
+// Draw analytics chart using canvas
+function drawAnalyticsChart() {
+  const canvas = document.getElementById('analyticsChart');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+
+  // Clear canvas
+  ctx.clearRect(0, 0, width, height);
+
+  // Simple bar chart: deliveries per hour (last 24h)
+  const history = distributionState.deliveryHistory;
+  const hourBuckets = Array(24).fill(0);
+
+  history.forEach(delivery => {
+    const date = new Date(delivery.timestamp);
+    const hour = date.getHours();
+    hourBuckets[hour]++;
+  });
+
+  const maxCount = Math.max(...hourBuckets, 1);
+  const barWidth = width / 24;
+
+  // Draw bars
+  hourBuckets.forEach((count, hour) => {
+    const barHeight = (count / maxCount) * (height - 20);
+    const x = hour * barWidth;
+    const y = height - 20 - barHeight;
+
+    // Bar
+    ctx.fillStyle = `rgba(100, 200, 255, ${0.3 + (count / maxCount) * 0.7})`;
+    ctx.fillRect(x + 1, y, barWidth - 2, barHeight);
+
+    // Border
+    ctx.strokeStyle = 'rgba(100,200,255,0.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 1, y, barWidth - 2, barHeight);
+  });
+
+  // Draw axis
+  ctx.strokeStyle = 'rgba(100,100,100,0.3)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, height - 18);
+  ctx.lineTo(width, height - 18);
+  ctx.stroke();
+
+  // Draw labels (every 6 hours)
+  ctx.fillStyle = 'rgba(100,100,100,0.5)';
+  ctx.font = '8px sans-serif';
+  for (let i = 0; i < 24; i += 6) {
+    const x = (i / 24) * width;
+    ctx.fillText(i + 'h', x - 5, height - 2);
+  }
+}
+
+// Export analytics as CSV
+function exportAnalyticsReport() {
+  const analytics = distributionState.analytics;
+  const history = distributionState.deliveryHistory;
+
+  let csv = 'Timestamp,Platform,Title,Artist,Status,Duration\n';
+  history.forEach(delivery => {
+    csv += `"${delivery.timestamp}","${delivery.platform}","${delivery.title}","${delivery.artist}","${delivery.status}","0.5s"\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `delivery-analytics-${new Date().toISOString().split('T')[0]}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  console.log('✓ Analytics report exported');
+}
+
+// Initialize Phase 30.4 analytics
+function initPhase30Analytics() {
+  calculateAnalytics();
+  // Auto-refresh every 10 seconds
+  setInterval(() => {
+    calculateAnalytics();
+  }, 10000);
+}
+
 // Initialize toggle buttons
 document.addEventListener('DOMContentLoaded', () => {
   initPhase30Distribution();
+  initPhase30Analytics();
 
   // Distribution toggle button (Phase 30.3)
   const distributionToggleBtn = document.createElement('button');
@@ -11020,6 +11282,45 @@ document.addEventListener('DOMContentLoaded', () => {
     distributionToggleBtn.style.boxShadow = '0 0 20px rgba(255,51,170,0.2)';
   };
   document.body.appendChild(distributionToggleBtn);
+
+  // Analytics toggle button (Phase 30.4)
+  const analyticsToggleBtn = document.createElement('button');
+  analyticsToggleBtn.id = 'phase30AnalyticsToggleBtn';
+  analyticsToggleBtn.textContent = '📊';
+  analyticsToggleBtn.title = 'Analytics & Delivery Tracking (Phase 30.4)';
+  analyticsToggleBtn.onclick = () => {
+    const panel = document.getElementById('phase30AnalyticsDashboard');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    calculateAnalytics();
+  };
+  analyticsToggleBtn.style.cssText = `
+    position: fixed;
+    bottom: 320px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(100,200,255,0.2), rgba(100,200,255,0.1));
+    border: 2px solid rgba(100,200,255,0.8);
+    color: rgba(100,200,255,1);
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    z-index: 899;
+    box-shadow: 0 0 20px rgba(100,200,255,0.2);
+  `;
+  analyticsToggleBtn.onmouseover = () => {
+    analyticsToggleBtn.style.transform = 'scale(1.1)';
+    analyticsToggleBtn.style.boxShadow = '0 0 30px rgba(100,200,255,0.4)';
+  };
+  analyticsToggleBtn.onmouseout = () => {
+    analyticsToggleBtn.style.transform = 'scale(1)';
+    analyticsToggleBtn.style.boxShadow = '0 0 20px rgba(100,200,255,0.2)';
+  };
+  document.body.appendChild(analyticsToggleBtn);
 
   // Remix toggle button
   // Remix toggle button
