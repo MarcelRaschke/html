@@ -1900,6 +1900,27 @@ let releaseSchedulingState = {
   nextCheckTime: null
 };
 
+// Phase 31: Performance Optimization & Monitoring
+let performanceState = {
+  metrics: {
+    cpuUsage: { value: 0, peak: 0, average: 0, history: [] },
+    memoryUsage: { value: 0, peak: 0, average: 0, history: [] },
+    audioLatency: { value: 0, target: 5, history: [] },
+    bufferUtilization: { input: 0, output: 0, processing: 0 }
+  },
+  moduleStats: {},
+  timeline: [],
+  configuration: {
+    cpuBudget: 70,
+    memoryLimit: 512,
+    qualityMode: 'balanced',
+    enableGPU: false
+  },
+  startTime: null,
+  lastMeasure: null,
+  profiling: false
+};
+
 // Phase 30.2: Resampling using OfflineAudioContext
 function resampleAudio(buffer, targetSampleRate) {
   if (!buffer || buffer.sampleRate === targetSampleRate) return buffer;
@@ -9638,6 +9659,84 @@ function toggleVideoExportVisualizer(analyzer) {
   <button onclick="document.getElementById('phase30SchedulingPanel').style.display='none'" style="width:100%;padding:8px;background:rgba(100,120,140,0.1);border:1px solid var(--border);color:var(--text-secondary);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">✕ Close</button>
 </div>
 
+<!-- Phase 31: Performance Optimization & Monitoring -->
+<div id="phase31PerformancePanel" style="position:fixed;bottom:600px;left:20px;width:540px;background:var(--bg-card);border:1px solid rgba(255,200,0,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:75vh;overflow-y:auto;display:none">
+  <div style="font-size:13px;font-weight:700;color:rgba(255,200,0,1);margin-bottom:12px">⚙️ Phase 31: Performance Optimization</div>
+
+  <!-- Real-Time Metrics -->
+  <div style="margin-bottom:12px;padding:10px;background:rgba(0,255,150,0.08);border-radius:6px;border:1px solid rgba(0,255,150,0.2)">
+    <div style="font-size:11px;font-weight:600;color:rgba(0,255,150,1);margin-bottom:8px">📊 Real-Time Metrics</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div style="padding:8px;background:rgba(100,100,100,0.1);border-radius:4px;text-align:center">
+        <div style="font-size:8px;color:var(--text-secondary)">CPU Usage</div>
+        <div style="font-size:16px;font-weight:700;color:rgba(0,255,150,1)" id="cpuUsageDisplay">0%</div>
+      </div>
+      <div style="padding:8px;background:rgba(100,100,100,0.1);border-radius:4px;text-align:center">
+        <div style="font-size:8px;color:var(--text-secondary)">Memory</div>
+        <div style="font-size:16px;font-weight:700;color:rgba(100,200,255,1)" id="memoryUsageDisplay">0MB</div>
+      </div>
+      <div style="padding:8px;background:rgba(100,100,100,0.1);border-radius:4px;text-align:center">
+        <div style="font-size:8px;color:var(--text-secondary)">Latency</div>
+        <div style="font-size:16px;font-weight:700;color:rgba(255,200,0,1)" id="latencyDisplay">0ms</div>
+      </div>
+      <div style="padding:8px;background:rgba(100,100,100,0.1);border-radius:4px;text-align:center">
+        <div style="font-size:8px;color:var(--text-secondary)">Peak CPU</div>
+        <div style="font-size:16px;font-weight:700;color:rgba(255,150,150,1)" id="peakCpuDisplay">0%</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Performance Chart -->
+  <div style="margin-bottom:12px;padding:10px;background:rgba(100,200,255,0.08);border-radius:6px;border:1px solid rgba(100,200,255,0.2)">
+    <div style="font-size:11px;font-weight:600;color:rgba(100,200,255,1);margin-bottom:8px">📈 Performance Timeline (60s)</div>
+    <canvas id="performanceChart" style="width:100%;height:120px;border-radius:4px;background:rgba(100,100,100,0.1)"></canvas>
+  </div>
+
+  <!-- Quality Profile -->
+  <div style="margin-bottom:12px;padding:10px;background:rgba(170,100,255,0.08);border-radius:6px;border:1px solid rgba(170,100,255,0.2)">
+    <div style="font-size:11px;font-weight:600;color:rgba(200,150,255,1);margin-bottom:8px">⚡ Quality Profile</div>
+    <select id="qualityProfileSelect" onchange="applyQualityProfile(this.value)" style="width:100%;padding:8px;background:rgba(100,100,100,0.2);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:10px;margin-bottom:8px">
+      <option value="high-quality">High Quality (100% CPU Budget)</option>
+      <option value="balanced" selected>Balanced (70% CPU Budget)</option>
+      <option value="performance">Performance Focused (50% CPU Budget)</option>
+    </select>
+  </div>
+
+  <!-- Hot Paths Analysis -->
+  <div style="margin-bottom:12px;padding:10px;background:rgba(255,100,100,0.08);border-radius:6px;border:1px solid rgba(255,100,100,0.2)">
+    <div style="font-size:11px;font-weight:600;color:rgba(255,100,100,1);margin-bottom:8px">🔥 Hot Paths (>5% CPU)</div>
+    <div id="hotPathsDisplay" style="font-size:8px;color:var(--text-secondary);max-height:80px;overflow-y:auto;padding:6px;background:rgba(100,100,100,0.1);border-radius:2px">
+      No heavy functions detected.
+    </div>
+  </div>
+
+  <!-- GPU Status -->
+  <div style="margin-bottom:12px;padding:10px;background:rgba(100,200,255,0.08);border-radius:6px;border:1px solid rgba(100,200,255,0.2)">
+    <div style="font-size:11px;font-weight:600;color:rgba(100,200,255,1);margin-bottom:8px">🎮 Acceleration Status</div>
+    <div id="gpuStatusDisplay" style="font-size:9px;color:var(--text-secondary)">WebGL: Detecting... | WebGPU: Detecting...</div>
+  </div>
+
+  <!-- Configuration -->
+  <div style="margin-bottom:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div>
+      <label style="font-size:9px;color:var(--text-secondary)">CPU Budget (%)</label>
+      <input id="cpuBudgetInput" type="range" min="10" max="100" value="70" style="width:100%;height:4px;border-radius:2px;background:rgba(100,100,100,0.2);cursor:pointer" oninput="performanceState.configuration.cpuBudget = this.value; document.getElementById('budgetDisplay').textContent = this.value + '%'">
+      <div style="font-size:8px;color:var(--text-secondary);margin-top:2px">Budget: <span id="budgetDisplay">70</span>%</div>
+    </div>
+    <div>
+      <label style="font-size:9px;color:var(--text-secondary)">Memory Limit (MB)</label>
+      <input id="memoryLimitInput" type="range" min="256" max="1024" value="512" style="width:100%;height:4px;border-radius:2px;background:rgba(100,100,100,0.2);cursor:pointer" oninput="performanceState.configuration.memoryLimit = this.value; document.getElementById('memLimitDisplay').textContent = this.value">
+      <div style="font-size:8px;color:var(--text-secondary);margin-top:2px">Limit: <span id="memLimitDisplay">512</span>MB</div>
+    </div>
+  </div>
+
+  <!-- Action Buttons -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <button onclick="updatePerformanceMetrics(); drawPerformanceDashboard()" style="padding:8px;background:rgba(0,255,150,0.2);border:1px solid rgba(0,255,150,0.5);color:rgba(0,255,150,1);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">🔄 Refresh</button>
+    <button onclick="document.getElementById('phase31PerformancePanel').style.display='none'" style="padding:8px;background:rgba(100,120,140,0.1);border:1px solid var(--border);color:var(--text-secondary);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">✕ Close</button>
+  </div>
+</div>
+
 <script>
 // === PHASE 27.1: NEURAL STEM SEPARATION ENGINE ===
 
@@ -11669,10 +11768,265 @@ function updateWorkflowUI() {
   workflowDisplay.innerHTML = html;
 }
 
+// === PHASE 31: PERFORMANCE OPTIMIZATION & MONITORING ===
+
+// Profile CPU/memory for a specific function
+function profileFunction(functionName, fn, iterations = 100) {
+  const startMem = performance.memory?.usedJSHeapSize || 0;
+  const startTime = performance.now();
+
+  for (let i = 0; i < iterations; i++) {
+    fn();
+  }
+
+  const endTime = performance.now();
+  const endMem = performance.memory?.usedJSHeapSize || 0;
+
+  const result = {
+    functionName,
+    avgTime: (endTime - startTime) / iterations,
+    totalTime: endTime - startTime,
+    memDelta: (endMem - startMem) / (1024 * 1024),
+    cpuPercent: ((endTime - startTime) / 16.67) * 100
+  };
+
+  if (!performanceState.moduleStats[functionName]) {
+    performanceState.moduleStats[functionName] = [];
+  }
+  performanceState.moduleStats[functionName].push(result);
+
+  return result;
+}
+
+// Analyze hot paths (functions consuming >5% CPU)
+function analyzeHotPaths() {
+  const hotPaths = [];
+
+  Object.entries(performanceState.moduleStats).forEach(([name, stats]) => {
+    if (stats.length > 0) {
+      const latest = stats[stats.length - 1];
+      if (latest.cpuPercent > 5) {
+        hotPaths.push({
+          name,
+          cpuPercent: latest.cpuPercent,
+          avgTime: latest.avgTime,
+          memDelta: latest.memDelta
+        });
+      }
+    }
+  });
+
+  return hotPaths.sort((a, b) => b.cpuPercent - a.cpuPercent);
+}
+
+// Measure audio latency (end-to-end processing)
+function measureAudioLatency() {
+  if (!audioCtx || !playbackState.playing) return 0;
+
+  const latency = audioCtx.outputLatency * 1000 + (audioCtx.baseLatency * 1000 || 0);
+
+  performanceState.metrics.audioLatency.value = latency;
+  performanceState.metrics.audioLatency.history.push({
+    value: latency,
+    timestamp: Date.now()
+  });
+
+  // Keep only last 60 seconds
+  const cutoff = Date.now() - 60000;
+  performanceState.metrics.audioLatency.history = performanceState.metrics.audioLatency.history.filter(h => h.timestamp > cutoff);
+
+  return latency;
+}
+
+// Update performance metrics (CPU, memory, latency)
+function updatePerformanceMetrics() {
+  // CPU usage (simplified - based on frame timing)
+  const now = performance.now();
+  if (performanceState.lastMeasure) {
+    const frameTime = now - performanceState.lastMeasure;
+    const cpuUsage = Math.min(100, (frameTime / 16.67) * 100); // 16.67ms = 60 FPS
+
+    performanceState.metrics.cpuUsage.value = cpuUsage;
+    performanceState.metrics.cpuUsage.peak = Math.max(performanceState.metrics.cpuUsage.peak, cpuUsage);
+    performanceState.metrics.cpuUsage.history.push({ value: cpuUsage, timestamp: now });
+
+    if (performanceState.metrics.cpuUsage.history.length > 1800) { // 30 seconds at 60 FPS
+      performanceState.metrics.cpuUsage.history.shift();
+    }
+  }
+  performanceState.lastMeasure = now;
+
+  // Memory usage
+  if (performance.memory) {
+    const memMB = performance.memory.usedJSHeapSize / (1024 * 1024);
+    performanceState.metrics.memoryUsage.value = memMB;
+    performanceState.metrics.memoryUsage.peak = Math.max(performanceState.metrics.memoryUsage.peak, memMB);
+    performanceState.metrics.memoryUsage.history.push({ value: memMB, timestamp: now });
+
+    if (performanceState.metrics.memoryUsage.history.length > 60) { // 60 seconds
+      performanceState.metrics.memoryUsage.history.shift();
+    }
+  }
+
+  // Audio latency
+  measureAudioLatency();
+
+  // Calculate averages
+  if (performanceState.metrics.cpuUsage.history.length > 0) {
+    const avg = performanceState.metrics.cpuUsage.history.reduce((sum, h) => sum + h.value, 0) / performanceState.metrics.cpuUsage.history.length;
+    performanceState.metrics.cpuUsage.average = avg;
+  }
+
+  if (performanceState.metrics.memoryUsage.history.length > 0) {
+    const avg = performanceState.metrics.memoryUsage.history.reduce((sum, h) => sum + h.value, 0) / performanceState.metrics.memoryUsage.history.length;
+    performanceState.metrics.memoryUsage.average = avg;
+  }
+}
+
+// Draw performance monitoring dashboard
+function drawPerformanceDashboard() {
+  const canvas = document.getElementById('performanceChart');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+
+  // Clear canvas
+  ctx.fillStyle = 'rgba(15, 21, 32, 1)';
+  ctx.fillRect(0, 0, width, height);
+
+  // Draw CPU history (green)
+  ctx.strokeStyle = 'rgba(0, 255, 150, 0.8)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+
+  const cpuHistory = performanceState.metrics.cpuUsage.history;
+  if (cpuHistory.length > 0) {
+    const maxCPU = Math.max(100, Math.max(...cpuHistory.map(h => h.value)));
+    cpuHistory.forEach((point, i) => {
+      const x = (i / Math.max(1, cpuHistory.length - 1)) * width;
+      const y = height - (point.value / maxCPU) * (height * 0.6);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+  }
+  ctx.stroke();
+
+  // Draw memory history (cyan)
+  ctx.strokeStyle = 'rgba(100, 200, 255, 0.8)';
+  ctx.beginPath();
+
+  const memHistory = performanceState.metrics.memoryUsage.history;
+  if (memHistory.length > 0) {
+    const maxMem = Math.max(512, Math.max(...memHistory.map(h => h.value)));
+    memHistory.forEach((point, i) => {
+      const x = (i / Math.max(1, memHistory.length - 1)) * width;
+      const y = height - (point.value / maxMem) * (height * 0.6);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+  }
+  ctx.stroke();
+
+  // Draw budget line
+  ctx.strokeStyle = 'rgba(255, 100, 100, 0.5)';
+  ctx.setLineDash([5, 5]);
+  const budgetY = height - (performanceState.configuration.cpuBudget / 100) * (height * 0.6);
+  ctx.beginPath();
+  ctx.moveTo(0, budgetY);
+  ctx.lineTo(width, budgetY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// Apply quality profile (high-quality, balanced, performance-focused)
+function applyQualityProfile(profile) {
+  performanceState.configuration.qualityMode = profile;
+
+  const profiles = {
+    'high-quality': { cpuBudget: 100, enabled: true },
+    'balanced': { cpuBudget: 70, enabled: true },
+    'performance': { cpuBudget: 50, enabled: true }
+  };
+
+  const config = profiles[profile];
+  if (config) {
+    performanceState.configuration.cpuBudget = config.cpuBudget;
+  }
+
+  // Notify UI
+  const profileBtn = document.getElementById('qualityProfileSelect');
+  if (profileBtn) {
+    profileBtn.value = profile;
+  }
+}
+
+// Detect GPU acceleration availability
+function detectGPUAcceleration() {
+  const canvas = document.createElement('canvas');
+  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  const webgpu = navigator.gpu !== undefined;
+
+  performanceState.configuration.enableGPU = (gl !== null) || webgpu;
+
+  return {
+    webgl: gl !== null,
+    webgpu: webgpu,
+    vendor: gl?.getParameter(gl.VENDOR) || 'N/A'
+  };
+}
+
+// Initialize Phase 31 monitoring loop
+function initPhase31Performance() {
+  performanceState.startTime = performance.now();
+
+  // Start monitoring loop (every 500ms)
+  setInterval(() => {
+    updatePerformanceMetrics();
+    drawPerformanceDashboard();
+    updatePhase31Dashboard();
+  }, 500);
+
+  // Detect GPU on startup
+  detectGPUAcceleration();
+
+  console.log('✓ Phase 31 Performance Monitoring initialized');
+}
+
+// Update Phase 31 dashboard UI
+function updatePhase31Dashboard() {
+  // Update metrics display
+  document.getElementById('cpuUsageDisplay').textContent = performanceState.metrics.cpuUsage.value.toFixed(1) + '%';
+  document.getElementById('memoryUsageDisplay').textContent = performanceState.metrics.memoryUsage.value.toFixed(0) + 'MB';
+  document.getElementById('latencyDisplay').textContent = performanceState.metrics.audioLatency.value.toFixed(1) + 'ms';
+  document.getElementById('peakCpuDisplay').textContent = performanceState.metrics.cpuUsage.peak.toFixed(1) + '%';
+
+  // Update hot paths
+  const hotPaths = analyzeHotPaths();
+  let hotPathsHTML = '';
+  if (hotPaths.length > 0) {
+    hotPaths.slice(0, 5).forEach(path => {
+      hotPathsHTML += `<div style="padding:3px;margin-bottom:2px;background:rgba(100,100,100,0.1);border-left:2px solid rgba(255,100,100,1)">
+        <strong>${path.name}</strong>: ${path.cpuPercent.toFixed(1)}% CPU, ${path.avgTime.toFixed(2)}ms
+      </div>`;
+    });
+  } else {
+    hotPathsHTML = 'All functions within normal range.';
+  }
+  document.getElementById('hotPathsDisplay').innerHTML = hotPathsHTML;
+
+  // Update GPU status
+  const gpuInfo = detectGPUAcceleration();
+  document.getElementById('gpuStatusDisplay').textContent =
+    `WebGL: ${gpuInfo.webgl ? 'Available' : 'Not available'} | WebGPU: ${gpuInfo.webgpu ? 'Available' : 'Not available'} | Vendor: ${gpuInfo.vendor}`;
+}
+
 // Initialize toggle buttons
 document.addEventListener('DOMContentLoaded', () => {
   initPhase30Distribution();
   initPhase30Analytics();
+  initPhase31Performance();
 
   // Distribution toggle button (Phase 30.3)
   const distributionToggleBtn = document.createElement('button');
@@ -11785,6 +12139,43 @@ document.addEventListener('DOMContentLoaded', () => {
     schedulingToggleBtn.style.boxShadow = '0 0 20px rgba(100,255,200,0.2)';
   };
   document.body.appendChild(schedulingToggleBtn);
+
+  // Performance toggle button (Phase 31)
+  const performanceToggleBtn = document.createElement('button');
+  performanceToggleBtn.id = 'phase31PerformanceToggleBtn';
+  performanceToggleBtn.textContent = '⚙️';
+  performanceToggleBtn.title = 'Performance Optimization & Monitoring (Phase 31)';
+  performanceToggleBtn.onclick = () => {
+    const panel = document.getElementById('phase31PerformancePanel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    updatePerformanceMetrics();
+    drawPerformanceDashboard();
+  };
+  performanceToggleBtn.style.cssText = `
+    position: fixed;
+    bottom: 440px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(255,200,0,0.3), rgba(255,200,0,0.1));
+    border: 2px solid rgba(255,200,0,0.5);
+    color: rgba(255,200,0,1);
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: 0 0 20px rgba(255,200,0,0.2);
+    z-index: 800;
+    transition: all 0.3s ease;
+  `;
+  performanceToggleBtn.onmouseover = () => {
+    performanceToggleBtn.style.transform = 'scale(1.1)';
+    performanceToggleBtn.style.boxShadow = '0 0 30px rgba(255,200,0,0.4)';
+  };
+  performanceToggleBtn.onmouseout = () => {
+    performanceToggleBtn.style.transform = 'scale(1)';
+    performanceToggleBtn.style.boxShadow = '0 0 20px rgba(255,200,0,0.2)';
+  };
+  document.body.appendChild(performanceToggleBtn);
 
   // Remix toggle button
   // Remix toggle button
