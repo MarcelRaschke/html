@@ -1885,6 +1885,21 @@ let distributionState = {
   }
 };
 
+// Phase 30.5: Release Scheduling & Automation
+let releaseSchedulingState = {
+  scheduledReleases: [],
+  batchOperations: [],
+  retryPolicies: {
+    spotify: { maxAttempts: 3, backoffMs: [5000, 10000, 30000, 120000, 300000] },
+    appleMusic: { maxAttempts: 3, backoffMs: [5000, 10000, 30000, 120000, 300000] },
+    youtube: { maxAttempts: 3, backoffMs: [5000, 10000, 30000, 120000, 300000] }
+  },
+  deliveryRules: [],
+  automationQueue: [],
+  monitoringActive: false,
+  nextCheckTime: null
+};
+
 // Phase 30.2: Resampling using OfflineAudioContext
 function resampleAudio(buffer, targetSampleRate) {
   if (!buffer || buffer.sampleRate === targetSampleRate) return buffer;
@@ -9536,6 +9551,93 @@ function toggleVideoExportVisualizer(analyzer) {
   </div>
 </div>
 
+<!-- Phase 30.5: Release Scheduling & Automation -->
+<div id="phase30SchedulingPanel" style="position:fixed;bottom:540px;left:20px;width:520px;background:var(--bg-card);border:1px solid rgba(100,255,200,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:75vh;overflow-y:auto;display:none">
+  <div style="font-size:13px;font-weight:700;color:rgba(100,255,200,1);margin-bottom:12px">🔄 Phase 30.5: Release Scheduling & Automation</div>
+
+  <!-- Release Scheduling -->
+  <div style="margin-bottom:12px;padding:10px;background:rgba(0,255,150,0.08);border-radius:6px;border:1px solid rgba(0,255,150,0.2)">
+    <div style="font-size:11px;font-weight:600;color:rgba(0,255,150,1);margin-bottom:8px">📅 Schedule Release</div>
+    <input id="scheduleReleaseTitle" type="text" placeholder="Release title" style="width:100%;padding:6px;background:rgba(100,100,100,0.2);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:10px;margin-bottom:6px">
+    <input id="scheduleReleaseDate" type="datetime-local" style="width:100%;padding:6px;background:rgba(100,100,100,0.2);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:10px;margin-bottom:6px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:6px;font-size:9px">
+      <label><input type="checkbox" name="schedulePlatform" value="spotify"> Spotify</label>
+      <label><input type="checkbox" name="schedulePlatform" value="appleMusic"> Apple Music</label>
+      <label><input type="checkbox" name="schedulePlatform" value="youtube"> YouTube</label>
+    </div>
+    <button onclick="scheduleRelease()" style="width:100%;padding:6px;background:rgba(0,255,150,0.2);border:1px solid rgba(0,255,150,0.5);color:rgba(0,255,150,1);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">Schedule Release</button>
+  </div>
+
+  <!-- Scheduled Releases Display -->
+  <div id="scheduleListDisplay" style="margin-bottom:12px;padding:10px;background:rgba(100,100,100,0.08);border-radius:6px;border:1px solid rgba(100,200,255,0.2);font-size:8px;max-height:100px;overflow-y:auto">
+    No scheduled releases.
+  </div>
+
+  <!-- Batch Upload Manager -->
+  <div style="margin-bottom:12px;padding:10px;background:rgba(100,200,255,0.08);border-radius:6px;border:1px solid rgba(100,200,255,0.2)">
+    <div style="font-size:11px;font-weight:600;color:rgba(100,200,255,1);margin-bottom:8px">📦 Batch Upload</div>
+    <input id="batchTitle" type="text" placeholder="Batch name" style="width:100%;padding:6px;background:rgba(100,100,100,0.2);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:10px;margin-bottom:6px">
+    <input id="batchTrackCount" type="number" placeholder="Number of tracks" value="1" min="1" style="width:100%;padding:6px;background:rgba(100,100,100,0.2);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:10px;margin-bottom:6px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:6px;font-size:9px">
+      <label><input type="checkbox" name="batchPlatform" value="spotify"> Spotify</label>
+      <label><input type="checkbox" name="batchPlatform" value="appleMusic"> Apple Music</label>
+      <label><input type="checkbox" name="batchPlatform" value="youtube"> YouTube</label>
+    </div>
+    <button onclick="batchUploadTracks()" style="width:100%;padding:6px;background:rgba(100,200,255,0.2);border:1px solid rgba(100,200,255,0.5);color:rgba(100,200,255,1);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">Create Batch</button>
+  </div>
+
+  <!-- Batch Progress -->
+  <div id="batchStatusDisplay" style="margin-bottom:12px;padding:10px;background:rgba(100,100,100,0.08);border-radius:6px;border:1px solid rgba(100,200,255,0.2);font-size:8px;max-height:100px;overflow-y:auto">
+    No batch operations.
+  </div>
+
+  <!-- Retry Management -->
+  <div style="margin-bottom:12px;padding:10px;background:rgba(255,200,0,0.08);border-radius:6px;border:1px solid rgba(255,200,0,0.2)">
+    <div style="font-size:11px;font-weight:600;color:rgba(255,200,0,1);margin-bottom:8px">🔄 Retry Failed Deliveries</div>
+    <button onclick="applyRetryPolicy()" style="width:100%;padding:6px;background:rgba(255,200,0,0.2);border:1px solid rgba(255,200,0,0.5);color:rgba(255,200,0,1);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">Retry Failed</button>
+  </div>
+
+  <!-- Retry Status -->
+  <div id="retryStatusDisplay" style="margin-bottom:12px;padding:10px;background:rgba(100,100,100,0.08);border-radius:6px;font-size:8px;max-height:80px;overflow-y:auto">
+    No retry operations.
+  </div>
+
+  <!-- Delivery Rules -->
+  <div style="margin-bottom:12px;padding:10px;background:rgba(200,150,255,0.08);border-radius:6px;border:1px solid rgba(200,150,255,0.2)">
+    <div style="font-size:11px;font-weight:600;color:rgba(200,150,255,1);margin-bottom:8px">📋 Delivery Rules</div>
+    <input id="ruleTitle" type="text" placeholder="Rule name" style="width:100%;padding:6px;background:rgba(100,100,100,0.2);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:9px;margin-bottom:4px">
+    <input id="ruleCondition" type="text" placeholder="Condition (e.g., genre=='electronic')" style="width:100%;padding:6px;background:rgba(100,100,100,0.2);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:9px;margin-bottom:4px">
+    <input id="ruleAction" type="text" placeholder="Action (e.g., delay by 24h)" style="width:100%;padding:6px;background:rgba(100,100,100,0.2);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:9px;margin-bottom:4px">
+    <button onclick="setupDeliveryRules()" style="width:100%;padding:6px;background:rgba(200,150,255,0.2);border:1px solid rgba(200,150,255,0.5);color:rgba(200,150,255,1);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">Add Rule</button>
+  </div>
+
+  <!-- Rules Display -->
+  <div id="rulesListDisplay" style="margin-bottom:12px;padding:10px;background:rgba(100,100,100,0.08);border-radius:6px;font-size:8px;max-height:120px;overflow-y:auto">
+    No delivery rules.
+  </div>
+
+  <!-- Workflows -->
+  <div style="margin-bottom:12px;padding:10px;background:rgba(100,200,255,0.08);border-radius:6px;border:1px solid rgba(100,200,255,0.2)">
+    <div style="font-size:11px;font-weight:600;color:rgba(100,200,255,1);margin-bottom:8px">⚙️ Automation Workflows</div>
+    <input id="workflowName" type="text" placeholder="Workflow name" style="width:100%;padding:6px;background:rgba(100,100,100,0.2);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:10px;margin-bottom:6px">
+    <button onclick="executeDeliveryWorkflow()" style="width:100%;padding:6px;background:rgba(100,200,255,0.2);border:1px solid rgba(100,200,255,0.5);color:rgba(100,200,255,1);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">Create Workflow</button>
+  </div>
+
+  <!-- Workflow Status -->
+  <div id="workflowStatusDisplay" style="margin-bottom:12px;padding:10px;background:rgba(100,100,100,0.08);border-radius:6px;font-size:8px;max-height:100px;overflow-y:auto">
+    No workflows.
+  </div>
+
+  <!-- Utilities -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+    <button onclick="calculateReleaseWindow()" style="padding:8px;background:rgba(100,200,255,0.2);border:1px solid rgba(100,200,255,0.5);color:rgba(100,200,255,1);border-radius:4px;cursor:pointer;font-size:9px;font-weight:600">📅 Best Time</button>
+    <button onclick="monitorScheduledReleases()" style="padding:8px;background:rgba(0,255,150,0.2);border:1px solid rgba(0,255,150,0.5);color:rgba(0,255,150,1);border-radius:4px;cursor:pointer;font-size:9px;font-weight:600">▶ Monitor</button>
+  </div>
+
+  <!-- Close Button -->
+  <button onclick="document.getElementById('phase30SchedulingPanel').style.display='none'" style="width:100%;padding:8px;background:rgba(100,120,140,0.1);border:1px solid var(--border);color:var(--text-secondary);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">✕ Close</button>
+</div>
+
 <script>
 // === PHASE 27.1: NEURAL STEM SEPARATION ENGINE ===
 
@@ -11240,6 +11342,333 @@ function initPhase30Analytics() {
   }, 10000);
 }
 
+// === PHASE 30.5: RELEASE SCHEDULING & AUTOMATION ===
+
+// Schedule a release for future date
+function scheduleRelease() {
+  const releaseTitle = document.getElementById('scheduleReleaseTitle')?.value;
+  const releaseDate = document.getElementById('scheduleReleaseDate')?.value;
+  const releasePlatforms = Array.from(document.querySelectorAll('input[name="schedulePlatform"]:checked')).map(el => el.value);
+
+  if (!releaseTitle || !releaseDate || releasePlatforms.length === 0) {
+    alert('Please fill in all fields: title, date, and select platforms');
+    return;
+  }
+
+  const scheduled = {
+    id: `sched_${Date.now()}`,
+    title: releaseTitle,
+    metadata: { ...distributionState.releaseMetadata, title: releaseTitle },
+    platformIds: releasePlatforms,
+    scheduleTime: new Date(releaseDate).getTime(),
+    status: 'scheduled',
+    createdAt: new Date().toISOString(),
+    attempts: 0
+  };
+
+  releaseSchedulingState.scheduledReleases.push(scheduled);
+  updateScheduleUI();
+  document.getElementById('scheduleReleaseTitle').value = '';
+  document.getElementById('scheduleReleaseDate').value = '';
+  alert(`✅ Release scheduled for ${releaseDate}`);
+}
+
+// Batch upload multiple tracks
+function batchUploadTracks() {
+  const batchTitle = document.getElementById('batchTitle')?.value;
+  const trackCount = parseInt(document.getElementById('batchTrackCount')?.value || '1');
+  const batchPlatforms = Array.from(document.querySelectorAll('input[name="batchPlatform"]:checked')).map(el => el.value);
+
+  if (!batchTitle || trackCount < 1 || batchPlatforms.length === 0) {
+    alert('Please fill in batch details');
+    return;
+  }
+
+  const batch = {
+    id: `batch_${Date.now()}`,
+    title: batchTitle,
+    trackCount: trackCount,
+    platformIds: batchPlatforms,
+    tracks: Array.from({ length: trackCount }, (_, i) => ({
+      id: `track_${i + 1}`,
+      status: 'pending',
+      progress: 0
+    })),
+    status: 'queued',
+    createdAt: new Date().toISOString(),
+    progress: 0
+  };
+
+  releaseSchedulingState.batchOperations.push(batch);
+  updateBatchUI();
+  document.getElementById('batchTitle').value = '';
+  document.getElementById('batchTrackCount').value = '1';
+  alert(`✅ Batch operation created with ${trackCount} tracks`);
+}
+
+// Apply retry policy to failed deliveries
+function applyRetryPolicy() {
+  const failedDeliveries = distributionState.deliveryHistory.filter(d => d.status === 'failed' && !d.retryCount);
+
+  if (failedDeliveries.length === 0) {
+    alert('No failed deliveries to retry');
+    return;
+  }
+
+  failedDeliveries.forEach(delivery => {
+    delivery.retryCount = (delivery.retryCount || 0) + 1;
+    delivery.nextRetryTime = Date.now() + releaseSchedulingState.retryPolicies[delivery.platform].backoffMs[delivery.retryCount - 1];
+    delivery.status = 'retrying';
+  });
+
+  alert(`✅ Queued ${failedDeliveries.length} deliveries for retry`);
+  updateRetryUI();
+}
+
+// Setup delivery rules for conditional distribution
+function setupDeliveryRules() {
+  const ruleTitle = document.getElementById('ruleTitle')?.value;
+  const ruleCondition = document.getElementById('ruleCondition')?.value;
+  const ruleAction = document.getElementById('ruleAction')?.value;
+
+  if (!ruleTitle || !ruleCondition || !ruleAction) {
+    alert('Please fill in all rule fields');
+    return;
+  }
+
+  const rule = {
+    id: `rule_${Date.now()}`,
+    title: ruleTitle,
+    condition: ruleCondition,
+    action: ruleAction,
+    priority: releaseSchedulingState.deliveryRules.length + 1,
+    createdAt: new Date().toISOString(),
+    active: true
+  };
+
+  releaseSchedulingState.deliveryRules.push(rule);
+  updateRulesUI();
+  document.getElementById('ruleTitle').value = '';
+  document.getElementById('ruleCondition').value = '';
+  document.getElementById('ruleAction').value = '';
+  alert(`✅ Delivery rule "${ruleTitle}" created`);
+}
+
+// Execute delivery workflow (multi-step release)
+function executeDeliveryWorkflow() {
+  const workflowName = document.getElementById('workflowName')?.value;
+
+  if (!workflowName) {
+    alert('Enter workflow name');
+    return;
+  }
+
+  const workflow = {
+    id: `workflow_${Date.now()}`,
+    name: workflowName,
+    steps: [],
+    status: 'running',
+    startTime: new Date().toISOString(),
+    completedSteps: 0
+  };
+
+  // Add workflow steps based on scheduled releases
+  releaseSchedulingState.scheduledReleases.filter(r => r.status === 'scheduled').forEach((release, idx) => {
+    workflow.steps.push({
+      stepId: idx + 1,
+      releaseId: release.id,
+      status: 'pending',
+      delayMs: idx * 24 * 60 * 60 * 1000 // Stagger by 24h
+    });
+  });
+
+  releaseSchedulingState.automationQueue.push(workflow);
+  alert(`✅ Workflow "${workflowName}" created with ${workflow.steps.length} steps`);
+  updateWorkflowUI();
+}
+
+// Monitor scheduled releases and execute when time is reached
+function monitorScheduledReleases() {
+  if (releaseSchedulingState.monitoringActive) {
+    releaseSchedulingState.monitoringActive = false;
+    console.log('Monitoring stopped');
+    return;
+  }
+
+  releaseSchedulingState.monitoringActive = true;
+  console.log('Release monitoring started');
+
+  const monitoring = setInterval(() => {
+    if (!releaseSchedulingState.monitoringActive) {
+      clearInterval(monitoring);
+      return;
+    }
+
+    const now = Date.now();
+    releaseSchedulingState.scheduledReleases.forEach(release => {
+      if (release.status === 'scheduled' && now >= release.scheduleTime) {
+        release.status = 'executing';
+        release.attempts++;
+
+        // Simulate execution
+        setTimeout(() => {
+          releaseSchedulingState.scheduledReleases.forEach(r => {
+            if (r.id === release.id) {
+              r.status = 'delivered';
+              r.deliveredAt = new Date().toISOString();
+              console.log(`✅ Scheduled release executed: ${r.title}`);
+            }
+          });
+          updateScheduleUI();
+        }, 2000);
+      }
+    });
+
+    updateScheduleUI();
+  }, 5000); // Check every 5 seconds
+}
+
+// Calculate optimal release window
+function calculateReleaseWindow() {
+  const analysis = {
+    bestDayOfWeek: 'Friday', // Peak engagement
+    bestTimeUTC: '13:00', // Mid-day for global reach
+    windowHours: 2,
+    reasoning: 'Friday afternoons UTC provide optimal reach across US, EU, and Asia'
+  };
+
+  alert(`📅 Recommended Release Window:\n${analysis.bestDayOfWeek} ${analysis.bestTimeUTC} UTC\nWindow: ±${analysis.windowHours}h\n\n${analysis.reasoning}`);
+}
+
+// Update batch progress tracking
+function updateBatchProgress() {
+  const batchUI = document.getElementById('batchStatusDisplay');
+  if (!batchUI || releaseSchedulingState.batchOperations.length === 0) return;
+
+  let html = '<div style="color:rgba(0,255,150,1);font-weight:600;margin-bottom:8px">📦 Batch Operations:</div>';
+
+  releaseSchedulingState.batchOperations.forEach((batch, idx) => {
+    const progressPct = Math.round((batch.tracks.filter(t => t.status === 'complete').length / batch.trackCount) * 100);
+    html += `
+      <div style="padding:8px;margin-bottom:6px;background:rgba(100,100,100,0.1);border-radius:4px;border:1px solid rgba(0,255,150,0.2)">
+        <div style="font-size:10px;font-weight:600;color:rgba(0,255,150,1);margin-bottom:4px">${batch.title} (${batch.trackCount} tracks)</div>
+        <div style="width:100%;height:6px;background:rgba(100,100,100,0.3);border-radius:2px;overflow:hidden">
+          <div style="height:100%;width:${progressPct}%;background:linear-gradient(90deg,rgba(0,255,150,0.5),rgba(0,255,150,1));transition:width 0.3s"></div>
+        </div>
+        <div style="font-size:8px;color:var(--text-secondary);margin-top:2px">${progressPct}% - ${batch.status}</div>
+      </div>
+    `;
+  });
+
+  batchUI.innerHTML = html;
+}
+
+// Update schedule UI
+function updateScheduleUI() {
+  const scheduleDisplay = document.getElementById('scheduleListDisplay');
+  if (!scheduleDisplay) return;
+
+  if (releaseSchedulingState.scheduledReleases.length === 0) {
+    scheduleDisplay.innerHTML = 'No scheduled releases.';
+    return;
+  }
+
+  let html = '<div style="color:rgba(0,255,150,1);font-weight:600;margin-bottom:8px">📅 Scheduled Releases:</div>';
+
+  releaseSchedulingState.scheduledReleases.forEach(release => {
+    const relDate = new Date(release.scheduleTime);
+    const timeUntil = Math.max(0, release.scheduleTime - Date.now());
+    const hours = Math.floor(timeUntil / 3600000);
+    const mins = Math.floor((timeUntil % 3600000) / 60000);
+    const statusColor = release.status === 'delivered' ? 'rgba(100,255,100,1)' : release.status === 'executing' ? 'rgba(255,200,0,1)' : 'rgba(100,200,255,1)';
+
+    html += `
+      <div style="font-size:9px;margin:4px 0;padding:4px;border-radius:2px;background:rgba(100,100,100,0.1);border-left:3px solid ${statusColor}">
+        <div style="font-weight:600;color:${statusColor}">${release.title}</div>
+        <div style="color:var(--text-secondary)">${relDate.toLocaleString()}</div>
+        <div style="color:rgba(0,255,150,0.7)">In ${hours}h ${mins}m | Status: ${release.status}</div>
+      </div>
+    `;
+  });
+
+  scheduleDisplay.innerHTML = html;
+}
+
+// Update retry UI
+function updateRetryUI() {
+  const retryDisplay = document.getElementById('retryStatusDisplay');
+  if (!retryDisplay) return;
+
+  const retrying = distributionState.deliveryHistory.filter(d => d.status === 'retrying');
+  const failed = distributionState.deliveryHistory.filter(d => d.status === 'failed');
+
+  let html = `<div style="color:rgba(255,200,0,1);font-weight:600;margin-bottom:8px">🔄 Retry Status: ${retrying.length} retrying, ${failed.length} failed</div>`;
+
+  retrying.forEach(delivery => {
+    const nextTime = new Date(delivery.nextRetryTime || Date.now()).toLocaleTimeString();
+    html += `
+      <div style="font-size:8px;margin:2px 0;padding:2px;color:rgba(255,200,0,1)">
+        ⏳ ${delivery.platform}: Retry ${delivery.retryCount}/3 at ${nextTime}
+      </div>
+    `;
+  });
+
+  retryDisplay.innerHTML = html;
+}
+
+// Update rules UI
+function updateRulesUI() {
+  const rulesDisplay = document.getElementById('rulesListDisplay');
+  if (!rulesDisplay) return;
+
+  if (releaseSchedulingState.deliveryRules.length === 0) {
+    rulesDisplay.innerHTML = 'No delivery rules.';
+    return;
+  }
+
+  let html = '<div style="color:rgba(200,150,255,1);font-weight:600;margin-bottom:8px">📋 Delivery Rules:</div>';
+
+  releaseSchedulingState.deliveryRules.forEach(rule => {
+    html += `
+      <div style="font-size:8px;margin:4px 0;padding:4px;background:rgba(100,100,100,0.1);border-radius:2px;border-left:2px solid rgba(200,150,255,1)">
+        <div style="font-weight:600;color:rgba(200,150,255,1)">${rule.title} (P${rule.priority})</div>
+        <div style="color:var(--text-secondary)">IF: ${rule.condition}</div>
+        <div style="color:rgba(100,255,100,0.8)">THEN: ${rule.action}</div>
+      </div>
+    `;
+  });
+
+  rulesDisplay.innerHTML = html;
+}
+
+// Update workflow UI
+function updateWorkflowUI() {
+  const workflowDisplay = document.getElementById('workflowStatusDisplay');
+  if (!workflowDisplay) return;
+
+  if (releaseSchedulingState.automationQueue.length === 0) {
+    workflowDisplay.innerHTML = 'No workflows.';
+    return;
+  }
+
+  let html = '<div style="color:rgba(100,200,255,1);font-weight:600;margin-bottom:8px">⚙️ Workflows:</div>';
+
+  releaseSchedulingState.automationQueue.forEach(workflow => {
+    const progressPct = Math.round((workflow.completedSteps / workflow.steps.length) * 100);
+    html += `
+      <div style="margin:8px 0;padding:8px;background:rgba(100,100,100,0.1);border-radius:4px;border:1px solid rgba(100,200,255,0.2)">
+        <div style="font-size:10px;font-weight:600;color:rgba(100,200,255,1);margin-bottom:4px">${workflow.name}</div>
+        <div style="font-size:8px;color:var(--text-secondary);margin-bottom:2px">${workflow.completedSteps}/${workflow.steps.length} steps</div>
+        <div style="width:100%;height:4px;background:rgba(100,100,100,0.3);border-radius:2px;overflow:hidden">
+          <div style="height:100%;width:${progressPct}%;background:rgba(100,200,255,1);transition:width 0.3s"></div>
+        </div>
+      </div>
+    `;
+  });
+
+  workflowDisplay.innerHTML = html;
+}
+
 // Initialize toggle buttons
 document.addEventListener('DOMContentLoaded', () => {
   initPhase30Distribution();
@@ -11321,6 +11750,41 @@ document.addEventListener('DOMContentLoaded', () => {
     analyticsToggleBtn.style.boxShadow = '0 0 20px rgba(100,200,255,0.2)';
   };
   document.body.appendChild(analyticsToggleBtn);
+
+  // Scheduling toggle button (Phase 30.5)
+  const schedulingToggleBtn = document.createElement('button');
+  schedulingToggleBtn.id = 'phase30SchedulingToggleBtn';
+  schedulingToggleBtn.textContent = '🔄';
+  schedulingToggleBtn.title = 'Release Scheduling & Automation (Phase 30.5)';
+  schedulingToggleBtn.onclick = () => {
+    const panel = document.getElementById('phase30SchedulingPanel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  };
+  schedulingToggleBtn.style.cssText = `
+    position: fixed;
+    bottom: 380px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(100,255,200,0.3), rgba(100,255,200,0.1));
+    border: 2px solid rgba(100,255,200,0.5);
+    color: rgba(100,255,200,1);
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: 0 0 20px rgba(100,255,200,0.2);
+    z-index: 800;
+    transition: all 0.3s ease;
+  `;
+  schedulingToggleBtn.onmouseover = () => {
+    schedulingToggleBtn.style.transform = 'scale(1.1)';
+    schedulingToggleBtn.style.boxShadow = '0 0 30px rgba(100,255,200,0.4)';
+  };
+  schedulingToggleBtn.onmouseout = () => {
+    schedulingToggleBtn.style.transform = 'scale(1)';
+    schedulingToggleBtn.style.boxShadow = '0 0 20px rgba(100,255,200,0.2)';
+  };
+  document.body.appendChild(schedulingToggleBtn);
 
   // Remix toggle button
   // Remix toggle button
