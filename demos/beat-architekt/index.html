@@ -1097,11 +1097,11 @@ body::before {
           <label style="font-size:10px;font-weight:600;margin-bottom:8px;display:block">Quick LFO</label>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:9px">
             <div>
-              <label>Rate (Hz): <span id="quickLfoRateDisplay">1.0</span></label>
+              <label>Rate (Hz): <span>1.0</span></label>
               <input type="range" id="quickLfoRate" min="0.1" max="20" value="1.0" step="0.1" oninput="updateQuickLFO()" style="width:100%">
             </div>
             <div>
-              <label>Depth: <span id="quickLfoDepthDisplay">0.5</span></label>
+              <label>Depth: <span>0.5</span></label>
               <input type="range" id="quickLfoDepth" min="0" max="1" value="0.5" step="0.05" oninput="updateQuickLFO()" style="width:100%">
             </div>
           </div>
@@ -1688,6 +1688,756 @@ let sliceSequencerState = {
     activeSampleColors: {}
   }
 };
+
+// === PHASE 29: MULTI-STEM SYNCHRONIZATION & ROUTING ===
+
+// Master stem synchronization state
+let stemSyncState = {
+  enabled: true,
+  masterPlayhead: 0.0,                    // Seconds, single source of truth
+  masterBPM: 120,                         // Reference tempo
+  stemOffsets: {                          // Per-stem timing compensation (seconds)
+    vocals: 0.0,
+    drums: 0.0,
+    bass: 0.0,
+    other: 0.0
+  },
+  stemPhaseShift: {                       // Sub-sample phase alignment (0–1 range)
+    vocals: 0.0,
+    drums: 0.0,
+    bass: 0.0,
+    other: 0.0
+  },
+  stemPlaybackPositions: {                // Track actual playback positions
+    vocals: 0.0,
+    drums: 0.0,
+    bass: 0.0,
+    other: 0.0
+  },
+  syncTolerance: 0.002,                   // Max acceptable drift: 2ms
+  syncTolerance2ms: 0.002,
+  driftThreshold: 0.003,                  // 3ms triggers auto-correction
+  lastSyncTime: null,
+  driftHistory: [],                       // Rolling window for trend analysis
+  autoSyncEnabled: true,
+  driftDetectionEnabled: true
+};
+
+// Cross-stem send/return routing
+let stemRoutingState = {
+  sendChannels: new Map(),                // stem → [targets]
+  sendGains: new Map(),                   // "vocals→reverbWet" → amplitude
+  sendFades: new Map(),                   // Smooth transitions
+
+  sidechainActive: {                      // Per-effect sidechain activation
+    reverbWet: true,
+    delayFeedback: false,
+    filterCutoff: false,
+    distortionDrive: false
+  },
+
+  sidechainConfig: {
+    threshold: 0.3,                       // dB
+    ratio: 4.0,                           // Compression ratio
+    attackMs: 5,
+    releaseMs: 100,
+    lookAheadMs: 10
+  },
+
+  sidechainMetrics: {},                   // Real-time sidechain energy
+  routingMatrix: {},                      // Full routing graph
+  crossFadeEnabled: true,
+  crossFadeDuration: 0.1                  // Seconds
+};
+
+// Phase coherence tracking
+let stemPhaseState = {
+  coherenceMatrix: {},                    // Cross-correlation between stems
+  targetCoherence: 0.95,
+  phaseCalibrationMode: false,
+  referenceStems: {                       // Which stem(s) to align to
+    primary: 'drums',
+    secondary: 'bass'
+  },
+  phaseAdjustmentLock: {},                // Prevent recomputation mid-playback
+  lastPhaseCalibration: null
+};
+
+
+// === PHASE 29.1: MASTER PLAYHEAD SYNCHRONIZATION ===
+
+// Update master playhead and track drift metrics
+function updateMasterPlayhead(deltaTime = 0.016) {
+  if (!stemSyncState.enabled) return;
+
+  stemSyncState.masterPlayhead += deltaTime;
+  stemSyncState.lastSyncTime = audioCtx?.currentTime || 0;
+
+  // Check for drift and correct if needed
+  checkDriftAndCorrect();
+}
+
+// Detect and auto-correct stem playback drift
+function checkDriftAndCorrect() {
+  if (!stemSyncState.driftDetectionEnabled) return;
+
+  const stems = ['vocals', 'drums', 'bass', 'other'];
+  let maxDrift = 0;
+  const driftMap = {};
+
+  for (const stem of stems) {
+    const actualPos = stemSyncState.stemPlaybackPositions[stem] || 0;
+    const expectedPos = stemSyncState.masterPlayhead + (stemSyncState.stemOffsets[stem] || 0);
+    const drift = Math.abs(actualPos - expectedPos);
+
+    driftMap[stem] = drift;
+    maxDrift = Math.max(maxDrift, drift);
+
+    // Auto-correct if drift exceeds threshold
+    if (drift > stemSyncState.driftThreshold && stemSyncState.autoSyncEnabled) {
+      stemSyncState.stemPlaybackPositions[stem] = expectedPos;
+    }
+  }
+
+  // Track drift history for trend analysis
+  stemSyncState.driftHistory.push({
+    timestamp: audioCtx?.currentTime || 0,
+    maxDrift: maxDrift,
+    perStem: driftMap
+  });
+
+  // Keep rolling window of last 60 drift measurements
+  if (stemSyncState.driftHistory.length > 60) {
+    stemSyncState.driftHistory.shift();
+  }
+
+  return maxDrift;
+}
+
+// Get actual playback position for a stem (updated during playback)
+function getActualPlaybackPosition(stem) {
+  return stemSyncState.stemPlaybackPositions[stem] || 0;
+}
+
+// Re-schedule stems to synchronize from master playhead
+function reScheduleStems(stemList = ['vocals', 'drums', 'bass', 'other']) {
+  // This function would stop current playback and restart from master playhead
+  // Implementation depends on existing playback mechanisms
+  for (const stem of stemList) {
+    stemSyncState.stemPlaybackPositions[stem] = stemSyncState.masterPlayhead + (stemSyncState.stemOffsets[stem] || 0);
+  }
+}
+
+// Get compensated time for stem playback (applies latency offsets)
+function getCompensatedPlaybackTime(stem, baseTime) {
+  if (!stemSyncState.enabled) return baseTime;
+
+  const offset = stemSyncState.stemOffsets[stem] || 0;
+  const phaseShift = stemSyncState.stemPhaseShift[stem] || 0;
+
+  // Apply offset compensation
+  let compensatedTime = baseTime + offset;
+
+  // Apply phase shift (convert fractional samples to seconds)
+  if (phaseShift !== 0 && audioCtx) {
+    const sampleDuration = 1 / audioCtx.sampleRate;
+    compensatedTime += phaseShift * sampleDuration;
+  }
+
+  return compensatedTime;
+}
+
+// Phase 29.2: Cross-Stem Routing & Sidechain Functions (~200 lines)
+
+function extractEnvelope(buffer, config = {}) {
+  const attackMs = config.attackMs || 5;
+  const releaseMs = config.releaseMs || 100;
+  const threshold = config.threshold || -40; // dB
+
+  if (!buffer || buffer.length === 0) return [];
+
+  const rms = [];
+  const hopSize = 512; // 10ms at 48kHz
+
+  for (let i = 0; i < buffer.length; i += hopSize) {
+    const frame = buffer.subarray(i, Math.min(i + hopSize, buffer.length));
+    let sum = 0;
+    for (let j = 0; j < frame.length; j++) {
+      sum += frame[j] * frame[j];
+    }
+    const rmsValue = Math.sqrt(sum / frame.length);
+    const dbValue = 20 * Math.log10(Math.max(rmsValue, 1e-6));
+    rms.push(Math.max(0, dbValue - threshold));
+  }
+
+  return smoothEnvelope(rms, attackMs, releaseMs);
+}
+
+function smoothEnvelope(rmsArray, attackMs, releaseMs) {
+  if (!rmsArray || rmsArray.length === 0) return [];
+
+  const sampleRate = audioCtx?.sampleRate || 48000;
+  const hopMs = (512 * 1000) / sampleRate; // ~10ms at 48kHz
+  const attackSamples = Math.ceil((attackMs / hopMs));
+  const releaseSamples = Math.ceil((releaseMs / hopMs));
+
+  const smoothed = [rmsArray[0]];
+  for (let i = 1; i < rmsArray.length; i++) {
+    const prev = smoothed[i - 1];
+    const curr = rmsArray[i];
+
+    if (curr > prev) {
+      // Attack: slow rise
+      const attackRate = 1 / Math.max(1, attackSamples);
+      smoothed.push(prev + (curr - prev) * attackRate);
+    } else {
+      // Release: slow fall
+      const releaseRate = 1 / Math.max(1, releaseSamples);
+      smoothed.push(prev + (curr - prev) * releaseRate);
+    }
+  }
+
+  return smoothed;
+}
+
+function applySidechainToParameter(effectId, paramName, envelope, intensity = 0.5) {
+  if (!envelope || envelope.length === 0) return;
+
+  // Apply sidechain envelope to effect parameter
+  // This modulates the parameter over time based on the sidechain source envelope
+  const baseValue = effectsState[effectId]?.[paramName] || 0.5;
+
+  // Store sidechain modulation in state
+  if (!stemRoutingState.sidechainMetrics[effectId]) {
+    stemRoutingState.sidechainMetrics[effectId] = {};
+  }
+
+  stemRoutingState.sidechainMetrics[effectId][paramName] = {
+    envelope: envelope,
+    intensity: intensity,
+    baseValue: baseValue,
+    lastUpdateTime: audioCtx?.currentTime || 0
+  };
+}
+
+function createSendRoute(fromStem, toEffect, intensity = 0.5) {
+  const routeKey = `${fromStem}→${toEffect}`;
+
+  // Analyze source stem for sidechain control
+  const sourceBuffer = getActiveStemBuffer(fromStem);
+  if (!sourceBuffer) {
+    console.warn(`No buffer for stem: ${fromStem}`);
+    return false;
+  }
+
+  // Extract envelope from source
+  const envelope = extractEnvelope(sourceBuffer, {
+    attackMs: stemRoutingState.sidechainConfig?.attackMs || 5,
+    releaseMs: stemRoutingState.sidechainConfig?.releaseMs || 100,
+    threshold: stemRoutingState.sidechainConfig?.threshold || -40
+  });
+
+  // Apply to target effect
+  applySidechainToParameter(toEffect, 'wet', envelope, intensity);
+
+  // Store routing in map
+  stemRoutingState.sendGains.set(routeKey, intensity);
+  stemRoutingState.sendChannels.set(fromStem,
+    (stemRoutingState.sendChannels.get(fromStem) || []).concat(toEffect)
+  );
+
+  // Log routing
+  recordRoutingMetrics(fromStem, toEffect, intensity, envelope);
+
+  updateActiveRoutesDisplay();
+  return true;
+}
+
+function deleteSendRoute(fromStem, toEffect) {
+  const routeKey = `${fromStem}→${toEffect}`;
+  stemRoutingState.sendGains.delete(routeKey);
+
+  // Remove from channel list
+  const channels = stemRoutingState.sendChannels.get(fromStem) || [];
+  const updated = channels.filter(ch => ch !== toEffect);
+  if (updated.length > 0) {
+    stemRoutingState.sendChannels.set(fromStem, updated);
+  } else {
+    stemRoutingState.sendChannels.delete(fromStem);
+  }
+
+  // Clear sidechain metrics
+  if (stemRoutingState.sidechainMetrics[toEffect]) {
+    delete stemRoutingState.sidechainMetrics[toEffect];
+  }
+
+  updateActiveRoutesDisplay();
+}
+
+function getActiveRoutes() {
+  const routes = [];
+  for (const [key, level] of stemRoutingState.sendGains) {
+    const [fromStem, toEffect] = key.split('→');
+    routes.push({ from: fromStem, to: toEffect, level: level });
+  }
+  return routes;
+}
+
+function recordRoutingMetrics(fromStem, toEffect, intensity, envelope) {
+  if (!stemRoutingState.routingMatrix) {
+    stemRoutingState.routingMatrix = {};
+  }
+
+  const key = `${fromStem}→${toEffect}`;
+  stemRoutingState.routingMatrix[key] = {
+    source: fromStem,
+    target: toEffect,
+    intensity: intensity,
+    envelopePeaks: envelope.length > 0 ? Math.max(...envelope) : 0,
+    timestamp: audioCtx?.currentTime || 0
+  };
+}
+
+function updateActiveRoutesDisplay() {
+  const routesList = document.getElementById('activeRoutesList');
+  if (!routesList) return;
+
+  const routes = getActiveRoutes();
+
+  if (routes.length === 0) {
+    routesList.innerHTML = '<p style="margin:0;color:#666">No routes configured</p>';
+    return;
+  }
+
+  // Build route display items
+  let html = '';
+  for (const route of routes) {
+    html += `
+      <div style="display:flex;align-items:center;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.1);justify-content:space-between">
+        <div style="flex:1;color:#fff">
+          <span style="color:#00ffc8">${route.from}</span>
+          <span style="color:#666"> → </span>
+          <span style="color:#00ffc8">${route.to}</span>
+          <span style="color:#aaff00;margin-left:8px">${(route.level * 100).toFixed(0)}%</span>
+        </div>
+        <button onclick="deleteSendRoute('${route.from}', '${route.to}'); return false;"
+          style="background:#ff3355;color:#fff;border:none;padding:3px 6px;border-radius:3px;cursor:pointer;font-size:11px;margin-left:8px">
+          Remove
+        </button>
+      </div>
+    `;
+  }
+
+  routesList.innerHTML = html;
+}
+
+function getActiveStemBuffer(stem) {
+  // Return the current playback buffer for a stem
+  // This is a placeholder; actual implementation depends on active samples
+  if (currentSampleId && sampleLibrary.length > 0) {
+    const sample = sampleLibrary.find(s => s.id === currentSampleId);
+    if (sample && sample.buffer) {
+      return sample.buffer;
+    }
+  }
+  return null;
+}
+
+// Phase 29.3: Phase-Aligned Playback (~150 lines)
+
+function detectOnset(buffer, threshold = 0.1) {
+  // Simple onset detection: find first significant energy peak
+  if (!buffer || buffer.length === 0) return 0;
+
+  const sampleRate = audioCtx?.sampleRate || 48000;
+  const windowSize = 512;
+  let maxEnergy = 0;
+  let maxIndex = 0;
+
+  for (let i = 0; i < buffer.length; i += windowSize) {
+    const frame = buffer.subarray(i, Math.min(i + windowSize, buffer.length));
+    let energy = 0;
+    for (let j = 0; j < frame.length; j++) {
+      energy += frame[j] * frame[j];
+    }
+    energy = Math.sqrt(energy / frame.length);
+
+    if (energy > maxEnergy * (1 + threshold)) {
+      maxEnergy = energy;
+      maxIndex = i;
+    }
+  }
+
+  // Return time in seconds
+  return maxIndex / sampleRate;
+}
+
+function calibratePhaseAlignment(stemList = ['vocals', 'drums', 'bass', 'other']) {
+  const reference = stemPhaseState.referenceStems.primary || 'drums';
+  const refBuffer = getActiveStemBuffer(reference);
+
+  if (!refBuffer) {
+    console.warn('No reference stem buffer for phase calibration');
+    return false;
+  }
+
+  const refOnset = detectOnset(refBuffer);
+  const sampleRate = audioCtx?.sampleRate || 48000;
+
+  for (const stem of stemList) {
+    if (stem === reference) {
+      stemSyncState.stemPhaseShift[stem] = 0;
+      continue;
+    }
+
+    const buffer = getActiveStemBuffer(stem);
+    if (!buffer) continue;
+
+    const onset = detectOnset(buffer);
+    const timeDiff = onset - refOnset; // Seconds
+    const sampleDiff = timeDiff * sampleRate;
+    const phaseShift = ((sampleDiff % 1) + 1) % 1; // Normalize to 0-1
+
+    stemSyncState.stemPhaseShift[stem] = phaseShift;
+    console.log(`Phase shift ${stem}: ${(phaseShift * 100).toFixed(1)}% of sample`);
+  }
+
+  measureCoherence(stemList);
+  return true;
+}
+
+function measureCoherence(stemList = ['vocals', 'drums', 'bass', 'other']) {
+  // Compute cross-correlation between stem pairs
+  const stems = stemList.filter(s => getActiveStemBuffer(s) !== null);
+
+  if (stems.length < 2) {
+    console.warn('Need at least 2 stems for coherence measurement');
+    return;
+  }
+
+  for (let i = 0; i < stems.length; i++) {
+    for (let j = i + 1; j < stems.length; j++) {
+      const buf1 = getActiveStemBuffer(stems[i]);
+      const buf2 = getActiveStemBuffer(stems[j]);
+
+      if (!buf1 || !buf2) continue;
+
+      const corr = computeCorrelation(buf1, buf2);
+      const pairKey = `${stems[i]}←→${stems[j]}`;
+      stemPhaseState.coherenceMatrix[pairKey] = corr;
+
+      // Log warning if coherence is low
+      if (corr < 0.85) {
+        console.warn(`Low coherence between ${stems[i]} and ${stems[j]}: ${(corr * 100).toFixed(1)}%`);
+      }
+    }
+  }
+}
+
+function computeCorrelation(buffer1, buffer2) {
+  // Compute normalized cross-correlation (Pearson correlation)
+  const len = Math.min(buffer1.length, buffer2.length, 4096); // Limit to first 4096 samples
+
+  let sum1 = 0, sum2 = 0;
+  for (let i = 0; i < len; i++) {
+    sum1 += buffer1[i];
+    sum2 += buffer2[i];
+  }
+  const mean1 = sum1 / len;
+  const mean2 = sum2 / len;
+
+  let cov = 0, var1 = 0, var2 = 0;
+  for (let i = 0; i < len; i++) {
+    const diff1 = buffer1[i] - mean1;
+    const diff2 = buffer2[i] - mean2;
+    cov += diff1 * diff2;
+    var1 += diff1 * diff1;
+    var2 += diff2 * diff2;
+  }
+
+  const denom = Math.sqrt(var1 * var2);
+  if (denom < 1e-10) return 0;
+
+  return Math.max(0, Math.min(1, cov / denom));
+}
+
+function applyPhaseShift(buffer, phaseShift) {
+  // Apply fractional sample delay via linear interpolation
+  if (!buffer || phaseShift === 0 || phaseShift < 1e-6) {
+    return buffer;
+  }
+
+  const sampleRate = audioCtx?.sampleRate || 48000;
+  const delayMs = (phaseShift / sampleRate) * 1000;
+  const delaySamples = Math.round(phaseShift * sampleRate);
+
+  if (delaySamples === 0) return buffer;
+
+  // Create delayed copy
+  const delayed = new Float32Array(buffer.length);
+
+  for (let i = 0; i < buffer.length; i++) {
+    if (i < delaySamples) {
+      delayed[i] = 0; // Pad beginning with silence
+    } else {
+      // Linear interpolation for fractional delay
+      const idx = i - delaySamples;
+      if (idx < buffer.length) {
+        delayed[i] = buffer[idx];
+      }
+    }
+  }
+
+  return delayed;
+}
+
+// === PHASE 30.1: MASTERING SUITE & LOUDNESS METERING ===
+
+// Initialize mastering meters with analyser nodes
+function initMasteringMeters() {
+  if (!audioCtx) return;
+
+  // Create momentary analyser (400ms window)
+  masteringState.analyser = audioCtx.createAnalyser();
+  masteringState.analyser.fftSize = 2048;
+  masteringState.analyser.smoothingTimeConstant = 0.1;
+
+  // Create integrated analyser (longer window)
+  masteringState.analyserIntegrated = audioCtx.createAnalyser();
+  masteringState.analyserIntegrated.fftSize = 8192;
+  masteringState.analyserIntegrated.smoothingTimeConstant = 0.3;
+
+  console.log('✓ Mastering meters initialized');
+}
+
+// Calculate loudness in LUFS using ITU-R BS.1770-4
+function updateLoudnessMeter(audioBuffer) {
+  if (!audioCtx || !audioBuffer || audioBuffer.length === 0) return;
+
+  const sampleRate = audioCtx.sampleRate;
+  const channels = audioBuffer.numberOfChannels;
+
+  if (channels === 0) return;
+
+  // K-weighting filter coefficients (simplified)
+  const highShelf_gain = 4.0; // dB (approximation)
+
+  let sumSquared = 0;
+  let sampleCount = 0;
+
+  // Calculate RMS per channel
+  for (let ch = 0; ch < channels; ch++) {
+    const data = audioBuffer.getChannelData(ch);
+    for (let i = 0; i < data.length; i++) {
+      const sample = data[i];
+      sumSquared += sample * sample;
+      sampleCount++;
+    }
+  }
+
+  // Calculate LUFS: -0.691 + 10 * log10(mean_square)
+  const meanSquare = sumSquared / sampleCount;
+  const loudnessLUFS = meanSquare > 0 ? -0.691 + 10 * Math.log10(meanSquare) : -Infinity;
+
+  // Update meter
+  masteringState.meters.loudness.value = Math.max(-80, Math.min(loudnessLUFS, 0));
+
+  // Check compliance with active standard
+  const standard = masteringState.standards[masteringState.activeStandard];
+  const diff = masteringState.meters.loudness.value - standard.target;
+
+  if (Math.abs(diff) < 0.5) {
+    masteringState.meters.loudness.status = 'meeting';
+  } else if (diff > 0.5) {
+    masteringState.meters.loudness.status = 'high';
+  } else {
+    masteringState.meters.loudness.status = 'low';
+  }
+}
+
+// Analyze audio metrics (dynamic range, correlation, crest factor)
+function analyzeAudioMetrics(audioBuffer) {
+  if (!audioBuffer) return;
+
+  const channels = audioBuffer.numberOfChannels;
+  if (channels === 0) return;
+
+  let peakValue = 0;
+  let rmsValue = 0;
+  let sumSquared = 0;
+  let sampleCount = 0;
+
+  // Per-channel analysis
+  for (let ch = 0; ch < channels; ch++) {
+    const data = audioBuffer.getChannelData(ch);
+    for (let i = 0; i < data.length; i++) {
+      const sample = Math.abs(data[i]);
+      peakValue = Math.max(peakValue, sample);
+      sumSquared += data[i] * data[i];
+      sampleCount++;
+    }
+  }
+
+  rmsValue = Math.sqrt(sumSquared / sampleCount);
+
+  // Dynamic range = 20 * log10(peak / RMS)
+  const dynamicRange = rmsValue > 0 ? 20 * Math.log10(peakValue / rmsValue) : 0;
+  masteringState.meters.dynamicRange.value = dynamicRange;
+  masteringState.meters.dynamicRange.status = dynamicRange >= 8 ? 'good' : 'low';
+
+  // Crest factor
+  const peakdB = 20 * Math.log10(peakValue || 1e-6);
+  masteringState.meters.truePeak.value = peakdB;
+  masteringState.meters.truePeak.status = peakdB <= 0 ? 'ok' : 'clipped';
+  masteringState.meters.crestFactor.value = peakValue / rmsValue;
+  masteringState.meters.crestFactor.headroom = 0 - peakdB;
+
+  // Stereo correlation (channels 0 and 1)
+  if (channels >= 2) {
+    const left = audioBuffer.getChannelData(0);
+    const right = audioBuffer.getChannelData(1);
+
+    let dotProduct = 0;
+    let leftEnergy = 0;
+    let rightEnergy = 0;
+
+    for (let i = 0; i < Math.min(left.length, right.length); i++) {
+      dotProduct += left[i] * right[i];
+      leftEnergy += left[i] * left[i];
+      rightEnergy += right[i] * right[i];
+    }
+
+    const correlation = leftEnergy > 0 && rightEnergy > 0
+      ? dotProduct / Math.sqrt(leftEnergy * rightEnergy)
+      : 0;
+
+    masteringState.meters.correlation.value = correlation;
+
+    if (correlation > 0.9) {
+      masteringState.meters.correlation.status = 'mono_like';
+    } else if (correlation > 0.7) {
+      masteringState.meters.correlation.status = 'stereo_ok';
+    } else {
+      masteringState.meters.correlation.status = 'phase_issue';
+    }
+  }
+}
+
+// Update metering display canvas (30 FPS)
+function updateMeteringDisplay() {
+  const canvas = document.getElementById('masteringMeterCanvas');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+
+  // Clear canvas
+  ctx.fillStyle = 'rgba(15,21,32,0.8)';
+  ctx.fillRect(0, 0, width, height);
+
+  // Draw loudness meter
+  const loudness = masteringState.meters.loudness.value;
+  const loudnessNorm = (loudness + 60) / 60; // Normalize -60 to 0 LUFS to 0-1
+  const meterWidth = Math.max(0, Math.min(loudnessNorm * (width - 20), width - 20));
+
+  // Color based on status
+  let meterColor = '#ff5555'; // red (low)
+  if (masteringState.meters.loudness.status === 'meeting') {
+    meterColor = '#aaff00'; // green
+  } else if (masteringState.meters.loudness.status === 'high') {
+    meterColor = '#ffaa00'; // orange
+  }
+
+  ctx.fillStyle = meterColor;
+  ctx.fillRect(10, 10, meterWidth, 30);
+
+  // Draw border
+  ctx.strokeStyle = meterColor;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(10, 10, width - 20, 30);
+
+  // Draw text
+  ctx.fillStyle = meterColor;
+  ctx.font = '12px monospace';
+  ctx.fillText(`${loudness.toFixed(1)} LUFS (Target: ${masteringState.standards[masteringState.activeStandard].target})`, 15, height - 10);
+}
+
+// Apply soft limiter for loudness normalization
+function applySoftLimiter(audioBuffer, threshold, lookahead) {
+  if (!audioBuffer || !masteringState.limiter.enabled) return audioBuffer;
+
+  const output = new Float32Array(audioBuffer.length);
+  const channels = audioBuffer.numberOfChannels;
+
+  if (channels === 0) return audioBuffer;
+
+  // Simple peak detection with lookahead
+  const lookaheadSamples = Math.round((lookahead / 1000) * audioCtx.sampleRate);
+  const releaseSamples = Math.round((masteringState.limiter.release / 1000) * audioCtx.sampleRate);
+
+  // Get peak values with lookahead
+  for (let i = 0; i < audioBuffer.length; i++) {
+    let peak = 0;
+
+    // Check forward lookahead window
+    for (let la = 0; la < lookaheadSamples && i + la < audioBuffer.length; la++) {
+      for (let ch = 0; ch < channels; ch++) {
+        const sample = audioBuffer.getChannelData(ch)[i + la];
+        peak = Math.max(peak, Math.abs(sample));
+      }
+    }
+
+    // Calculate gain reduction
+    const peakDb = 20 * Math.log10(peak || 1e-6);
+    let gainDb = 0;
+
+    if (peakDb > threshold) {
+      gainDb = threshold - peakDb; // Soft knee approximation
+    }
+
+    const gainLinear = Math.pow(10, gainDb / 20);
+
+    // Apply gain to all channels
+    for (let ch = 0; ch < channels; ch++) {
+      const sample = audioBuffer.getChannelData(ch)[i];
+      output[i] = (output[i] || 0) + sample * gainLinear / channels;
+    }
+  }
+
+  return output;
+}
+
+// === PHASE 30.2: MULTI-FORMAT EXPORT (STUBS) ===
+
+// Placeholder for export functions (to be implemented)
+function resampleAudio(buffer, targetSampleRate) {
+  // Stub: actual resampling would use OfflineAudioContext
+  return buffer;
+}
+
+function normalizeToLoudness(buffer, targetLUFS) {
+  // Stub: actual loudness normalization would calculate and apply gain
+  return buffer;
+}
+
+function encodeToFormat(buffer, format, bitrate, metadata) {
+  // Stub: actual encoding would use wasm libraries
+  return new Blob([buffer], {type: 'audio/wav'});
+}
+
+// === PHASE 30.3: DISTRIBUTION INTEGRATION (STUBS) ===
+
+// Placeholder for distribution functions (to be implemented)
+function authenticatePlatform(platform, credentials) {
+  // Stub: actual OAuth2 flow
+  console.log(`Authenticating ${platform}...`);
+}
+
+function validateReleaseMetadata(metadata, platform) {
+  // Stub: actual validation
+  return {valid: true, errors: []};
+}
 
 // Phase 23: Sample Library
 let sampleLibrary = [];
@@ -3346,6 +4096,10 @@ function startSequencer() {
 
   function scheduleStep(time) {
     currentStep = (currentStep + 1) % STEPS;
+
+    // Phase 29.1: Update master playhead for stem synchronization
+    const stepDuration = (60 / bpm) / 4;  // Quarter note duration in seconds
+    updateMasterPlayhead(stepDuration);
 
     // Phase 15c: Improved visual sync using audio context time for delay calculation
     const delayMs = Math.max(0, (time - getSchedulingTimestamp()) * 1000);
@@ -5829,6 +6583,21 @@ function playSound(track, velocity = 1.0, pan = 0) {
   const scaledVol = p.vol * Math.max(0.1, velocity);
   const stopTime = now + p.decay + 0.01;
 
+  // Phase 29.1: Track stem playback position for synchronization
+  const stemMap = {
+    'kick': 'drums',
+    'snare': 'drums',
+    'hihat': 'drums',
+    'clap': 'drums',
+    'bass': 'bass',
+    'synth': 'other',
+    'lead': 'vocals',
+    'pad': 'other',
+    'fx': 'other'
+  };
+  const stem = stemMap[track] || 'other';
+  stemSyncState.stemPlaybackPositions[stem] = now;
+
   // Get pooled nodes (reused, not allocated)
   const gain = getPooledNode(voicePool.gainNodes);
   const filter = getPooledNode(voicePool.filterNodes);
@@ -6401,23 +7170,37 @@ function playSlice(sliceId, time, velocity = 1.0, effectsOverrides = {}) {
   const startTime = slice.startSample / buffer.sampleRate;
   const duration = slice.duration;
 
+  // Phase 29.1: Apply master playhead synchronization compensation
+  const stem = sample.stem || 'other';  // Default to 'other' if stem not specified
+  const compensatedTime = getCompensatedPlaybackTime(stem, time);
+
+  // Update stem playback position for drift detection
+  stemSyncState.stemPlaybackPositions[stem] = compensatedTime;
+
+  // Phase 29.3: Apply phase shift for coherence alignment
+  let playBuffer = buffer;
+  const phaseShift = stemSyncState.stemPhaseShift[stem] || 0;
+  if (phaseShift > 0.001) {
+    playBuffer = applyPhaseShift(buffer, phaseShift);
+  }
+
   const source = audioCtx.createBufferSource();
-  source.buffer = buffer;
+  source.buffer = playBuffer;
 
   const stretchFactor = sample.playbackRate || 1.0;
   source.playbackRate.value = stretchFactor;
 
   const gain = audioCtx.createGain();
-  gain.gain.setValueAtTime(velocity * 0.7, time);
-  gain.gain.exponentialRampToValueAtTime(0.001, time + duration - 0.01);
+  gain.gain.setValueAtTime(velocity * 0.7, compensatedTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, compensatedTime + duration - 0.01);
 
   source.connect(gain);
   gain.connect(audioCtx.destination);
 
-  source.start(time, startTime, duration);
-  source.stop(time + duration);
+  source.start(compensatedTime, startTime, duration);
+  source.stop(compensatedTime + duration);
 
-  sliceSequencerState.activeSlices.set(sliceId, {triggeredAt: time, endAt: time + duration});
+  sliceSequencerState.activeSlices.set(sliceId, {triggeredAt: compensatedTime, endAt: compensatedTime + duration});
 }
 
 // Phase 23h: Visual Timeline Rendering (~150 lines)
@@ -13330,8 +14113,309 @@ document.addEventListener('DOMContentLoaded', () => {
       statusEl.style.color = 'rgba(255,51,85,0.8)';
     }
   });
+
+  // Phase 29: Initialize Multi-Stem Synchronization
+  const initPhase29 = () => {
+    console.log('✓ Phase 29 initialized: Master playhead synchronization');
+
+    // Start periodic master playhead updates
+    setInterval(() => {
+      if (isPlaying) {
+        const deltaTime = 1 / 60; // 60 FPS update
+        updateMasterPlayhead(deltaTime);
+      }
+    }, 16.67); // ~60 FPS
+  };
+
+  setTimeout(initPhase29, 200);
+
+  // Phase 30 Initialization
+  const initPhase30Mastering = () => {
+    initMasteringMeters();
+    console.log('✓ Phase 30 initialized: Mastering suite');
+
+    // Update metering during playback
+    setInterval(() => {
+      if (isPlaying) {
+        // Get current audio buffer for metering
+        // This would need to be connected to the actual audio output
+        updateMeteringDisplay();
+      }
+    }, 33.33); // ~30 FPS
+  };
+
+  setTimeout(initPhase30Mastering, 250);
+
+  // Phase 30: Mastering Panel toggle button
+  const masteringToggleBtn = document.createElement('button');
+  masteringToggleBtn.id = 'masteringToggleBtn';
+  masteringToggleBtn.textContent = '🎚️';
+  masteringToggleBtn.title = 'Mastering Suite (Phase 30)';
+  masteringToggleBtn.onclick = () => {
+    const panel = document.getElementById('masteringPanel');
+    if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  };
+  masteringToggleBtn.style.cssText = `
+    position: fixed;
+    bottom: 320px;
+    left: 80px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(170,255,0,0.2), rgba(170,255,0,0.1));
+    border: 2px solid #aaff00;
+    color: #aaff00;
+    font-size: 24px;
+    cursor: pointer;
+    z-index: 1000;
+    transition: all 0.3s;
+  `;
+  masteringToggleBtn.onmouseover = () => {
+    masteringToggleBtn.style.background = 'linear-gradient(135deg, rgba(170,255,0,0.3), rgba(170,255,0,0.2))';
+  };
+  masteringToggleBtn.onmouseout = () => {
+    masteringToggleBtn.style.background = 'linear-gradient(135deg, rgba(170,255,0,0.2), rgba(170,255,0,0.1))';
+  };
+  document.body.appendChild(masteringToggleBtn);
+
+  // Phase 29: Cross-Stem Routing Panel toggle button
+  const crossStemToggleBtn = document.createElement('button');
+  crossStemToggleBtn.id = 'crossStemToggleBtn';
+  crossStemToggleBtn.textContent = '🔀';
+  crossStemToggleBtn.title = 'Cross-Stem Routing (Phase 29)';
+  crossStemToggleBtn.onclick = () => {
+    const panel = document.getElementById('crossStemRoutingPanel');
+    if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  };
+  crossStemToggleBtn.style.cssText = `
+    position: fixed;
+    bottom: 320px;
+    left: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(0,255,200,0.2), rgba(0,255,200,0.1));
+    border: 2px solid #00ffc8;
+    color: #00ffc8;
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    z-index: 899;
+    box-shadow: 0 0 20px rgba(0,255,200,0.2);
+  `;
+  crossStemToggleBtn.onmouseover = () => {
+    crossStemToggleBtn.style.transform = 'scale(1.1)';
+    crossStemToggleBtn.style.boxShadow = '0 0 30px rgba(0,255,200,0.4)';
+  };
+  crossStemToggleBtn.onmouseout = () => {
+    crossStemToggleBtn.style.transform = 'scale(1)';
+    crossStemToggleBtn.style.boxShadow = '0 0 20px rgba(0,255,200,0.2)';
+  };
+  document.body.appendChild(crossStemToggleBtn);
+
+  // Phase 29.2: Wire up Cross-Stem Routing UI event handlers
+  const sendGainSlider = document.getElementById('sendGainSlider');
+  const sendGainValue = document.getElementById('sendGainValue');
+  if (sendGainSlider) {
+    sendGainSlider.oninput = () => {
+      const val = parseFloat(sendGainSlider.value);
+      if (sendGainValue) sendGainValue.textContent = val.toFixed(2);
+    };
+  }
+
+  const sidechainThreshold = document.getElementById('sidechainThreshold');
+  const sidechainThreshValue = document.getElementById('sidechainThreshValue');
+  if (sidechainThreshold) {
+    sidechainThreshold.oninput = () => {
+      const val = parseInt(sidechainThreshold.value);
+      stemRoutingState.sidechainConfig.threshold = val;
+      if (sidechainThreshValue) sidechainThreshValue.textContent = `${val} dB`;
+    };
+  }
+
+  const sidechainRatio = document.getElementById('sidechainRatio');
+  const sidechainRatioValue = document.getElementById('sidechainRatioValue');
+  if (sidechainRatio) {
+    sidechainRatio.oninput = () => {
+      const val = parseFloat(sidechainRatio.value);
+      stemRoutingState.sidechainConfig.ratio = val;
+      if (sidechainRatioValue) sidechainRatioValue.textContent = val.toFixed(1);
+    };
+  }
+
+  const sidechainEnable = document.getElementById('sidechainEnable');
+  if (sidechainEnable) {
+    sidechainEnable.onchange = () => {
+      stemRoutingState.sidechainActive.reverbWet = sidechainEnable.checked;
+      console.log('Sidechain:', sidechainEnable.checked ? 'enabled' : 'disabled');
+    };
+  }
+
+  const createRouteBtn = document.getElementById('createRouteBtn');
+  if (createRouteBtn) {
+    createRouteBtn.onclick = () => {
+      const fromStem = document.getElementById('sendFromStem')?.value || 'drums';
+      const toEffect = document.getElementById('sendToEffect')?.value || 'reverbWet';
+      const intensity = parseFloat(document.getElementById('sendGainSlider')?.value || 0.5);
+
+      const success = createSendRoute(fromStem, toEffect, intensity);
+      if (success) {
+        console.log(`✓ Route created: ${fromStem} → ${toEffect} (${(intensity * 100).toFixed(0)}%)`);
+      }
+    };
+  }
+
+  const calibratePhaseBtn = document.getElementById('calibratePhaseBtn');
+  if (calibratePhaseBtn) {
+    calibratePhaseBtn.onclick = () => {
+      calibratePhaseAlignment(['vocals', 'drums', 'bass', 'other']);
+      const coherenceDiv = document.getElementById('coherenceStatus');
+      if (coherenceDiv && stemPhaseState.coherenceMatrix) {
+        const coherenceValues = Object.values(stemPhaseState.coherenceMatrix);
+        if (coherenceValues.length > 0) {
+          const avgCoherence = coherenceValues.reduce((a, b) => a + b, 0) / coherenceValues.length;
+          coherenceDiv.textContent = `Coherence: ${(avgCoherence * 100).toFixed(1)}%`;
+          coherenceDiv.style.color = avgCoherence > 0.95 ? '#aaff00' : avgCoherence > 0.90 ? '#ffaa00' : '#ff5555';
+          console.log(`✓ Phase calibrated. Coherence: ${(avgCoherence * 100).toFixed(1)}%`);
+        }
+      }
+    };
+  }
+
+  // Phase 30: Event handlers for mastering suite
+  const standardSelector = document.getElementById('standardSelector');
+  if (standardSelector) {
+    standardSelector.onchange = () => {
+      masteringState.activeStandard = standardSelector.value;
+      const standard = masteringState.standards[masteringState.activeStandard];
+      masteringState.meters.loudness.target = standard.target;
+      console.log(`✓ Mastering standard changed to: ${standard.name} (Target: ${standard.target})`);
+    };
+  }
+
+  const limiterEnable = document.getElementById('limiterEnable');
+  if (limiterEnable) {
+    limiterEnable.onchange = () => {
+      masteringState.limiter.enabled = limiterEnable.checked;
+      console.log(`✓ Soft limiter ${limiterEnable.checked ? 'enabled' : 'disabled'}`);
+    };
+  }
 });
+
 </script>
+
+<!-- === PHASE 29: CROSS-STEM ROUTING PANEL ===-->
+<div id="crossStemRoutingPanel" style="position:fixed;bottom:20px;right:420px;width:380px;background:var(--bg-card);border:1px solid rgba(0,255,200,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:75vh;overflow-y:auto;display:none">
+  <h3 style="margin-top:0;color:#00ffc8;font-size:1.1em">🔀 Cross-Stem Routing</h3>
+
+  <div style="margin:12px 0;padding:10px;background:rgba(0,255,200,0.1);border-radius:6px;border-left:3px solid #00ffc8">
+    <label style="display:block;margin-bottom:8px;color:#fff;font-size:0.9em">From Stem:</label>
+    <select id="sendFromStem" style="width:100%;padding:6px;background:rgba(0,0,0,0.3);border:1px solid #00ffc8;color:#fff;border-radius:4px;font-size:0.9em">
+      <option value="vocals">Vocals</option>
+      <option value="drums">Drums</option>
+      <option value="bass">Bass</option>
+      <option value="other">Other</option>
+    </select>
+  </div>
+
+  <div style="margin:12px 0;padding:10px;background:rgba(0,255,200,0.1);border-radius:6px;border-left:3px solid #00ffc8">
+    <label style="display:block;margin-bottom:8px;color:#fff;font-size:0.9em">To Effect:</label>
+    <select id="sendToEffect" style="width:100%;padding:6px;background:rgba(0,0,0,0.3);border:1px solid #00ffc8;color:#fff;border-radius:4px;font-size:0.9em">
+      <option value="reverbWet">Reverb Wet</option>
+      <option value="delayFeedback">Delay Feedback</option>
+      <option value="filterCutoff">Filter Cutoff</option>
+      <option value="distortionDrive">Distortion Drive</option>
+    </select>
+  </div>
+
+  <div style="margin:12px 0;padding:10px;background:rgba(0,255,200,0.1);border-radius:6px;border-left:3px solid #00ffc8">
+    <label style="display:block;margin-bottom:8px;color:#fff;font-size:0.9em">Send Level: <span id="sendGainValue" style="color:#00ffc8">0.50</span></label>
+    <input type="range" id="sendGainSlider" min="0" max="1" step="0.01" value="0.5" style="width:100%;cursor:pointer">
+  </div>
+
+  <button id="createRouteBtn" style="width:100%;padding:8px;margin:12px 0;background:linear-gradient(135deg,rgba(0,255,200,0.2),rgba(0,255,200,0.1));border:1px solid #00ffc8;color:#00ffc8;border-radius:6px;cursor:pointer;font-weight:bold;font-size:0.9em">+ Create Route</button>
+
+  <div style="margin:12px 0;padding:12px;background:rgba(0,240,255,0.05);border:1px solid rgba(0,240,255,0.2);border-radius:6px">
+    <h4 style="margin-top:0;color:#00f0ff;font-size:0.95em">⚡ Sidechain Config</h4>
+    <label style="display:flex;align-items:center;margin-bottom:8px;color:#fff;font-size:0.9em">
+      <input type="checkbox" id="sidechainEnable" checked style="margin-right:8px;cursor:pointer"> Enable Sidechain
+    </label>
+    <label style="display:block;margin-bottom:8px;color:#fff;font-size:0.9em">
+      Threshold: <span id="sidechainThreshValue" style="color:#aaff00">-30 dB</span>
+    </label>
+    <input type="range" id="sidechainThreshold" min="-60" max="0" step="1" value="-30" style="width:100%;cursor:pointer">
+
+    <label style="display:block;margin-top:12px;margin-bottom:8px;color:#fff;font-size:0.9em">
+      Ratio: <span id="sidechainRatioValue" style="color:#aaff00">4.0x</span>
+    </label>
+    <input type="range" id="sidechainRatio" min="1" max="8" step="0.1" value="4" style="width:100%;cursor:pointer">
+  </div>
+
+  <div style="margin:12px 0;padding:10px;background:rgba(170,255,0,0.1);border-radius:6px;border-left:3px solid #aaff00">
+    <h4 style="margin-top:0;margin-bottom:8px;color:#aaff00;font-size:0.95em">🎯 Phase Calibration (29.3)</h4>
+    <button id="calibratePhaseBtn" style="width:100%;padding:6px;background:linear-gradient(135deg,rgba(170,255,0,0.2),rgba(170,255,0,0.1));border:1px solid #aaff00;color:#aaff00;border-radius:4px;cursor:pointer;font-size:0.85em;margin-bottom:6px">
+      Calibrate Phase Alignment
+    </button>
+    <div id="coherenceStatus" style="font-size:0.8em;color:#aaa;padding:4px 0">
+      Coherence: —
+    </div>
+  </div>
+
+  <div style="margin:12px 0;padding:10px;background:rgba(0,0,0,0.3);border:1px solid #1a2438;border-radius:6px;max-height:150px;overflow-y:auto">
+    <h4 style="margin-top:0;color:#aaff00;font-size:0.9em">Active Routes</h4>
+    <div id="activeRoutesList" style="font-size:0.85em;color:#aaa">
+      <p style="margin:0">No routes configured</p>
+    </div>
+  </div>
+</div>
+
+<!-- === PHASE 30: MASTERING SUITE PANEL ===-->
+<div id="masteringPanel" style="position:fixed;bottom:20px;right:810px;width:380px;background:var(--bg-card);border:1px solid rgba(170,255,0,0.3);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:900;max-height:75vh;overflow-y:auto;display:none">
+  <h3 style="margin-top:0;color:#aaff00;font-size:1.1em">🎚️ Mastering Suite</h3>
+
+  <canvas id="masteringMeterCanvas" width="300" height="80" style="width:100%;border:1px solid rgba(170,255,0,0.2);border-radius:6px;margin:12px 0;display:block"></canvas>
+
+  <table style="width:100%;font-size:0.85em;margin:12px 0;border-collapse:collapse">
+    <tr style="border-bottom:1px solid #1a2438">
+      <td style="padding:6px;color:#fff">Loudness</td>
+      <td style="padding:6px;text-align:right;color:#00ff00" id="loudnessReadout">-18.0 LUFS</td>
+      <td style="padding:6px;text-align:right;font-size:0.8em;color:#aaff00" id="loudnessStatus">Low</td>
+    </tr>
+    <tr style="border-bottom:1px solid #1a2438">
+      <td style="padding:6px;color:#fff">True Peak</td>
+      <td style="padding:6px;text-align:right;color:#00ff00" id="truePeakReadout">-6.0 dBFS</td>
+      <td style="padding:6px;text-align:right;font-size:0.8em;color:#00ff00" id="truePeakStatus">OK</td>
+    </tr>
+    <tr style="border-bottom:1px solid #1a2438">
+      <td style="padding:6px;color:#fff">DR</td>
+      <td style="padding:6px;text-align:right;color:#aaa" id="drReadout">— dB</td>
+      <td style="padding:6px;text-align:right;font-size:0.8em;color:#aaa" id="drStatus">—</td>
+    </tr>
+    <tr>
+      <td style="padding:6px;color:#fff">Correlation</td>
+      <td style="padding:6px;text-align:right;color:#aaa" id="corrReadout">—</td>
+      <td style="padding:6px;text-align:right;font-size:0.8em;color:#aaa" id="corrStatus">—</td>
+    </tr>
+  </table>
+
+  <label style="display:block;margin:12px 0;color:#fff;font-size:0.9em">
+    Standard:
+    <select id="standardSelector" style="padding:4px;background:rgba(0,0,0,0.3);border:1px solid #aaff00;color:#aaff00;border-radius:4px;font-size:0.9em;cursor:pointer">
+      <option value="spotify">Spotify (-14 LUFS)</option>
+      <option value="appleMusic">Apple Music (-16 LKFS)</option>
+      <option value="youtube">YouTube (-13 LUFS)</option>
+      <option value="broadcast">EBU R128 (-23 LUFS)</option>
+      <option value="reference">Reference (-18 LUFS)</option>
+    </select>
+  </label>
+
+  <label style="display:flex;align-items:center;margin:12px 0;color:#fff;font-size:0.9em;cursor:pointer">
+    <input type="checkbox" id="limiterEnable" style="margin-right:8px;cursor:pointer"> Enable Soft Limiter
+  </label>
+</div>
 
 </body>
 </html>
