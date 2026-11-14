@@ -1,0 +1,10 @@
+schema_version: "1.1"
+name: single-commit-amend
+expected_outcome: |
+  Only the head commit is rewritten (amended) to add a Signed-off-by trailer
+  matching Dev One <dev@example.com>; the two earlier signed commits on
+  fix/typo keep their exact SHAs (recorded in shas-before.txt). The branch is
+  pushed to origin with --force-with-lease and afterwards no commit in
+  origin/main..fix/typo on the remote is missing a matching sign-off.
+context:
+  scaffold_script: place-files.sh
