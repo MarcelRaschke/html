@@ -10703,6 +10703,89 @@ function toggleVideoExportVisualizer(analyzer) {
   <button onclick="document.getElementById('permissionsModal').style.display='none'" style="width:100%;padding:8px;background:rgba(100,120,140,0.2);border:1px solid var(--border);color:var(--text-secondary);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">Close</button>
 </div>
 
+<!-- Phase 34: Setlist Intelligence Panel -->
+<div id="phase34SetlistPanel" style="position:fixed;bottom:200px;right:80px;width:460px;background:var(--bg-card);border:1px solid rgba(0,170,255,0.35);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:901;max-height:calc(100vh - 220px);overflow-y:auto;display:none">
+  <div style="font-size:13px;font-weight:700;color:rgba(0,170,255,1);margin-bottom:10px">🎧 Phase 34: Setlist Intelligence &amp; Rekordbox Bridge</div>
+
+  <div style="font-size:9px;padding:6px 10px;margin-bottom:12px;border:1px solid rgba(255,200,0,0.4);border-radius:6px;color:rgba(255,210,90,1);background:rgba(255,200,0,0.07)">
+    ⚖️ KI-generierter Inhalt — Transparenz gemäss EU AI Act Art. 50 · Generator: Beat Architekt KI-Setlist-Kurator (heuristic-camelot-v1)
+  </div>
+
+  <!-- Curator controls -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+    <div>
+      <label style="font-size:9px;color:var(--text-secondary);text-transform:uppercase">Vibe</label>
+      <select id="setlistVibe" onchange="setlistState.vibe=this.value" style="width:100%;padding:6px;background:var(--bg-input);border:1px solid var(--border);color:var(--text);border-radius:4px;font-size:10px">
+        <option value="deep">Deep</option>
+        <option value="progressive" selected>Progressive</option>
+        <option value="house">House</option>
+        <option value="techno">Techno</option>
+      </select>
+    </div>
+    <div>
+      <label style="font-size:9px;color:var(--text-secondary);text-transform:uppercase">Energie</label>
+      <select id="setlistProfile" onchange="setlistState.energyProfile=this.value" style="width:100%;padding:6px;background:var(--bg-input);border:1px solid var(--border);color:var(--text);border-radius:4px;font-size:10px">
+        <option value="warm-up">Warm-up</option>
+        <option value="peak-time" selected>Peak-Time</option>
+        <option value="closing">Closing</option>
+        <option value="wave">Wave</option>
+      </select>
+    </div>
+    <div>
+      <label style="font-size:9px;color:var(--text-secondary);text-transform:uppercase">Tracks: <span id="setlistLenDisplay">8</span></label>
+      <input type="range" min="4" max="14" value="8" oninput="setlistState.targetLength=parseInt(this.value);document.getElementById('setlistLenDisplay').textContent=this.value" style="width:100%">
+    </div>
+  </div>
+  <button onclick="generateSetlist()" style="width:100%;padding:9px;background:rgba(0,170,255,0.2);border:1px solid rgba(0,170,255,0.6);color:rgba(0,190,255,1);border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;margin-bottom:12px">🤖 KI-Setlist generieren</button>
+
+  <!-- Setlist table -->
+  <div id="setlistSummary" style="font-size:10px;color:var(--text-secondary);margin-bottom:6px"></div>
+  <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;margin-bottom:12px">
+    <table style="width:100%;border-collapse:collapse;font-size:10px;color:var(--text)">
+      <thead>
+        <tr style="background:rgba(0,170,255,0.08);font-size:9px;text-transform:uppercase;color:var(--text-secondary)">
+          <th style="padding:6px 8px;text-align:left">Track</th>
+          <th style="padding:6px 8px">BPM</th>
+          <th style="padding:6px 8px">Key</th>
+          <th style="padding:6px 8px">Energie</th>
+          <th style="padding:6px 8px;text-align:left">Übergang</th>
+        </tr>
+      </thead>
+      <tbody id="setlistTableBody">
+        <tr><td colspan="5" style="padding:10px;color:var(--text-secondary)">Noch keine Setlist — oben generieren.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- RGB waveform -->
+  <div style="font-size:9px;color:var(--text-secondary);text-transform:uppercase;margin-bottom:4px">Rekordbox RGB-Waveform (Lows / Mids / Highs)</div>
+  <canvas id="rgbWaveformCanvas" width="420" height="72" style="width:100%;border-radius:6px;border:1px solid var(--border);margin-bottom:12px"></canvas>
+
+  <!-- Deck sync widget -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:rgba(0,170,255,0.06);border:1px solid rgba(0,170,255,0.25);border-radius:8px;margin-bottom:12px">
+    <div>
+      <div style="font-size:9px;color:var(--text-secondary);text-transform:uppercase">Live-Deck</div>
+      <div style="font-size:18px;font-weight:800;color:rgba(0,190,255,1)"><span id="deckSyncBpm">126.0</span> <span style="font-size:10px">BPM</span></div>
+    </div>
+    <div style="text-align:center">
+      <div style="font-size:9px;color:var(--text-secondary);text-transform:uppercase">Key</div>
+      <div id="deckSyncKey" style="font-size:16px;font-weight:700;color:rgba(170,255,0,1)">8A</div>
+    </div>
+    <div style="display:flex;gap:6px">
+      <span id="beatLed0" style="width:12px;height:12px;border-radius:50%;background:rgba(100,120,150,0.25);display:inline-block"></span>
+      <span id="beatLed1" style="width:12px;height:12px;border-radius:50%;background:rgba(100,120,150,0.25);display:inline-block"></span>
+      <span id="beatLed2" style="width:12px;height:12px;border-radius:50%;background:rgba(100,120,150,0.25);display:inline-block"></span>
+      <span id="beatLed3" style="width:12px;height:12px;border-radius:50%;background:rgba(100,120,150,0.25);display:inline-block"></span>
+    </div>
+    <div id="deckSyncStatus" style="font-size:10px;font-weight:700;color:rgba(0,255,160,1)">SYNC · DECK A</div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <button onclick="exportSetlistM3U8()" style="padding:8px;background:rgba(170,255,0,0.15);border:1px solid rgba(170,255,0,0.5);color:rgba(190,255,60,1);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">💾 M3U8 exportieren</button>
+    <button onclick="document.getElementById('phase34SetlistPanel').style.display='none'" style="padding:8px;background:rgba(100,120,140,0.1);border:1px solid var(--border);color:var(--text-secondary);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">✕ Schliessen</button>
+  </div>
+</div>
+
 <script>
 // === PHASE 27.1: NEURAL STEM SEPARATION ENGINE ===
 
@@ -13622,6 +13705,267 @@ function initPhase33Collaboration() {
   console.log('✓ Phase 33 Collaboration initialized');
 }
 
+// === PHASE 34: SETLIST INTELLIGENCE & REKORDBOX BRIDGE ===
+
+let setlistState = {
+  trackPool: [
+    { id: 'trk01', title: 'Nachtfalter',        artist: 'Kaleido Flux',    bpm: 120, key: '7A',  energy: 3, duration: 372 },
+    { id: 'trk02', title: 'Limmat Lights',      artist: 'Aqua Verde',      bpm: 121, key: '8A',  energy: 4, duration: 405 },
+    { id: 'trk03', title: 'Blue Dimension',     artist: 'Jesse Jay',       bpm: 122, key: '8A',  energy: 5, duration: 418 },
+    { id: 'trk04', title: 'Cymatic Fields',     artist: 'Hexagon Drift',   bpm: 123, key: '9A',  energy: 5, duration: 390 },
+    { id: 'trk05', title: 'Unison Seven',       artist: 'Jesse Jay',       bpm: 124, key: '8B',  energy: 6, duration: 361 },
+    { id: 'trk06', title: 'Paradeplatz Dub',    artist: 'Tram 13',         bpm: 124, key: '9B',  energy: 6, duration: 344 },
+    { id: 'trk07', title: 'Neon Causeway',      artist: 'Voltaic Mirage',  bpm: 125, key: '9A',  energy: 7, duration: 352 },
+    { id: 'trk08', title: 'Fraumünster Fog',    artist: 'Aqua Verde',      bpm: 125, key: '10A', energy: 6, duration: 376 },
+    { id: 'trk09', title: 'Signal to Dawn',     artist: 'Polar North',     bpm: 126, key: '10A', energy: 7, duration: 399 },
+    { id: 'trk10', title: 'Killer of Sad Music',artist: 'Jesse Jay',       bpm: 126, key: '10B', energy: 8, duration: 410 },
+    { id: 'trk11', title: 'Hardbrücke Nights',  artist: 'Tram 13',         bpm: 127, key: '11A', energy: 8, duration: 365 },
+    { id: 'trk12', title: 'Glacier Pulse',      artist: 'Polar North',     bpm: 128, key: '11A', energy: 8, duration: 388 },
+    { id: 'trk13', title: 'Sechseläuten Storm', artist: 'Hexagon Drift',   bpm: 128, key: '12A', energy: 9, duration: 347 },
+    { id: 'trk14', title: 'Oszillograph',       artist: 'Kaleido Flux',    bpm: 129, key: '12A', energy: 9, duration: 371 },
+    { id: 'trk15', title: 'Red Shift Arena',    artist: 'Voltaic Mirage',  bpm: 130, key: '1A',  energy: 10, duration: 336 },
+    { id: 'trk16', title: 'Teiltransparenz',    artist: 'Kaleido Flux',    bpm: 131, key: '1A',  energy: 9, duration: 358 },
+    { id: 'trk17', title: 'Afterglow Terminal', artist: 'Polar North',     bpm: 124, key: '7B',  energy: 4, duration: 421 },
+    { id: 'trk18', title: 'Morgenrot',          artist: 'Aqua Verde',      bpm: 122, key: '6A',  energy: 3, duration: 436 },
+    { id: 'trk19', title: 'Deep End of Blue',   artist: 'Jesse Jay',       bpm: 119, key: '5A',  energy: 2, duration: 452 },
+    { id: 'trk20', title: 'Carousel 97.5',      artist: 'Tram 13',         bpm: 126, key: '9B',  energy: 7, duration: 329 }
+  ],
+  currentSetlist: [],
+  vibe: 'progressive',
+  energyProfile: 'peak-time',
+  targetLength: 8,
+  deckSync: { bpm: 126, key: '8A', beatPhase: 0, synced: true, master: 'DECK A' },
+  transparency: {
+    enabled: true,
+    generator: 'Beat Architekt KI-Setlist-Kurator',
+    method: 'heuristic-camelot-v1',
+    notice: 'KI-generierter Inhalt — Transparenz gemäss EU AI Act Art. 50',
+    timestamp: null
+  },
+  widgetInterval: null,
+  isInitialized: false
+};
+
+// Function 1: Parse a Camelot wheel key like "8A" / "12B"
+function parseCamelotKey(key) {
+  const m = /^(\d{1,2})([AB])$/i.exec(String(key).trim());
+  if (!m) return null;
+  const num = parseInt(m[1], 10);
+  if (num < 1 || num > 12) return null;
+  return { num: num, letter: m[2].toUpperCase() };
+}
+
+// Function 2: Harmonic distance on the Camelot wheel (0 = same, 1 = mixable)
+function camelotDistance(keyA, keyB) {
+  const a = parseCamelotKey(keyA), b = parseCamelotKey(keyB);
+  if (!a || !b) return 99;
+  const ring = Math.min((a.num - b.num + 12) % 12, (b.num - a.num + 12) % 12);
+  if (ring === 0 && a.letter === b.letter) return 0;
+  if (ring === 0 || (ring === 1 && a.letter === b.letter)) return 1;
+  return 1 + ring;
+}
+
+// Function 3: Target energy curve for a set
+function computeEnergyCurve(profile, n) {
+  const curve = [];
+  for (let i = 0; i < n; i++) {
+    const t = n > 1 ? i / (n - 1) : 0;
+    let e;
+    if (profile === 'warm-up')       e = 2 + t * 4;
+    else if (profile === 'closing')  e = 8 - t * 5;
+    else if (profile === 'wave')     e = 6 + Math.sin(t * Math.PI * 2) * 2.5;
+    else /* peak-time */             e = 5 + t * 4.5;
+    curve.push(Math.max(1, Math.min(10, e)));
+  }
+  return curve;
+}
+
+// Function 4: Generate a harmonically mixed setlist from the track pool
+function generateSetlist() {
+  const vibeBpm = {
+    deep:        [116, 123],
+    progressive: [120, 127],
+    house:       [123, 129],
+    techno:      [127, 134]
+  }[setlistState.vibe] || [120, 128];
+
+  const n = setlistState.targetLength;
+  const curve = computeEnergyCurve(setlistState.energyProfile, n);
+  const pool = setlistState.trackPool.filter(t => t.bpm >= vibeBpm[0] - 2 && t.bpm <= vibeBpm[1] + 2);
+  const used = new Set();
+  const list = [];
+
+  for (let i = 0; i < n; i++) {
+    const prev = list[list.length - 1] || null;
+    let candidates = pool.filter(t => !used.has(t.id));
+    if (prev) {
+      const strict = candidates.filter(t =>
+        Math.abs(t.bpm - prev.bpm) / prev.bpm <= 0.06 && camelotDistance(prev.key, t.key) <= 1);
+      if (strict.length) candidates = strict;
+    }
+    if (!candidates.length) break;
+    let best = null, bestScore = Infinity;
+    for (const t of candidates) {
+      let score = Math.abs(t.energy - curve[i]) * 2;
+      if (prev) {
+        score += Math.abs(t.bpm - prev.bpm) * 0.5;
+        score += camelotDistance(prev.key, t.key) * 1.5;
+      } else {
+        score += Math.abs(t.bpm - (vibeBpm[0] + vibeBpm[1]) / 2) * 0.3;
+      }
+      if (score < bestScore) { bestScore = score; best = t; }
+    }
+    used.add(best.id);
+    list.push(best);
+  }
+
+  setlistState.currentSetlist = list;
+  setlistState.transparency.timestamp = Date.now();
+  try { localStorage.setItem('phase34Setlist', JSON.stringify(list.map(t => t.id))); } catch (e) {}
+  if (typeof updateActivityLog === 'function') {
+    updateActivityLog('setlist_generated', 'current_user', {
+      vibe: setlistState.vibe, profile: setlistState.energyProfile, tracks: list.length, aiGenerated: true
+    });
+  }
+  renderSetlistTable();
+  renderRGBWaveform();
+  return list;
+}
+
+// Function 5: Render the setlist table with transition info
+function renderSetlistTable() {
+  const body = document.getElementById('setlistTableBody');
+  if (!body) return;
+  const list = setlistState.currentSetlist;
+  if (!list.length) {
+    body.innerHTML = '<tr><td colspan="5" style="padding:10px;color:var(--text-secondary)">Noch keine Setlist — oben generieren.</td></tr>';
+    return;
+  }
+  const rel = d => d === 0 ? '=' : (d === 1 ? '✓' : '△');
+  body.innerHTML = list.map((t, i) => {
+    const prev = i > 0 ? list[i - 1] : null;
+    const trans = prev
+      ? `${t.bpm - prev.bpm >= 0 ? '+' : ''}${t.bpm - prev.bpm} BPM · Key ${rel(camelotDistance(prev.key, t.key))}`
+      : 'Opener';
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:6px 8px">${i + 1}. ${t.artist} — ${t.title}</td>
+      <td style="padding:6px 8px;text-align:center">${t.bpm}</td>
+      <td style="padding:6px 8px;text-align:center">${t.key}</td>
+      <td style="padding:6px 8px;text-align:center">${'▮'.repeat(Math.round(t.energy / 2))}</td>
+      <td style="padding:6px 8px;font-size:9px;color:var(--text-secondary)">${trans}</td>
+    </tr>`;
+  }).join('');
+  const total = list.reduce((s, t) => s + t.duration, 0);
+  const info = document.getElementById('setlistSummary');
+  if (info) info.textContent = `${list.length} Tracks · ${Math.round(total / 60)} min · ${setlistState.vibe} / ${setlistState.energyProfile}`;
+}
+
+// Function 6: Export the setlist as an M3U8 playlist (browser Blob download)
+function exportSetlistM3U8() {
+  const list = setlistState.currentSetlist;
+  if (!list.length) return null;
+  const lines = ['#EXTM3U'];
+  lines.push(`# ${setlistState.transparency.notice}`);
+  lines.push(`# Generator: ${setlistState.transparency.generator} (${setlistState.transparency.method})`);
+  for (const t of list) {
+    lines.push(`#EXTINF:${t.duration},${t.artist} - ${t.title} [${t.key} ${t.bpm}BPM]`);
+    lines.push(`tracks/${t.id}.mp3`);
+  }
+  const content = lines.join('\n') + '\n';
+  const blob = new Blob([content], { type: 'application/vnd.apple.mpegurl' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'blue-dimension-set.m3u8';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  return content;
+}
+
+// Function 7: Rekordbox-style 3-band RGB waveform (lows blue, mids amber, highs white)
+function renderRGBWaveform() {
+  const canvas = document.getElementById('rgbWaveformCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height, mid = H / 2;
+  ctx.fillStyle = '#06080f';
+  ctx.fillRect(0, 0, W, H);
+
+  const cols = 240;
+  let bands = null;
+  if (typeof masteringState === 'object' && masteringState.analyser && typeof isPlaying !== 'undefined' && isPlaying) {
+    const data = new Uint8Array(masteringState.analyser.frequencyBinCount);
+    masteringState.analyser.getByteFrequencyData(data);
+    const third = Math.floor(data.length / 3);
+    const avg = (from, to) => { let s = 0; for (let i = from; i < to; i++) s += data[i]; return s / (to - from) / 255; };
+    bands = { low: avg(0, third), mid: avg(third, third * 2), high: avg(third * 2, data.length) };
+  }
+
+  let seed = setlistState.transparency.timestamp || 975;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+  for (let x = 0; x < cols; x++) {
+    const phase = x / cols;
+    const groove = 0.55 + 0.35 * Math.sin(phase * Math.PI * 16) * Math.sin(phase * Math.PI * 2);
+    const low  = bands ? bands.low  * (0.7 + rnd() * 0.3) : groove * (0.55 + rnd() * 0.35);
+    const midB = bands ? bands.mid  * (0.7 + rnd() * 0.3) : groove * (0.35 + rnd() * 0.3);
+    const high = bands ? bands.high * (0.7 + rnd() * 0.3) : groove * (0.2 + rnd() * 0.25);
+    const px = x * (W / cols), bw = Math.max(1, W / cols - 1);
+    ctx.fillStyle = '#0a3fff';
+    ctx.fillRect(px, mid - low * mid, bw, low * H);
+    ctx.fillStyle = '#ffb21e';
+    ctx.fillRect(px, mid - midB * mid * 0.8, bw, midB * H * 0.8);
+    ctx.fillStyle = '#eef2ff';
+    ctx.fillRect(px, mid - high * mid * 0.5, bw, high * H * 0.5);
+  }
+  ctx.fillStyle = 'rgba(255,255,255,0.65)';
+  ctx.fillRect(W * 0.35, 0, 1.5, H);
+}
+
+// Function 8: Live deck sync widget (BPM, key, beat phase LEDs)
+function updateDeckSyncWidget() {
+  const d = setlistState.deckSync;
+  d.bpm = typeof bpm === 'number' ? bpm : d.bpm;
+  d.beatPhase = (d.beatPhase + 1) % 4;
+  const bpmEl = document.getElementById('deckSyncBpm');
+  const keyEl = document.getElementById('deckSyncKey');
+  const stEl = document.getElementById('deckSyncStatus');
+  if (bpmEl) bpmEl.textContent = d.bpm.toFixed(1);
+  if (keyEl) keyEl.textContent = d.key;
+  if (stEl) {
+    stEl.textContent = d.synced ? 'SYNC · ' + d.master : 'NO SYNC';
+    stEl.style.color = d.synced ? 'rgba(0,255,160,1)' : 'rgba(255,120,80,1)';
+  }
+  for (let i = 0; i < 4; i++) {
+    const led = document.getElementById('beatLed' + i);
+    if (led) {
+      led.style.background = i === d.beatPhase ? (i === 0 ? '#ff4d6d' : '#00aaff') : 'rgba(100,120,150,0.25)';
+      led.style.boxShadow = i === d.beatPhase ? '0 0 8px ' + (i === 0 ? '#ff4d6d' : '#00aaff') : 'none';
+    }
+  }
+}
+
+// Function 9: Initialize Phase 34
+function initPhase34Setlist() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('phase34Setlist') || '[]');
+    if (saved.length) {
+      setlistState.currentSetlist = saved
+        .map(id => setlistState.trackPool.find(t => t.id === id))
+        .filter(Boolean);
+    }
+  } catch (e) {}
+  setlistState.widgetInterval = setInterval(() => {
+    const panel = document.getElementById('phase34SetlistPanel');
+    if (panel && panel.style.display !== 'none') {
+      updateDeckSyncWidget();
+      if (typeof isPlaying !== 'undefined' && isPlaying) renderRGBWaveform();
+    }
+  }, 500);
+  setlistState.isInitialized = true;
+  console.log('✓ Phase 34 Setlist Intelligence initialized');
+}
+
 // Initialize toggle buttons
 document.addEventListener('DOMContentLoaded', () => {
   initPhase30Distribution();
@@ -13629,6 +13973,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initPhase31Performance();
   initPhase32Analytics();
   initPhase33Collaboration();
+  initPhase34Setlist();
 
   // Distribution toggle button (Phase 30.3)
   const distributionToggleBtn = document.createElement('button');
@@ -13849,6 +14194,43 @@ document.addEventListener('DOMContentLoaded', () => {
     collaborationToggleBtn.style.boxShadow = '0 0 20px rgba(200,100,255,0.2)';
   };
   document.body.appendChild(collaborationToggleBtn);
+
+  // Phase 34: Setlist Intelligence toggle button
+  const setlistToggleBtn = document.createElement('button');
+  setlistToggleBtn.id = 'phase34SetlistToggleBtn';
+  setlistToggleBtn.textContent = '🎧';
+  setlistToggleBtn.title = 'Setlist Intelligence & Rekordbox Bridge (Phase 34)';
+  setlistToggleBtn.style.cssText = `
+    position: fixed;
+    bottom: 200px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(0,170,255,0.2), rgba(0,120,255,0.1));
+    border: 2px solid rgba(0,170,255,0.9);
+    color: rgba(0,190,255,1);
+    font-size: 24px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 20px rgba(0,170,255,0.2);
+    z-index: 10000;
+  `;
+  setlistToggleBtn.onclick = () => {
+    const panel = document.getElementById('phase34SetlistPanel');
+    const opening = panel.style.display === 'none';
+    panel.style.display = opening ? 'block' : 'none';
+    if (opening) { renderSetlistTable(); renderRGBWaveform(); updateDeckSyncWidget(); }
+  };
+  setlistToggleBtn.onmouseover = () => {
+    setlistToggleBtn.style.transform = 'scale(1.1)';
+    setlistToggleBtn.style.boxShadow = '0 0 30px rgba(0,170,255,0.4)';
+  };
+  setlistToggleBtn.onmouseout = () => {
+    setlistToggleBtn.style.transform = 'scale(1)';
+    setlistToggleBtn.style.boxShadow = '0 0 20px rgba(0,170,255,0.2)';
+  };
+  document.body.appendChild(setlistToggleBtn);
 
   // Remix toggle button
   // Remix toggle button
