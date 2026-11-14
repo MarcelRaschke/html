@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>iVDJ AI v2.0 — Dashboard & Beat Architekt</title>
+<title>DJ Jesse Jay — Beat Architekt | AI v2.0</title>
+<link rel="icon" type="image/png" href="assets/djjj-favicon.png">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Outfit:wght@300;400;600;800;900&display=swap');
 
@@ -148,8 +149,13 @@ body::before {
 /* === HERO === */
 .hero {
   text-align: center;
-  padding: 48px 0 40px;
+  padding: 64px 24px 56px;
   animation: fadeInUp 0.6s ease-out;
+  background:
+    linear-gradient(180deg, rgba(5,8,20,0.82) 0%, rgba(5,8,20,0.62) 45%, rgba(5,8,20,0.92) 100%),
+    url('assets/djjj-hero.jpg') center 35% / cover no-repeat;
+  border-radius: 16px;
+  overflow: hidden;
 }
 .hero h1 {
   font-size: 52px;
@@ -681,7 +687,7 @@ body::before {
 <!-- HEADER -->
 <header class="header">
   <div class="header-left">
-    <div class="logo">iVDJ</div>
+    <img src="assets/djjj-logo.png" alt="DJ Jesse Jay" style="height:40px;width:auto;display:block">
     <span class="version-badge">AI v2.0</span>
   </div>
   <nav class="header-nav">
@@ -698,8 +704,8 @@ body::before {
   <!-- OVERVIEW PANEL -->
   <div id="panel-overview" class="panel active">
     <div class="hero">
-      <h1>AI <span class="gradient">v2.0</span> System</h1>
-      <p class="subtitle">13 KI-Module für die nächste Generation des Browser-basierten DJ-Erlebnisses</p>
+      <h1>DJ Jesse Jay <span class="gradient">AI v2.0</span></h1>
+      <p class="subtitle">Beat Architekt — 13 KI-Module für die nächste Generation des Browser-basierten DJ-Erlebnisses</p>
       <div class="hero-stats">
         <div class="hero-stat">
           <div class="num">13</div>
@@ -1243,7 +1249,7 @@ body::before {
   </div>
 
   <footer class="footer">
-    <p>iVDJ AI v2.0 Dashboard — Built with Web Audio API, Canvas, and Zero Dependencies</p>
+    <p>DJ Jesse Jay — Beat Architekt (AI v2.0) — Built with Web Audio API, Canvas, and Zero Dependencies</p>
   </footer>
 </main>
 
