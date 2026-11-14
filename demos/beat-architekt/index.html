@@ -1049,7 +1049,25 @@ body::before {
           <!-- Timeline Visualization -->
           <div style="font-size:10px">
             <div style="color:var(--purple);font-weight:600;margin-bottom:4px">📈 Automation Timeline</div>
-            <canvas id="automationTimelineCanvas" style="width:100%;height:60px;border:1px solid var(--border);border-radius:4px;background:rgba(0,0,0,0.3)"></canvas>
+            <canvas id="automationTimelineCanvas" width="560" height="120" style="width:100%;height:120px;border:1px solid var(--border);border-radius:4px;background:rgba(0,0,0,0.3);cursor:crosshair;touch-action:none"></canvas>
+            <div style="display:flex;gap:6px;align-items:center;margin-top:6px">
+              <label style="font-size:9px;color:var(--text-secondary)">Kurve</label>
+              <select id="automationCurveType" onchange="renderAutomationTimeline()" style="flex:1;padding:3px;background:var(--bg-secondary);color:var(--purple);border:1px solid var(--border);border-radius:4px;font-size:9px">
+                <option value="linear">linear</option>
+                <option value="ease-in">ease-in</option>
+                <option value="ease-out">ease-out</option>
+                <option value="ease-in-out">ease-in-out</option>
+                <option value="exponential">exponential</option>
+              </select>
+            </div>
+            <input type="range" id="automationScrubber" min="0" max="1" step="0.001" value="0" oninput="scrubAutomation(this.value)" style="width:100%;margin-top:6px">
+            <div style="display:flex;gap:6px;margin-top:6px">
+              <button onclick="exportAutomationJSON()" style="flex:1;font-size:9px;padding:4px;background:rgba(170,255,0,0.12);border:1px solid rgba(170,255,0,0.4);color:var(--lime);border-radius:4px;cursor:pointer">⬇ JSON export</button>
+              <label style="flex:1;font-size:9px;padding:4px;text-align:center;background:rgba(0,240,255,0.1);border:1px solid rgba(0,240,255,0.4);color:var(--cyan);border-radius:4px;cursor:pointer">
+                ⬆ JSON import
+                <input type="file" accept="application/json,.json" onchange="if(this.files[0])importAutomationJSON(this.files[0])" style="display:none">
+              </label>
+            </div>
           </div>
         </div>
       </div>
@@ -1507,7 +1525,8 @@ let undoStack = [];
 let redoStack = [];
 const MAX_UNDO_DEPTH = 50;
 const DB_NAME = 'iVDJBeatArchitekt';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
+const AUTOMATION_STORE = 'automation';
 const STORE_NAME = 'patterns';
 
 // Phase 7: Cloud Sync (Firebase)
@@ -7490,12 +7509,13 @@ function updateEnvelopeFollower(analyserNode, playbackTimeSeconds) {
 // Phase 24.2: Automation Curve Evaluation (~50 lines)
 function evaluateAutomationCurve(trackKey, timeInBar) {
   const track = effectsAutomationState.automationTracks.get(trackKey);
-  if (!track || track.length === 0) return null;
+  const points = track ? track.points : null;
+  if (!points || points.length === 0) return null;
 
   let before = null;
   let after = null;
 
-  for (const point of track) {
+  for (const point of points) {
     if (point.time <= timeInBar) before = point;
     if (point.time >= timeInBar && !after) {
       after = point;
@@ -7503,12 +7523,12 @@ function evaluateAutomationCurve(trackKey, timeInBar) {
     }
   }
 
-  if (!before) return track[0].value;
+  if (!before) return points[0].value;
   if (!after) return before.value;
   if (before.time === after.time) return before.value;
 
   const t = (timeInBar - before.time) / (after.time - before.time);
-  const curve = before.curve || 'linear';
+  const curve = before.curveType || 'linear';
 
   let easing = t;
   switch (curve) {
@@ -7620,6 +7640,7 @@ function toggleAutomationRecording() {
 function stopAutomationRecording() {
   if (!effectsAutomationState.recordingMode.active) return;
   toggleAutomationRecording(); // Toggle off
+  saveAutomationState();
 }
 
 // Phase 24.1: LFO Pool Management (~50 lines)
@@ -7843,7 +7864,7 @@ function recordAutomationFrame(effectId, paramName, value) {
     track.points.push({
       time: timeInBar,
       value: parseFloat(value),
-      curveType: 'linear'
+      curveType: (document.getElementById('automationCurveType') || {}).value || 'linear'
     });
 
     // Update min/max for range
@@ -7863,36 +7884,142 @@ function recordAutomationFrame(effectId, paramName, value) {
   }
 }
 
-function updateRecordingWaveform(trackKey) {
+function updateRecordingWaveform() {
+  renderAutomationTimeline();
+}
+
+// Phase 24.4: Automation Timeline, Curve Editing & Scrubber (~150 lines)
+let automationEditDrag = null;
+let automationScrubTime = null;
+const AUTOMATION_TRACK_COLORS = ['#00f0ff', '#ff3dcb', '#aaff00', '#ffb21e', '#8a7dff'];
+
+function automationBarDuration() {
+  return (240 / bpm) || 2.0;
+}
+
+function renderAutomationTimeline() {
+  const canvas = document.getElementById('automationTimelineCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const barDuration = automationBarDuration();
+  ctx.clearRect(0, 0, W, H);
+
+  let colorIndex = 0;
+  for (const [trackKey, track] of effectsAutomationState.automationTracks.entries()) {
+    if (!track.points || track.points.length === 0) continue;
+    const color = AUTOMATION_TRACK_COLORS[colorIndex++ % AUTOMATION_TRACK_COLORS.length];
+    const range = (track.maxValue - track.minValue) || 1;
+    const toX = t => (t / barDuration) * W;
+    const toY = v => H - ((v - track.minValue) / range) * (H - 8) - 4;
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    const steps = 120;
+    for (let s = 0; s <= steps; s++) {
+      const t = (s / steps) * barDuration;
+      const v = evaluateAutomationCurve(trackKey, t);
+      if (v === null) continue;
+      if (s === 0) ctx.moveTo(toX(t), toY(v));
+      else ctx.lineTo(toX(t), toY(v));
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = color;
+    for (const p of track.points) {
+      ctx.beginPath();
+      ctx.arc(toX(p.time), toY(p.value), 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  let playT = null;
+  if (automationScrubTime !== null) playT = automationScrubTime;
+  else if (isPlaying) playT = getSchedulingTimestamp() % barDuration;
+  if (playT !== null) {
+    const x = (playT / barDuration) * W;
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, H);
+    ctx.stroke();
+  }
+}
+
+function automationPointAt(canvas, evt) {
+  const rect = canvas.getBoundingClientRect();
+  const px = (evt.clientX - rect.left) * (canvas.width / rect.width);
+  const py = (evt.clientY - rect.top) * (canvas.height / rect.height);
+  const barDuration = automationBarDuration();
+  let best = null, bestDist = 14;
+  for (const [trackKey, track] of effectsAutomationState.automationTracks.entries()) {
+    const range = (track.maxValue - track.minValue) || 1;
+    track.points.forEach((p, index) => {
+      const x = (p.time / barDuration) * canvas.width;
+      const y = canvas.height - ((p.value - track.minValue) / range) * (canvas.height - 8) - 4;
+      const d = Math.hypot(x - px, y - py);
+      if (d < bestDist) {
+        bestDist = d;
+        best = { trackKey, index, track };
+      }
+    });
+  }
+  return best;
+}
+
+function saveAutomationState() {
+  if (typeof saveAutomationToDB === 'function') saveAutomationToDB();
+}
+
+function initAutomationTimeline() {
   const canvas = document.getElementById('automationTimelineCanvas');
   if (!canvas) return;
 
-  const ctx = canvas.getContext('2d');
-  const track = effectsAutomationState.automationTracks.get(trackKey);
-  if (!track || track.points.length < 2) return;
+  canvas.addEventListener('pointerdown', e => {
+    const hit = automationPointAt(canvas, e);
+    if (!hit) return;
+    automationEditDrag = hit;
+    canvas.setPointerCapture(e.pointerId);
+  });
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = '#00f0ff';
-  ctx.lineWidth = 2;
-  ctx.fillStyle = 'rgba(0, 240, 255, 0.1)';
+  canvas.addEventListener('pointermove', e => {
+    if (!automationEditDrag) return;
+    const rect = canvas.getBoundingClientRect();
+    const px = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const py = (e.clientY - rect.top) * (canvas.height / rect.height);
+    const { track, index } = automationEditDrag;
+    const range = (track.maxValue - track.minValue) || 1;
+    const barDuration = automationBarDuration();
+    const pt = track.points[index];
+    pt.time = Math.min(barDuration, Math.max(0, (px / canvas.width) * barDuration));
+    const norm = 1 - (py - 4) / (canvas.height - 8);
+    pt.value = Math.min(1, Math.max(0, track.minValue + norm * range));
+    renderAutomationTimeline();
+  });
 
-  const barDuration = (240 / bpm) || 2.0;
-  const pixelsPerSecond = canvas.width / barDuration;
-  const valueRange = track.maxValue - track.minValue || 1;
+  const endDrag = () => {
+    if (!automationEditDrag) return;
+    const { track } = automationEditDrag;
+    track.points.sort((a, b) => a.time - b.time);
+    track.minValue = Math.min(...track.points.map(p => p.value));
+    track.maxValue = Math.max(...track.points.map(p => p.value));
+    automationEditDrag = null;
+    renderAutomationTimeline();
+    saveAutomationState();
+  };
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
 
-  ctx.beginPath();
-  for (let i = 0; i < track.points.length; i++) {
-    const point = track.points[i];
-    const x = point.time * pixelsPerSecond;
-    const y = canvas.height - ((point.value - track.minValue) / valueRange) * canvas.height;
+  setInterval(() => {
+    if (canvas.offsetParent !== null) renderAutomationTimeline();
+  }, 33);
+}
 
-    if (i === 0) {
-      ctx.moveTo(x, y);
-    } else {
-      ctx.lineTo(x, y);
-    }
-  }
-  ctx.stroke();
+function scrubAutomation(v) {
+  automationScrubTime = isPlaying ? null : Number(v) * automationBarDuration();
+  renderAutomationTimeline();
 }
 
 function playbackAutomationForStep(step, time) {
@@ -8363,8 +8490,90 @@ function initDB() {
       if (!database.objectStoreNames.contains(STORE_NAME)) {
         database.createObjectStore(STORE_NAME, { keyPath: 'id' });
       }
+      if (!database.objectStoreNames.contains(AUTOMATION_STORE)) {
+        database.createObjectStore(AUTOMATION_STORE, { keyPath: 'id' });
+      }
     };
   });
+}
+
+// Phase 24.5: Automation Persistence (IndexedDB) & JSON Export/Import (~90 lines)
+function serializeAutomationState() {
+  return {
+    id: 'current',
+    tracks: Array.from(effectsAutomationState.automationTracks.entries()).map(([key, track]) => ({
+      key,
+      effectId: track.effectId,
+      paramName: track.paramName,
+      points: track.points.map(p => ({ time: p.time, value: p.value, curveType: p.curveType || 'linear' })),
+      minValue: track.minValue,
+      maxValue: track.maxValue
+    })),
+    modulationMatrix: effectsAutomationState.modulationMatrix,
+    lfoPool: effectsAutomationState.lfoPool,
+    savedAt: Date.now()
+  };
+}
+
+function applyAutomationState(data) {
+  if (!data || !Array.isArray(data.tracks)) return false;
+  effectsAutomationState.automationTracks = new Map(
+    data.tracks.map(t => [t.key, {
+      effectId: t.effectId,
+      paramName: t.paramName,
+      points: t.points.map(p => ({ time: p.time, value: p.value, curveType: p.curveType || 'linear' })),
+      minValue: t.minValue,
+      maxValue: t.maxValue
+    }])
+  );
+  if (data.modulationMatrix) effectsAutomationState.modulationMatrix = data.modulationMatrix;
+  if (Array.isArray(data.lfoPool)) effectsAutomationState.lfoPool = data.lfoPool;
+  renderAutomationTimeline();
+  return true;
+}
+
+function saveAutomationToDB() {
+  if (!db) return Promise.resolve(false);
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(AUTOMATION_STORE, 'readwrite');
+    tx.objectStore(AUTOMATION_STORE).put(serializeAutomationState());
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+function loadAutomationFromDB() {
+  if (!db) return Promise.resolve(false);
+  return new Promise((resolve, reject) => {
+    const req = db.transaction(AUTOMATION_STORE, 'readonly').objectStore(AUTOMATION_STORE).get('current');
+    req.onsuccess = () => resolve(applyAutomationState(req.result));
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function exportAutomationJSON() {
+  const blob = new Blob([JSON.stringify(serializeAutomationState(), null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'automation-curves.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+function importAutomationJSON(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const ok = applyAutomationState(JSON.parse(reader.result));
+      if (ok) saveAutomationToDB();
+      else console.error('Automation import: invalid file');
+    } catch (err) {
+      console.error('Automation import failed:', err);
+    }
+  };
+  reader.readAsText(file);
 }
 
 function savePattern(name, genre = 'custom') {
@@ -9426,6 +9635,7 @@ initDB().then(() => {
   loadPatternLibrary().then(() => {
     renderPatternLibrary();
   });
+  loadAutomationFromDB().catch(err => console.error('Automation load failed:', err));
 
   // Phase 10: Initialize Remix Presets from localStorage
   initRemixPresets();
@@ -14319,6 +14529,7 @@ function initPhase33Collaboration() {
 // Initialize toggle buttons
 document.addEventListener('DOMContentLoaded', () => {
   initWavetables();
+  initAutomationTimeline();
   initPhase30Distribution();
   initPhase30Analytics();
   initPhase31Performance();
