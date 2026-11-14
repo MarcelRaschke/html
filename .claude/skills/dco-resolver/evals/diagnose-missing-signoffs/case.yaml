@@ -1,0 +1,11 @@
+schema_version: "1.1"
+name: diagnose-missing-signoffs
+expected_outcome: |
+  The report identifies exactly the two failing commits out of three on the
+  feature branch: the "Add login form" commit has no Signed-off-by trailer at
+  all, and the "Add validation" commit has a Signed-off-by from a different
+  person than its author (Other Person vs Dev One). The "Add logout button"
+  commit is correctly reported as passing. No commit is rewritten: the branch
+  head SHA is unchanged after the run.
+context:
+  scaffold_script: place-files.sh
