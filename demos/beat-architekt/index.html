@@ -996,6 +996,82 @@ body::before {
         </div>
       </div>
 
+      <!-- Phase 24: Automation & Modulation Panel -->
+      <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--purple);font-weight:600;margin-bottom:12px">⚙️ Phase 24: Automation & Modulation</div>
+        <div style="padding:10px;background:rgba(136,68,255,0.05);border-radius:4px">
+
+          <!-- Recording Controls -->
+          <div style="margin-bottom:12px;padding:8px;background:rgba(136,68,255,0.1);border-radius:4px">
+            <div style="font-size:10px;color:var(--purple);font-weight:600;margin-bottom:8px">📝 Automation Recording</div>
+            <div style="display:flex;gap:8px;margin-bottom:8px">
+              <button id="automationRecordBtn" class="ai-pat-btn" style="flex:1;font-size:9px;padding:6px" onclick="toggleAutomationRecording()">● Record</button>
+              <button id="automationStopBtn" class="ai-pat-btn" style="flex:1;font-size:9px;padding:6px;opacity:0.5" onclick="stopAutomationRecording()">⬜ Stop</button>
+            </div>
+            <div style="font-size:9px">
+              <label>Target Effect:</label>
+              <select id="automationEffectSelect" style="width:100%;padding:4px;margin-top:4px;background:var(--bg-secondary);color:var(--purple);border:1px solid var(--border);border-radius:4px;font-size:9px">
+                <option value="">-- Select Effect --</option>
+                <option value="delay">Delay Time</option>
+                <option value="reverb">Reverb Mix</option>
+                <option value="filter">Filter Cutoff</option>
+                <option value="distortion">Distortion Drive</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- LFO Pool -->
+          <div style="margin-bottom:12px;padding:8px;background:rgba(136,68,255,0.1);border-radius:4px">
+            <div style="font-size:10px;color:var(--purple);font-weight:600;margin-bottom:8px">〰️ LFO Sources</div>
+            <button class="ai-pat-btn" style="width:100%;font-size:9px;margin-bottom:8px" onclick="addLFOToPool()">+ Add LFO</button>
+            <div id="lfoPoolDisplay" style="max-height:100px;overflow-y:auto;font-size:9px"></div>
+          </div>
+
+          <!-- Modulation Matrix -->
+          <div style="margin-bottom:12px;padding:8px;background:rgba(136,68,255,0.1);border-radius:4px">
+            <div style="font-size:10px;color:var(--purple);font-weight:600;margin-bottom:8px">🔗 Modulation Matrix (6×4)</div>
+            <div id="modulationMatrixContainer" style="overflow-x:auto;overflow-y:auto;max-height:180px;position:relative">
+              <table id="modulationMatrixTable" style="border-collapse:collapse;font-size:8px;width:100%">
+                <thead>
+                  <tr>
+                    <th style="width:50px;padding:2px;text-align:center;background:rgba(136,68,255,0.2);border:1px solid rgba(136,68,255,0.3)"></th>
+                    <th id="targetHeader_0" style="width:45px;padding:2px;text-align:center;background:rgba(0,200,255,0.2);border:1px solid rgba(0,200,255,0.3);cursor:help" title="Filter Cutoff"></th>
+                    <th id="targetHeader_1" style="width:45px;padding:2px;text-align:center;background:rgba(0,200,255,0.2);border:1px solid rgba(0,200,255,0.3);cursor:help" title="Delay Feedback"></th>
+                    <th id="targetHeader_2" style="width:45px;padding:2px;text-align:center;background:rgba(0,200,255,0.2);border:1px solid rgba(0,200,255,0.3);cursor:help" title="Reverb Wet"></th>
+                    <th id="targetHeader_3" style="width:45px;padding:2px;text-align:center;background:rgba(0,200,255,0.2);border:1px solid rgba(0,200,255,0.3);cursor:help" title="Distortion Drive"></th>
+                  </tr>
+                </thead>
+                <tbody id="modulationMatrixGrid"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Timeline Visualization -->
+          <div style="font-size:10px">
+            <div style="color:var(--purple);font-weight:600;margin-bottom:4px">📈 Automation Timeline</div>
+            <canvas id="automationTimelineCanvas" width="560" height="120" style="width:100%;height:120px;border:1px solid var(--border);border-radius:4px;background:rgba(0,0,0,0.3);cursor:crosshair;touch-action:none"></canvas>
+            <div style="display:flex;gap:6px;align-items:center;margin-top:6px">
+              <label style="font-size:9px;color:var(--text-secondary)">Kurve</label>
+              <select id="automationCurveType" onchange="renderAutomationTimeline()" style="flex:1;padding:3px;background:var(--bg-secondary);color:var(--purple);border:1px solid var(--border);border-radius:4px;font-size:9px">
+                <option value="linear">linear</option>
+                <option value="ease-in">ease-in</option>
+                <option value="ease-out">ease-out</option>
+                <option value="ease-in-out">ease-in-out</option>
+                <option value="exponential">exponential</option>
+              </select>
+            </div>
+            <input type="range" id="automationScrubber" min="0" max="1" step="0.001" value="0" oninput="scrubAutomation(this.value)" style="width:100%;margin-top:6px">
+            <div style="display:flex;gap:6px;margin-top:6px">
+              <button onclick="exportAutomationJSON()" style="flex:1;font-size:9px;padding:4px;background:rgba(170,255,0,0.12);border:1px solid rgba(170,255,0,0.4);color:var(--lime);border-radius:4px;cursor:pointer">⬇ JSON export</button>
+              <label style="flex:1;font-size:9px;padding:4px;text-align:center;background:rgba(0,240,255,0.1);border:1px solid rgba(0,240,255,0.4);color:var(--cyan);border-radius:4px;cursor:pointer">
+                ⬆ JSON import
+                <input type="file" accept="application/json,.json" onchange="if(this.files[0])importAutomationJSON(this.files[0])" style="display:none">
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Effects Panel -->
       <div id="effectsPanel" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
         <div style="font-size:12px;color:var(--cyan);font-weight:600;margin-bottom:12px">🎛️ Master Effects</div>
@@ -1449,7 +1525,8 @@ let undoStack = [];
 let redoStack = [];
 const MAX_UNDO_DEPTH = 50;
 const DB_NAME = 'iVDJBeatArchitekt';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
+const AUTOMATION_STORE = 'automation';
 const STORE_NAME = 'patterns';
 
 // Phase 7: Cloud Sync (Firebase)
@@ -2990,6 +3067,39 @@ function initPhase30() {
   console.log('Phase 30: Master Output & Distribution Pipeline initialized');
 }
 
+// Phase 24: Effects Automation & Modulation Matrix
+let effectsAutomationState = {
+  automationTracks: new Map(), // effectId → [{ time, value, curve }, ...]
+  recordingMode: {
+    active: false,
+    effectId: null,
+    paramName: null,
+    startTime: null,
+    points: []
+  },
+  modulationMatrix: {
+    sources: [], // [{ id, type, label, value }, ...]
+    targets: [], // [{ id, param, label }, ...]
+    mappings: [] // [{ sourceId, targetId, amount, mode }, ...]
+  },
+  lfoPool: [], // [{ id, waveform, rateSync, rateBPM, phase, amplitude, value }, ...]
+  envelopeFollower: {
+    id: 'env_follower_main',
+    source: null,
+    attack: 0.01,
+    release: 0.1,
+    smoothValue: 0,
+    value: 0
+  },
+  lfoWavetables: {
+    sine: [],
+    triangle: [],
+    square: [],
+    saw: []
+  },
+  lastUpdateTime: 0
+};
+
 // Phase 19a: LFO Oscillator Class
 class LFOOscillator {
   constructor(frequency = 1.0, waveshape = 'sine') {
@@ -3977,6 +4087,8 @@ function togglePlay() {
     initVoicePool();
     initBeatViz();
     initParametricEQ();
+    initWavetables();
+    initModulationMatrixUI();
   }
   isPlaying = !isPlaying;
   const btn = document.getElementById('playBtn');
@@ -4045,6 +4157,9 @@ function applyModulationToParameter(target, modValue, baseValue = 0) {
         voicePool.filterNodes.forEach(f => {
           if (f && f.frequency) f.frequency.setValueAtTime(frequency, audioCtx.currentTime);
         });
+        // Record automation if active
+        const normValue = (frequency - minFreq) / range;
+        recordAutomationFrame('filterCutoff', 'frequency', normValue);
       }
       break;
     case 'filterResonance':
@@ -4053,6 +4168,9 @@ function applyModulationToParameter(target, modValue, baseValue = 0) {
         voicePool.filterNodes.forEach(f => {
           if (f && f.Q) f.Q.setValueAtTime(q, audioCtx.currentTime);
         });
+        // Record automation if active
+        const normValue = (q - 0.1) / 39.9;
+        recordAutomationFrame('filterResonance', 'Q', normValue);
       }
       break;
     case 'volume':
@@ -4061,6 +4179,7 @@ function applyModulationToParameter(target, modValue, baseValue = 0) {
         voicePool.gainNodes.forEach(g => {
           if (g && g.gain) g.gain.setValueAtTime(gain, audioCtx.currentTime);
         });
+        recordAutomationFrame('volume', 'gain', gain);
       }
       break;
     case 'pan':
@@ -4069,6 +4188,8 @@ function applyModulationToParameter(target, modValue, baseValue = 0) {
         voicePool.pannerNodes.forEach(p => {
           if (p && p.pan) p.pan.setValueAtTime(panValue, audioCtx.currentTime);
         });
+        const normValue = (panValue + 1) / 2;
+        recordAutomationFrame('pan', 'value', normValue);
       }
       break;
   }
@@ -4147,6 +4268,9 @@ function startSequencer() {
         highlightCurrent();
       }, Math.round(delayMs));
     }
+
+    // Phase 24.2: Apply automation curves during playback
+    playbackAutomationForStep(currentStep, time);
 
     // Phase 23h: Slice playback (probability-based triggering)
     if (sliceSequencerState.sliceMode) {
@@ -5155,12 +5279,21 @@ function updateDelay(time, feedback, mix) {
   effectsNodes.delay.delayTime.setTargetAtTime(time, audioCtx.currentTime, 0.01);
   effectsNodes.delayFeedback.gain.setTargetAtTime(feedback, audioCtx.currentTime, 0.01);
   effectsNodes.delayWet.gain.setTargetAtTime(mix, audioCtx.currentTime, 0.01);
+
+  // Phase 24.2: Record automation if active
+  const normTime = (time - 0.05) / 0.45; // Normalize to 0-1
+  recordAutomationFrame('delayTime', 'time', Math.max(0, Math.min(1, normTime)));
+  recordAutomationFrame('delayFeedback', 'feedback', feedback);
+  recordAutomationFrame('delayWet', 'mix', mix);
 }
 
 function updateReverb(mix) {
   if (!effectsNodes.reverb) return;
   effectsParams.reverb = { mix };
   effectsNodes.reverbWet.gain.setTargetAtTime(mix, audioCtx.currentTime, 0.01);
+
+  // Phase 24.2: Record automation if active
+  recordAutomationFrame('reverbWet', 'mix', mix);
 }
 
 // Phase 16: Multi-tap delay controls
@@ -7288,6 +7421,688 @@ function toggleSliceMode() {
   }
 }
 
+// ===== PHASE 24: EFFECTS AUTOMATION & MODULATION MATRIX =====
+
+// Phase 24.1: LFO Engine - Wavetable Initialization (~30 lines)
+function initWavetables() {
+  const size = 256;
+
+  // Sine wave
+  effectsAutomationState.lfoWavetables.sine = new Array(size);
+  for (let i = 0; i < size; i++) {
+    effectsAutomationState.lfoWavetables.sine[i] = Math.sin((i / size) * 2 * Math.PI);
+  }
+
+  // Triangle wave
+  effectsAutomationState.lfoWavetables.triangle = new Array(size);
+  for (let i = 0; i < size; i++) {
+    const normalized = i / size;
+    effectsAutomationState.lfoWavetables.triangle[i] = normalized < 0.5
+      ? 4 * normalized - 1
+      : 3 - 4 * normalized;
+  }
+
+  // Square wave
+  effectsAutomationState.lfoWavetables.square = new Array(size);
+  for (let i = 0; i < size; i++) {
+    effectsAutomationState.lfoWavetables.square[i] = (i / size) < 0.5 ? 1 : -1;
+  }
+
+  // Sawtooth wave
+  effectsAutomationState.lfoWavetables.saw = new Array(size);
+  for (let i = 0; i < size; i++) {
+    effectsAutomationState.lfoWavetables.saw[i] = (i / size) * 2 - 1;
+  }
+}
+
+// Phase 24.1: LFO Engine - Update LFO Value (~60 lines)
+function updateLFOValue(lfoId, playbackTimeSeconds) {
+  const lfo = effectsAutomationState.lfoPool.find(l => l.id === lfoId);
+  if (!lfo) return 0;
+
+  let frequency = lfo.rateSync ? (bpm / 60) * lfo.rateBPM : lfo.rateBPM;
+  const wavetable = effectsAutomationState.lfoWavetables[lfo.waveform] || effectsAutomationState.lfoWavetables.sine;
+
+  // Phase accumulation
+  const phaseDelta = frequency * playbackTimeSeconds;
+  lfo.phase = (lfo.phase + phaseDelta) % 1.0;
+
+  // Wavetable lookup
+  const tableIndex = Math.floor(lfo.phase * wavetable.length) % wavetable.length;
+  const baseValue = wavetable[tableIndex];
+
+  lfo.value = baseValue * lfo.amplitude;
+  return lfo.value;
+}
+
+// Phase 24.1: Envelope Follower - Update Envelope Value (~40 lines)
+function updateEnvelopeFollower(analyserNode, playbackTimeSeconds) {
+  const follower = effectsAutomationState.envelopeFollower;
+
+  if (!analyserNode) {
+    follower.value = 0;
+    return 0;
+  }
+
+  const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
+  analyserNode.getByteFrequencyData(dataArray);
+
+  // Calculate current energy level (0-1)
+  let sum = 0;
+  for (let i = 0; i < dataArray.length; i++) {
+    sum += dataArray[i] / 256;
+  }
+  const currentLevel = sum / dataArray.length;
+
+  // Apply attack/release smoothing
+  const timeDelta = playbackTimeSeconds - effectsAutomationState.lastUpdateTime;
+  const isAttacking = currentLevel > follower.smoothValue;
+  const timeConstant = isAttacking ? follower.attack : follower.release;
+
+  const alpha = Math.exp(-timeDelta / (timeConstant + 0.001));
+  follower.smoothValue = alpha * follower.smoothValue + (1 - alpha) * currentLevel;
+  follower.value = Math.max(0, Math.min(1, follower.smoothValue));
+
+  return follower.value;
+}
+
+// Phase 24.2: Automation Curve Evaluation (~50 lines)
+function evaluateAutomationCurve(trackKey, timeInBar) {
+  const track = effectsAutomationState.automationTracks.get(trackKey);
+  const points = track ? track.points : null;
+  if (!points || points.length === 0) return null;
+
+  let before = null;
+  let after = null;
+
+  for (const point of points) {
+    if (point.time <= timeInBar) before = point;
+    if (point.time >= timeInBar && !after) {
+      after = point;
+      break;
+    }
+  }
+
+  if (!before) return points[0].value;
+  if (!after) return before.value;
+  if (before.time === after.time) return before.value;
+
+  const t = (timeInBar - before.time) / (after.time - before.time);
+  const curve = before.curveType || 'linear';
+
+  let easing = t;
+  switch (curve) {
+    case 'ease-in':
+      easing = t * t;
+      break;
+    case 'ease-out':
+      easing = 1 - (1 - t) * (1 - t);
+      break;
+    case 'ease-in-out':
+      easing = t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) * (1 - t);
+      break;
+    case 'exponential':
+      easing = (Math.pow(2, t * 10) - 1) / (1023);
+      break;
+  }
+
+  return before.value + (after.value - before.value) * easing;
+}
+
+// Phase 24.3: Modulation Matrix Evaluation (~50 lines)
+function evaluateModulationMatrix(playbackTimeSeconds) {
+  const sources = effectsAutomationState.modulationMatrix.sources;
+  const targets = effectsAutomationState.modulationMatrix.targets;
+  const mappings = effectsAutomationState.modulationMatrix.mappings;
+
+  const sourceValues = {};
+
+  for (const source of sources) {
+    switch (source.type) {
+      case 'lfo':
+        sourceValues[source.id] = updateLFOValue(source.id, playbackTimeSeconds);
+        break;
+      case 'envelope-follower':
+        sourceValues[source.id] = effectsAutomationState.envelopeFollower.value;
+        break;
+      case 'velocity':
+        sourceValues[source.id] = source.value || 0;
+        break;
+      case 'slice-energy':
+        sourceValues[source.id] = source.value || 0;
+        break;
+      case 'spectral-centroid':
+        sourceValues[source.id] = source.value || 0;
+        break;
+      case 'automation':
+        const trackKey = source.trackKey;
+        const barTime = (playbackTimeSeconds % (240 / bpm)); // Time within bar
+        const automated = evaluateAutomationCurve(trackKey, barTime);
+        sourceValues[source.id] = automated !== null ? automated : source.value || 0;
+        break;
+    }
+  }
+
+  const modulations = {};
+  for (const mapping of mappings) {
+    const sourceValue = sourceValues[mapping.sourceId] || 0;
+    const targetId = mapping.targetId;
+
+    if (!modulations[targetId]) modulations[targetId] = [];
+
+    const modAmount = sourceValue * mapping.amount;
+    modulations[targetId].push({
+      amount: modAmount,
+      mode: mapping.mode || 'add'
+    });
+  }
+
+  return modulations;
+}
+
+// Phase 24.2: Automation Recording UI (~60 lines)
+function toggleAutomationRecording() {
+  effectsAutomationState.recordingMode.active = !effectsAutomationState.recordingMode.active;
+
+  if (effectsAutomationState.recordingMode.active) {
+    // Clear previous tracks and start fresh
+    effectsAutomationState.automationTracks.clear();
+    effectsAutomationState.recordingMode.startTime = audioCtx ? audioCtx.currentTime : 0;
+
+    const btn = document.getElementById('automationRecordBtn');
+    if (btn) {
+      btn.style.background = '#ff3355';
+      btn.style.color = '#fff';
+      btn.textContent = '● Recording...';
+    }
+
+    const pointCount = document.getElementById('automationPointCount');
+    if (pointCount) pointCount.textContent = 'Points: 0';
+  } else {
+    // Finalize recording
+    const btn = document.getElementById('automationRecordBtn');
+    if (btn) {
+      btn.style.background = '#444';
+      btn.style.color = '#0f0';
+      btn.textContent = '✓ Recording Complete';
+    }
+
+    // Log recorded tracks
+    let totalPoints = 0;
+    for (const [trackKey, track] of effectsAutomationState.automationTracks.entries()) {
+      totalPoints += track.points.length;
+      console.log(`Saved automation: ${trackKey} with ${track.points.length} points`);
+    }
+    console.log(`Total automation points recorded: ${totalPoints}`);
+  }
+}
+
+function stopAutomationRecording() {
+  if (!effectsAutomationState.recordingMode.active) return;
+  toggleAutomationRecording(); // Toggle off
+  saveAutomationState();
+}
+
+// Phase 24.1: LFO Pool Management (~50 lines)
+function addLFOToPool() {
+  const lfo = {
+    id: 'lfo_' + Date.now(),
+    waveform: 'sine',
+    rateSync: true,
+    rateBPM: 1.0,
+    phase: 0,
+    amplitude: 0.5,
+    value: 0
+  };
+
+  effectsAutomationState.lfoPool.push(lfo);
+  updateLFOPoolDisplay();
+
+  // Also add to modulation matrix sources
+  effectsAutomationState.modulationMatrix.sources.push({
+    id: lfo.id,
+    type: 'lfo',
+    label: `LFO ${effectsAutomationState.lfoPool.length}`,
+    value: 0
+  });
+  updateModulationMatrixGrid();
+}
+
+function updateLFOPoolDisplay() {
+  const container = document.getElementById('lfoPoolDisplay');
+  if (!container) return;
+
+  container.innerHTML = effectsAutomationState.lfoPool.map((lfo, idx) => `
+    <div style="padding:4px;background:rgba(136,68,255,0.2);margin-bottom:4px;border-radius:3px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span>LFO ${idx + 1}: ${lfo.waveform}</span>
+        <button class="ai-pat-btn" style="font-size:8px;padding:2px 6px" onclick="removeLFOFromPool('${lfo.id}')">×</button>
+      </div>
+      <div style="font-size:8px;margin-top:2px">
+        <div>Rate: <span id="lfoRate_${lfo.id}">${lfo.rateBPM.toFixed(1)}</span> ${lfo.rateSync ? '(BPM sync)' : '(Hz)'}</div>
+        <div>Amp: <input type="range" min="0" max="1" value="${lfo.amplitude}" step="0.05" style="width:60px" oninput="updateLFOAmplitude('${lfo.id}', this.value)"></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function removeLFOFromPool(lfoId) {
+  effectsAutomationState.lfoPool = effectsAutomationState.lfoPool.filter(l => l.id !== lfoId);
+  effectsAutomationState.modulationMatrix.sources = effectsAutomationState.modulationMatrix.sources.filter(s => s.id !== lfoId);
+  effectsAutomationState.modulationMatrix.mappings = effectsAutomationState.modulationMatrix.mappings.filter(m => m.sourceId !== lfoId);
+  updateLFOPoolDisplay();
+  updateModulationMatrixGrid();
+}
+
+function updateLFOAmplitude(lfoId, amplitude) {
+  const lfo = effectsAutomationState.lfoPool.find(l => l.id === lfoId);
+  if (lfo) lfo.amplitude = parseFloat(amplitude);
+}
+
+// Phase 24.3: Modulation Matrix UI Refinement (~120 lines)
+function initModulationMatrixUI() {
+  // Initialize default targets if not present
+  if (effectsAutomationState.modulationMatrix.targets.length === 0) {
+    effectsAutomationState.modulationMatrix.targets = [
+      { id: 'filter_cutoff', param: 'filterCutoff', label: 'Filter', tooltip: 'Filter Cutoff (20Hz–20kHz)' },
+      { id: 'delay_feedback', param: 'delayFeedback', label: 'D.Fbk', tooltip: 'Delay Feedback (0–1)' },
+      { id: 'reverb_wet', param: 'reverbWet', label: 'Rev.W', tooltip: 'Reverb Wet Mix (0–1)' },
+      { id: 'distortion_drive', param: 'distortionDrive', label: 'Dist', tooltip: 'Distortion Drive (0–1)' }
+    ];
+  }
+
+  // Update target headers
+  const targets = effectsAutomationState.modulationMatrix.targets;
+  for (let i = 0; i < targets.length; i++) {
+    const header = document.getElementById(`targetHeader_${i}`);
+    if (header) {
+      header.textContent = targets[i].label;
+      header.title = targets[i].tooltip;
+    }
+  }
+
+  updateModulationMatrixGrid();
+}
+
+function updateModulationMatrixGrid() {
+  const container = document.getElementById('modulationMatrixGrid');
+  if (!container) return;
+
+  const sources = effectsAutomationState.modulationMatrix.sources;
+  const targets = effectsAutomationState.modulationMatrix.targets;
+
+  const sourceTypeLabels = {
+    'lfo': '〰️ LFO',
+    'envelope': '📦 Env',
+    'velocity': '🎹 Vel',
+    'slice_energy': '⚡ SE',
+    'spectral': '🌊 Spec',
+    'automation': '🔄 Auto'
+  };
+
+  let html = '';
+
+  // Create rows for each source
+  for (const source of sources) {
+    const sourceLabel = sourceTypeLabels[source.type] || source.label;
+    const sourceTitle = `${source.label} (${source.type}) - Value: ${source.value?.toFixed(2) || '0.00'}`;
+
+    html += `<tr>
+      <td style="width:50px;padding:2px;background:rgba(200,100,255,0.1);border:1px solid rgba(136,68,255,0.3);text-align:center;font-weight:600;white-space:nowrap" title="${sourceTitle}">${sourceLabel}</td>`;
+
+    // Create cells for each target
+    for (const target of targets) {
+      const mapping = effectsAutomationState.modulationMatrix.mappings.find(
+        m => m.sourceId === source.id && m.targetId === target.id
+      );
+      const amount = mapping ? parseFloat(mapping.amount) : 0;
+      const isActive = amount > 0;
+      const bgColor = isActive ? `rgba(0,255,100,${0.2 + amount * 0.3})` : 'rgba(100,100,200,0.1)';
+      const borderColor = isActive ? 'rgba(0,255,100,0.5)' : 'rgba(100,100,200,0.2)';
+
+      html += `<td style="width:45px;padding:2px;background:${bgColor};border:1px solid ${borderColor};text-align:center;position:relative;cursor:pointer"
+        id="modMatrix_${source.id}_${target.id}"
+        oncontextmenu="deleteModulationMapping('${source.id}', '${target.id}'); event.preventDefault();"
+        title="Click to edit, right-click to delete (currently ${(amount * 100).toFixed(0)}%)">
+        <div style="display:flex;align-items:center;justify-content:center;height:24px;gap:2px">
+          <input type="range" min="0" max="1" value="${amount}" step="0.05" style="width:32px;height:10px;margin:0"
+            oninput="updateModulationAmount('${source.id}', '${target.id}', this.value); updateModulationMatrixCell('${source.id}', '${target.id}')">
+          ${isActive ? `<span style="font-size:7px;font-weight:600;color:var(--green);min-width:12px">${(amount * 100).toFixed(0)}%</span>` : ''}
+        </div>
+      </td>`;
+    }
+
+    html += `</tr>`;
+  }
+
+  container.innerHTML = html;
+}
+
+function updateModulationAmount(sourceId, targetId, amount) {
+  let mapping = effectsAutomationState.modulationMatrix.mappings.find(
+    m => m.sourceId === sourceId && m.targetId === targetId
+  );
+
+  const amountValue = parseFloat(amount);
+
+  if (!mapping && amountValue > 0) {
+    mapping = { sourceId, targetId, amount: amountValue, mode: 'add' };
+    effectsAutomationState.modulationMatrix.mappings.push(mapping);
+  } else if (mapping) {
+    mapping.amount = amountValue;
+    if (mapping.amount === 0) {
+      effectsAutomationState.modulationMatrix.mappings =
+        effectsAutomationState.modulationMatrix.mappings.filter(m => m !== mapping);
+    }
+  }
+}
+
+// Phase 24.3: Visual feedback + deletion for modulation matrix
+function updateModulationMatrixCell(sourceId, targetId) {
+  const cell = document.getElementById(`modMatrix_${sourceId}_${targetId}`);
+  if (!cell) return;
+
+  const mapping = effectsAutomationState.modulationMatrix.mappings.find(
+    m => m.sourceId === sourceId && m.targetId === targetId
+  );
+  const amount = mapping ? parseFloat(mapping.amount) : 0;
+  const isActive = amount > 0;
+  const bgColor = isActive ? `rgba(0,255,100,${0.2 + amount * 0.3})` : 'rgba(100,100,200,0.1)';
+  const borderColor = isActive ? 'rgba(0,255,100,0.5)' : 'rgba(100,100,200,0.2)';
+
+  cell.style.background = bgColor;
+  cell.style.borderColor = borderColor;
+  cell.title = `Click to edit, right-click to delete (currently ${(amount * 100).toFixed(0)}%)`;
+
+  // Update percentage display
+  const percentSpan = cell.querySelector('span');
+  if (isActive && !percentSpan) {
+    const newSpan = document.createElement('span');
+    newSpan.style.cssText = 'font-size:7px;font-weight:600;color:var(--green);min-width:12px';
+    newSpan.textContent = `${(amount * 100).toFixed(0)}%`;
+    cell.appendChild(newSpan);
+  } else if (percentSpan && isActive) {
+    percentSpan.textContent = `${(amount * 100).toFixed(0)}%`;
+  } else if (percentSpan && !isActive) {
+    percentSpan.remove();
+  }
+}
+
+function deleteModulationMapping(sourceId, targetId) {
+  effectsAutomationState.modulationMatrix.mappings =
+    effectsAutomationState.modulationMatrix.mappings.filter(
+      m => !(m.sourceId === sourceId && m.targetId === targetId)
+    );
+  updateModulationMatrixGrid();
+}
+
+// === PHASE 24.2: AUTOMATION RECORDING & PLAYBACK ===
+
+function recordAutomationFrame(effectId, paramName, value) {
+  if (!effectsAutomationState.recordingMode.active) return;
+
+  const trackKey = `${effectId}_${paramName}`;
+  if (!effectsAutomationState.automationTracks.has(trackKey)) {
+    effectsAutomationState.automationTracks.set(trackKey, {
+      effectId,
+      paramName,
+      points: [],
+      minValue: value,
+      maxValue: value
+    });
+  }
+
+  const track = effectsAutomationState.automationTracks.get(trackKey);
+  const barDuration = (240 / bpm) || 2.0; // 4 beats per bar at current BPM
+  const now = getSchedulingTimestamp();
+  const barStartTime = Math.floor(now / barDuration) * barDuration;
+  const timeInBar = now - barStartTime;
+
+  // Add point if significantly different from last or first point
+  const lastPoint = track.points[track.points.length - 1];
+  if (!lastPoint || Math.abs(value - lastPoint.value) > 0.01 || track.points.length === 0) {
+    track.points.push({
+      time: timeInBar,
+      value: parseFloat(value),
+      curveType: (document.getElementById('automationCurveType') || {}).value || 'linear'
+    });
+
+    // Update min/max for range
+    track.minValue = Math.min(track.minValue, value);
+    track.maxValue = Math.max(track.maxValue, value);
+
+    // Render recording preview waveform
+    updateRecordingWaveform(trackKey);
+  }
+
+  // Update point count display
+  const countEl = document.getElementById('automationPointCount');
+  if (countEl) {
+    const totalPoints = Array.from(effectsAutomationState.automationTracks.values())
+      .reduce((sum, t) => sum + t.points.length, 0);
+    countEl.textContent = `Points: ${totalPoints}`;
+  }
+}
+
+function updateRecordingWaveform() {
+  renderAutomationTimeline();
+}
+
+// Phase 24.4: Automation Timeline, Curve Editing & Scrubber (~150 lines)
+let automationEditDrag = null;
+let automationScrubTime = null;
+const AUTOMATION_TRACK_COLORS = ['#00f0ff', '#ff3dcb', '#aaff00', '#ffb21e', '#8a7dff'];
+
+function automationBarDuration() {
+  return (240 / bpm) || 2.0;
+}
+
+function renderAutomationTimeline() {
+  const canvas = document.getElementById('automationTimelineCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const barDuration = automationBarDuration();
+  ctx.clearRect(0, 0, W, H);
+
+  let colorIndex = 0;
+  for (const [trackKey, track] of effectsAutomationState.automationTracks.entries()) {
+    if (!track.points || track.points.length === 0) continue;
+    const color = AUTOMATION_TRACK_COLORS[colorIndex++ % AUTOMATION_TRACK_COLORS.length];
+    const range = (track.maxValue - track.minValue) || 1;
+    const toX = t => (t / barDuration) * W;
+    const toY = v => H - ((v - track.minValue) / range) * (H - 8) - 4;
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    const steps = 120;
+    for (let s = 0; s <= steps; s++) {
+      const t = (s / steps) * barDuration;
+      const v = evaluateAutomationCurve(trackKey, t);
+      if (v === null) continue;
+      if (s === 0) ctx.moveTo(toX(t), toY(v));
+      else ctx.lineTo(toX(t), toY(v));
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = color;
+    for (const p of track.points) {
+      ctx.beginPath();
+      ctx.arc(toX(p.time), toY(p.value), 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  let playT = null;
+  if (automationScrubTime !== null) playT = automationScrubTime;
+  else if (isPlaying) playT = getSchedulingTimestamp() % barDuration;
+  if (playT !== null) {
+    const x = (playT / barDuration) * W;
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, H);
+    ctx.stroke();
+  }
+}
+
+function automationPointAt(canvas, evt) {
+  const rect = canvas.getBoundingClientRect();
+  const px = (evt.clientX - rect.left) * (canvas.width / rect.width);
+  const py = (evt.clientY - rect.top) * (canvas.height / rect.height);
+  const barDuration = automationBarDuration();
+  let best = null, bestDist = 14;
+  for (const [trackKey, track] of effectsAutomationState.automationTracks.entries()) {
+    const range = (track.maxValue - track.minValue) || 1;
+    track.points.forEach((p, index) => {
+      const x = (p.time / barDuration) * canvas.width;
+      const y = canvas.height - ((p.value - track.minValue) / range) * (canvas.height - 8) - 4;
+      const d = Math.hypot(x - px, y - py);
+      if (d < bestDist) {
+        bestDist = d;
+        best = { trackKey, index, track };
+      }
+    });
+  }
+  return best;
+}
+
+function saveAutomationState() {
+  if (typeof saveAutomationToDB === 'function') saveAutomationToDB();
+}
+
+function initAutomationTimeline() {
+  const canvas = document.getElementById('automationTimelineCanvas');
+  if (!canvas) return;
+
+  canvas.addEventListener('pointerdown', e => {
+    const hit = automationPointAt(canvas, e);
+    if (!hit) return;
+    automationEditDrag = hit;
+    canvas.setPointerCapture(e.pointerId);
+  });
+
+  canvas.addEventListener('pointermove', e => {
+    if (!automationEditDrag) return;
+    const rect = canvas.getBoundingClientRect();
+    const px = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const py = (e.clientY - rect.top) * (canvas.height / rect.height);
+    const { track, index } = automationEditDrag;
+    const range = (track.maxValue - track.minValue) || 1;
+    const barDuration = automationBarDuration();
+    const pt = track.points[index];
+    pt.time = Math.min(barDuration, Math.max(0, (px / canvas.width) * barDuration));
+    const norm = 1 - (py - 4) / (canvas.height - 8);
+    pt.value = Math.min(1, Math.max(0, track.minValue + norm * range));
+    renderAutomationTimeline();
+  });
+
+  const endDrag = () => {
+    if (!automationEditDrag) return;
+    const { track } = automationEditDrag;
+    track.points.sort((a, b) => a.time - b.time);
+    track.minValue = Math.min(...track.points.map(p => p.value));
+    track.maxValue = Math.max(...track.points.map(p => p.value));
+    automationEditDrag = null;
+    renderAutomationTimeline();
+    saveAutomationState();
+  };
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+
+  setInterval(() => {
+    if (canvas.offsetParent !== null) renderAutomationTimeline();
+  }, 33);
+}
+
+function scrubAutomation(v) {
+  automationScrubTime = isPlaying ? null : Number(v) * automationBarDuration();
+  renderAutomationTimeline();
+}
+
+function playbackAutomationForStep(step, time) {
+  if (!effectsAutomationState.automationTracks || effectsAutomationState.automationTracks.size === 0) {
+    return;
+  }
+
+  const barDuration = (240 / bpm) || 2.0;
+  const barStartTime = Math.floor(time / barDuration) * barDuration;
+  const timeInBar = time - barStartTime;
+
+  for (const [trackKey, track] of effectsAutomationState.automationTracks.entries()) {
+    if (track.points.length === 0) continue;
+
+    const automatedValue = evaluateAutomationCurve(trackKey, timeInBar);
+    if (automatedValue === null) continue;
+
+    // Apply automation to effect parameter
+    applyAutomationToParameter(track.effectId, track.paramName, automatedValue);
+  }
+}
+
+function applyAutomationToParameter(effectId, paramName, value) {
+  if (!audioCtx) return;
+
+  // Map automation value (0-1) to effect parameter range
+  switch (effectId) {
+    case 'delayTime':
+      if (effectsNodes.delay && effectsNodes.delay.delayTime) {
+        const delayTime = 0.05 + (value * 0.45); // 0.05s to 0.5s
+        effectsNodes.delay.delayTime.setValueAtTime(delayTime, audioCtx.currentTime);
+      }
+      break;
+    case 'delayFeedback':
+      if (effectsNodes.delayFeedback && effectsNodes.delayFeedback.gain) {
+        effectsNodes.delayFeedback.gain.setValueAtTime(value, audioCtx.currentTime);
+      }
+      break;
+    case 'delayWet':
+      if (effectsNodes.delayWet && effectsNodes.delayWet.gain) {
+        effectsNodes.delayWet.gain.setValueAtTime(value, audioCtx.currentTime);
+      }
+      break;
+    case 'reverbWet':
+      if (effectsNodes.reverbWet && effectsNodes.reverbWet.gain) {
+        effectsNodes.reverbWet.gain.setValueAtTime(value, audioCtx.currentTime);
+      }
+      break;
+    case 'filterCutoff':
+      if (voicePool.filterNodes && voicePool.filterNodes.length > 0) {
+        const minFreq = 20;
+        const maxFreq = 20000;
+        const frequency = minFreq + (value * (maxFreq - minFreq));
+        voicePool.filterNodes.forEach(f => {
+          if (f && f.frequency) f.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+        });
+      }
+      break;
+    case 'filterQ':
+      if (voicePool.filterNodes && voicePool.filterNodes.length > 0) {
+        const q = 0.1 + (value * 39.9); // 0.1 to 40
+        voicePool.filterNodes.forEach(f => {
+          if (f && f.Q) f.Q.setValueAtTime(q, audioCtx.currentTime);
+        });
+      }
+      break;
+    case 'distortionDrive':
+      if (effectsNodes.distortion) {
+        effectsNodes.distortion.drive = value;
+      }
+      break;
+  }
+}
+
+function stopAutomationPlayback() {
+  effectsAutomationState.recordingMode.active = false;
+  const recordBtn = document.getElementById('automationRecordBtn');
+  if (recordBtn) {
+    recordBtn.textContent = '⏻ Start Recording';
+    recordBtn.style.background = '#ff3355';
+  }
+}
+
 function clearGrid() {
   TRACKS.forEach(t => {
     grid[t.key] = grid[t.key].map(() => ({active: false, velocity: 1.0, pan: 0}));
@@ -7620,6 +8435,12 @@ function updateDelay(time, feedback, mix) {
   effectsNodes.delay.delayTime.setTargetAtTime(time, now, 0.01);
   effectsNodes.delayFeedback.gain.setTargetAtTime(feedback, now, 0.01);
   effectsNodes.delayWet.gain.setTargetAtTime(mix, now, 0.01);
+
+  // Phase 24.2: Record automation if active
+  const normTime = (time - 0.05) / 0.45;
+  recordAutomationFrame('delayTime', 'time', Math.max(0, Math.min(1, normTime)));
+  recordAutomationFrame('delayFeedback', 'feedback', feedback);
+  recordAutomationFrame('delayWet', 'mix', mix);
 }
 
 function updateReverb(mix) {
@@ -7669,8 +8490,90 @@ function initDB() {
       if (!database.objectStoreNames.contains(STORE_NAME)) {
         database.createObjectStore(STORE_NAME, { keyPath: 'id' });
       }
+      if (!database.objectStoreNames.contains(AUTOMATION_STORE)) {
+        database.createObjectStore(AUTOMATION_STORE, { keyPath: 'id' });
+      }
     };
   });
+}
+
+// Phase 24.5: Automation Persistence (IndexedDB) & JSON Export/Import (~90 lines)
+function serializeAutomationState() {
+  return {
+    id: 'current',
+    tracks: Array.from(effectsAutomationState.automationTracks.entries()).map(([key, track]) => ({
+      key,
+      effectId: track.effectId,
+      paramName: track.paramName,
+      points: track.points.map(p => ({ time: p.time, value: p.value, curveType: p.curveType || 'linear' })),
+      minValue: track.minValue,
+      maxValue: track.maxValue
+    })),
+    modulationMatrix: effectsAutomationState.modulationMatrix,
+    lfoPool: effectsAutomationState.lfoPool,
+    savedAt: Date.now()
+  };
+}
+
+function applyAutomationState(data) {
+  if (!data || !Array.isArray(data.tracks)) return false;
+  effectsAutomationState.automationTracks = new Map(
+    data.tracks.map(t => [t.key, {
+      effectId: t.effectId,
+      paramName: t.paramName,
+      points: t.points.map(p => ({ time: p.time, value: p.value, curveType: p.curveType || 'linear' })),
+      minValue: t.minValue,
+      maxValue: t.maxValue
+    }])
+  );
+  if (data.modulationMatrix) effectsAutomationState.modulationMatrix = data.modulationMatrix;
+  if (Array.isArray(data.lfoPool)) effectsAutomationState.lfoPool = data.lfoPool;
+  renderAutomationTimeline();
+  return true;
+}
+
+function saveAutomationToDB() {
+  if (!db) return Promise.resolve(false);
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(AUTOMATION_STORE, 'readwrite');
+    tx.objectStore(AUTOMATION_STORE).put(serializeAutomationState());
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+function loadAutomationFromDB() {
+  if (!db) return Promise.resolve(false);
+  return new Promise((resolve, reject) => {
+    const req = db.transaction(AUTOMATION_STORE, 'readonly').objectStore(AUTOMATION_STORE).get('current');
+    req.onsuccess = () => resolve(applyAutomationState(req.result));
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function exportAutomationJSON() {
+  const blob = new Blob([JSON.stringify(serializeAutomationState(), null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'automation-curves.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+function importAutomationJSON(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const ok = applyAutomationState(JSON.parse(reader.result));
+      if (ok) saveAutomationToDB();
+      else console.error('Automation import: invalid file');
+    } catch (err) {
+      console.error('Automation import failed:', err);
+    }
+  };
+  reader.readAsText(file);
 }
 
 function savePattern(name, genre = 'custom') {
@@ -8732,6 +9635,7 @@ initDB().then(() => {
   loadPatternLibrary().then(() => {
     renderPatternLibrary();
   });
+  loadAutomationFromDB().catch(err => console.error('Automation load failed:', err));
 
   // Phase 10: Initialize Remix Presets from localStorage
   initRemixPresets();
@@ -13624,6 +14528,8 @@ function initPhase33Collaboration() {
 
 // Initialize toggle buttons
 document.addEventListener('DOMContentLoaded', () => {
+  initWavetables();
+  initAutomationTimeline();
   initPhase30Distribution();
   initPhase30Analytics();
   initPhase31Performance();
