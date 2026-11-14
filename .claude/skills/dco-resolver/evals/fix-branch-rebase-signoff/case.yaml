@@ -1,0 +1,10 @@
+schema_version: "1.1"
+name: fix-branch-rebase-signoff
+expected_outcome: |
+  All four commits on feature/phase-x get a Signed-off-by trailer matching
+  their author (Dev One <dev@example.com>), commit subjects and file contents
+  are byte-identical to before, and the rewritten branch is pushed to origin
+  with --force-with-lease (not plain --force). The bare origin repository's
+  feature/phase-x afterwards has zero commits missing a matching sign-off.
+context:
+  scaffold_script: place-files.sh
