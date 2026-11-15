@@ -11671,7 +11671,7 @@ function toggleVideoExportVisualizer(analyzer) {
       <svg viewBox="0 0 120 120" width="120" height="120" style="filter:drop-shadow(0 0 6px rgba(0,240,255,0.55))" aria-label="Plattenspieler A">
         <rect x="3" y="3" width="114" height="114" rx="12" fill="#070a14" stroke="#ff3dcb" stroke-width="2"/>
         <g>
-          <animateTransform class="deck-spin" attributeName="transform" type="rotate" from="0 60 60" to="360 60 60" dur="1.9s" repeatCount="indefinite"/>
+          <animateTransform data-deck-spin attributeName="transform" type="rotate" from="0 60 60" to="360 60 60" dur="1.9s" repeatCount="indefinite"/>
           <circle cx="60" cy="60" r="46" fill="none" stroke="#00f0ff" stroke-width="2"/>
           <circle cx="60" cy="60" r="40" fill="none" stroke="rgba(0,240,255,0.3)" stroke-width="1"/>
           <circle cx="60" cy="60" r="33" fill="none" stroke="rgba(0,240,255,0.3)" stroke-width="1"/>
@@ -11701,7 +11701,7 @@ function toggleVideoExportVisualizer(analyzer) {
       <svg viewBox="0 0 120 120" width="120" height="120" style="filter:drop-shadow(0 0 6px rgba(0,240,255,0.55))" aria-label="Plattenspieler B">
         <rect x="3" y="3" width="114" height="114" rx="12" fill="#070a14" stroke="#ff3dcb" stroke-width="2"/>
         <g>
-          <animateTransform class="deck-spin" attributeName="transform" type="rotate" from="0 60 60" to="360 60 60" dur="1.9s" repeatCount="indefinite"/>
+          <animateTransform data-deck-spin attributeName="transform" type="rotate" from="0 60 60" to="360 60 60" dur="1.9s" repeatCount="indefinite"/>
           <circle cx="60" cy="60" r="46" fill="none" stroke="#00f0ff" stroke-width="2"/>
           <circle cx="60" cy="60" r="40" fill="none" stroke="rgba(0,240,255,0.3)" stroke-width="1"/>
           <circle cx="60" cy="60" r="33" fill="none" stroke="rgba(0,240,255,0.3)" stroke-width="1"/>
@@ -11729,7 +11729,7 @@ function toggleVideoExportVisualizer(analyzer) {
         <path d="M8 60 Q 30 20 52 60 T 96 60 T 140 60 T 160 56" fill="none" stroke="#00f0ff" stroke-width="2" opacity="0.9"/>
         <path d="M8 74 Q 30 44 52 74 T 96 74 T 140 74" fill="none" stroke="#aaff00" stroke-width="1.5" opacity="0.7"/>
         <g>
-          <animateTransform class="deck-spin" attributeName="transform" type="translate" from="0 0" to="0 104" dur="1.9s" repeatCount="indefinite"/>
+          <animateTransform data-deck-spin attributeName="transform" type="translate" from="0 0" to="0 104" dur="1.9s" repeatCount="indefinite"/>
           <rect x="4" y="2" width="152" height="6" fill="rgba(255,255,255,0.12)"/>
         </g>
         <text x="80" y="122" text-anchor="middle" font-size="9" font-weight="700" fill="#00f0ff" font-family="sans-serif">VIDEO A</text>
@@ -11745,7 +11745,7 @@ function toggleVideoExportVisualizer(analyzer) {
         <path d="M8 60 Q 30 20 52 60 T 96 60 T 140 60 T 160 56" fill="none" stroke="#ff3dcb" stroke-width="2" opacity="0.9"/>
         <path d="M8 74 Q 30 44 52 74 T 96 74 T 140 74" fill="none" stroke="#aaff00" stroke-width="1.5" opacity="0.7"/>
         <g>
-          <animateTransform class="deck-spin" attributeName="transform" type="translate" from="0 0" to="0 104" dur="1.9s" repeatCount="indefinite"/>
+          <animateTransform data-deck-spin attributeName="transform" type="translate" from="0 0" to="0 104" dur="1.9s" repeatCount="indefinite"/>
           <rect x="4" y="2" width="152" height="6" fill="rgba(255,255,255,0.12)"/>
         </g>
         <text x="80" y="122" text-anchor="middle" font-size="9" font-weight="700" fill="#ff3dcb" font-family="sans-serif">VIDEO B</text>
@@ -14910,7 +14910,7 @@ function updateDeckSyncWidget() {
     stEl.style.color = d.synced ? 'rgba(0,255,160,1)' : 'rgba(255,120,80,1)';
   }
   const spinDur = ((60 / d.bpm) * 4).toFixed(3) + 's';
-  document.querySelectorAll('.deck-spin').forEach(a => a.setAttribute('dur', spinDur));
+  document.querySelectorAll('[data-deck-spin]').forEach(a => a.setAttribute('dur', spinDur));
   for (let i = 0; i < 4; i++) {
     const led = document.getElementById('beatLed' + i);
     if (led) {
