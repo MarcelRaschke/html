@@ -11717,6 +11717,41 @@ function toggleVideoExportVisualizer(analyzer) {
     </div>
   </div>
 
+  <!-- Video-Decks: zwei Bildschirme im Neon-Stil, Scanline läuft im Takt -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;justify-items:center;padding:10px;background:rgba(5,8,20,0.7);border:1px solid rgba(255,61,203,0.3);border-radius:10px;margin-bottom:12px">
+    <div style="text-align:center">
+      <svg viewBox="0 0 160 128" width="180" height="144" style="filter:drop-shadow(0 0 6px #00f0ff)" aria-label="Video-Deck A">
+        <rect x="3" y="3" width="154" height="104" rx="10" fill="#03050d" stroke="#00f0ff" stroke-width="2"/>
+        <g stroke="rgba(0,240,255,0.18)" stroke-width="1">
+          <line x1="3" y1="30" x2="157" y2="30"/><line x1="3" y1="58" x2="157" y2="58"/><line x1="3" y1="86" x2="157" y2="86"/>
+          <line x1="40" y1="3" x2="40" y2="107"/><line x1="80" y1="3" x2="80" y2="107"/><line x1="120" y1="3" x2="120" y2="107"/>
+        </g>
+        <path d="M8 60 Q 30 20 52 60 T 96 60 T 140 60 T 160 56" fill="none" stroke="#00f0ff" stroke-width="2" opacity="0.9"/>
+        <path d="M8 74 Q 30 44 52 74 T 96 74 T 140 74" fill="none" stroke="#aaff00" stroke-width="1.5" opacity="0.7"/>
+        <g>
+          <animateTransform class="deck-spin" attributeName="transform" type="translate" from="0 0" to="0 104" dur="1.9s" repeatCount="indefinite"/>
+          <rect x="4" y="2" width="152" height="6" fill="rgba(255,255,255,0.12)"/>
+        </g>
+        <text x="80" y="122" text-anchor="middle" font-size="9" font-weight="700" fill="#00f0ff" font-family="sans-serif">VIDEO A</text>
+      </svg>
+    </div>
+    <div style="text-align:center">
+      <svg viewBox="0 0 160 128" width="180" height="144" style="filter:drop-shadow(0 0 6px #ff3dcb)" aria-label="Video-Deck B">
+        <rect x="3" y="3" width="154" height="104" rx="10" fill="#03050d" stroke="#ff3dcb" stroke-width="2"/>
+        <g stroke="rgba(0,240,255,0.18)" stroke-width="1">
+          <line x1="3" y1="30" x2="157" y2="30"/><line x1="3" y1="58" x2="157" y2="58"/><line x1="3" y1="86" x2="157" y2="86"/>
+          <line x1="40" y1="3" x2="40" y2="107"/><line x1="80" y1="3" x2="80" y2="107"/><line x1="120" y1="3" x2="120" y2="107"/>
+        </g>
+        <path d="M8 60 Q 30 20 52 60 T 96 60 T 140 60 T 160 56" fill="none" stroke="#ff3dcb" stroke-width="2" opacity="0.9"/>
+        <path d="M8 74 Q 30 44 52 74 T 96 74 T 140 74" fill="none" stroke="#aaff00" stroke-width="1.5" opacity="0.7"/>
+        <g>
+          <animateTransform class="deck-spin" attributeName="transform" type="translate" from="0 0" to="0 104" dur="1.9s" repeatCount="indefinite"/>
+          <rect x="4" y="2" width="152" height="6" fill="rgba(255,255,255,0.12)"/>
+        </g>
+        <text x="80" y="122" text-anchor="middle" font-size="9" font-weight="700" fill="#ff3dcb" font-family="sans-serif">VIDEO B</text>
+      </svg>
+    </div>
+  </div>
 
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
     <button onclick="exportSetlistM3U8()" style="padding:8px;background:rgba(170,255,0,0.15);border:1px solid rgba(170,255,0,0.5);color:rgba(190,255,60,1);border-radius:4px;cursor:pointer;font-size:10px;font-weight:600">💾 M3U8 exportieren</button>
