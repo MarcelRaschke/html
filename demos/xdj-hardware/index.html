@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XDJ Hardware — Anbindung &amp; MIDI-Monitor</title>
+<style>
+:root { --bg:#070a14; --card:#0d1222; --line:rgba(0,240,255,0.2); --text:#e6ecff; --dim:#8a94b8; --cyan:#00f0ff; --lime:#aaff00; --magenta:#ff3dcb; }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --bg:#f4f6fb; --card:#fff; --line:rgba(0,120,160,0.25); --text:#141a2e; --dim:#4a5572; --cyan:#00779a; --lime:#4a7a00; --magenta:#a0137d; } }
+:root[data-theme="dark"] { --bg:#070a14; --card:#0d1222; --line:rgba(0,240,255,0.2); --text:#e6ecff; --dim:#8a94b8; --cyan:#00f0ff; --lime:#aaff00; --magenta:#ff3dcb; }
+body { margin:0; background:var(--bg); color:var(--text); font:14px/1.5 system-ui, sans-serif; }
+main { max-width:920px; margin:0 auto; padding:24px 16px 48px; }
+h1 { font-size:26px; margin:0 0 6px; color:var(--cyan); }
+h2 { font-size:16px; margin:28px 0 10px; color:var(--lime); }
+p, li { color:var(--text); }
+.muted { color:var(--dim); font-size:13px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:14px; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+th { color:var(--dim); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+code { background:rgba(0,240,255,0.08); padding:1px 5px; border-radius:4px; font-size:12px; }
+button { background:rgba(0,240,255,0.12); color:var(--cyan); border:1px solid var(--cyan); border-radius:8px; padding:8px 14px; cursor:pointer; font-weight:600; }
+button:disabled { opacity:.45; cursor:default; }
+.status { display:flex; align-items:center; gap:10px; margin:10px 0; }
+.dot { width:12px; height:12px; border-radius:50%; background:#ff4d6d; }
+.dot.on { background:var(--lime); box-shadow:0 0 10px var(--lime); }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; }
+.kv { font-size:12px; color:var(--dim); }
+.kv b { display:block; font-size:22px; color:var(--text); font-variant-numeric:tabular-nums; }
+#log { font:12px/1.5 ui-monospace, monospace; color:var(--dim); max-height:180px; overflow:auto; white-space:pre; }
+.note { border-left:3px solid var(--magenta); padding:8px 12px; background:rgba(255,61,203,0.06); border-radius:6px; font-size:13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>XDJ Hardware</h1>
+  <p class="muted">Anbindung des Beat Architekt an Pioneer-XDJ/DJM-Geräte über Web MIDI. Diese Seite beschreibt die tatsächlich implementierte Zuordnung und zeigt eingehende Nachrichten live. Sie verändert den Zustand der Beat-Architekt-App nicht.</p>
+
+  <div class="card">
+    <div class="status"><span id="dot" class="dot"></span><span id="statusText">Nicht verbunden</span></div>
+    <div id="deviceName" class="muted">Kein Gerät erkannt</div>
+    <p class="muted" style="margin:10px 0 12px">Der Browser fragt nach MIDI-Zugriff. Erkannt werden Geräte mit „XDJ“, „DJM“ oder „Pioneer“ im Namen, wie in der App.</p>
+    <button id="connectBtn">MIDI verbinden</button>
+    <p id="noMidi" class="note" style="display:none;margin-top:12px">Web MIDI ist in diesem Browser nicht verfügbar. Chrome oder Edge mit Gerät über USB verwenden.</p>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Live-Werte</h2>
+    <div class="grid">
+      <div class="kv">Tempo (CC 6)<b id="bpmVal">—</b><span id="bpmRaw">—</span></div>
+      <div class="kv">Playhead (CC 3)<b id="stepVal">—</b><span id="stepRaw">—</span></div>
+      <div class="kv">Pad-Note (Note On)<b id="padVal">—</b><span id="padRaw">—</span></div>
+      <div class="kv">Nachrichten gesamt<b id="countVal">0</b><span>seit Verbindung</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Eingehende Nachrichten</h2>
+    <div id="log">Warte auf Nachrichten …</div>
+  </div>
+
+  <h2>Zuordnung</h2>
+  <div class="card" style="padding:0">
+    <table>
+      <thead><tr><th>Nachricht</th><th>Bedeutung in Beat Architekt</th><th>Umrechnung</th></tr></thead>
+      <tbody>
+        <tr><td><code>CC 6</code> (Tempo)</td><td>Hardware-Tempo. Weicht es um mehr als die Sync-Toleranz vom lokalen BPM ab, übernimmt die App es.</td><td>BPM = 60 + Wert / 127 × 120 (Bereich 60–180)</td></tr>
+        <tr><td><code>CC 3</code> (Playhead)</td><td>Aktuelle Schrittposition im Sequencer, nur eingehend.</td><td>Schritt = round(Wert / 127 × (Schritte − 1))</td></tr>
+        <tr><td><code>Note On 36…</code> (Pads)</td><td>Schaltet den Schritt <i>Note − 36</i> des aktiven Tracks um. Nur mit gespeichertem Pattern.</td><td>Schritt = Note − 36, Bereich 0–(Schritte − 1)</td></tr>
+        <tr><td>Ausgehend (Pattern-Sync)</td><td>Der aktive Track wird als Note On/Off an das Gerät gesendet, sobald Hardware verbunden ist.</td><td>Velocity = Schrittlautstärke × 127; Note = 36 + Schritt</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">Hinweis: Die Schrittzahl ist in der App zwischen 8 und 32 einstellbar (Standard 16). Pads mit Schritten oberhalb der aktuellen Schrittzahl werden ignoriert.</div>
+</main>
+
+<script>
+(() => {
+  const CONNECTABLE = /XDJ|DJM|Pioneer/i;
+  const els = {
+    dot: document.getElementById('dot'), status: document.getElementById('statusText'),
+    device: document.getElementById('deviceName'), btn: document.getElementById('connectBtn'),
+    noMidi: document.getElementById('noMidi'), log: document.getElementById('log'),
+    bpm: document.getElementById('bpmVal'), bpmRaw: document.getElementById('bpmRaw'),
+    step: document.getElementById('stepVal'), stepRaw: document.getElementById('stepRaw'),
+    pad: document.getElementById('padVal'), padRaw: document.getElementById('padRaw'),
+    count: document.getElementById('countVal')
+  };
+  let total = 0, lines = [];
+  const hex = n => '0x' + n.toString(16).padStart(2, '0').toUpperCase();
+
+  function setConnected(name) {
+    els.dot.classList.add('on');
+    els.status.textContent = 'Verbunden';
+    els.device.textContent = name;
+    els.btn.disabled = true;
+  }
+
+  function show(msg) {
+    const [cmd, a, b] = msg.data;
+    total++;
+    els.count.textContent = total;
+    const kind = cmd & 0xF0;
+    let text = `${hex(cmd)} ${hex(a)} ${hex(b)}`;
+    if (kind === 0xB0 && a === 6) {
+      const bpm = 60 + (b / 127) * 120;
+      els.bpm.textContent = bpm.toFixed(1); els.bpmRaw.textContent = `CC 6 = ${b}`;
+      text += `  Tempo ${bpm.toFixed(1)} BPM`;
+    } else if (kind === 0xB0 && a === 3) {
+      const step = Math.round((b / 127) * 15);
+      els.step.textContent = step; els.stepRaw.textContent = `CC 3 = ${b} (16 Schritte)`;
+      text += `  Playhead-Position Wert ${b}`;
+    } else if (kind === 0x90 && b > 0) {
+      els.pad.textContent = `Schritt ${a - 36}`; els.padRaw.textContent = `Note ${a}, Velocity ${b}`;
+      text += `  Pad → Schritt ${a - 36}`;
+    } else if (kind === 0x90 || kind === 0x80) {
+      text += '  Pad losgelassen';
+    } else {
+      text += '  (nicht zugeordnet)';
+    }
+    lines.push(text);
+    if (lines.length > 40) lines = lines.slice(-40);
+    els.log.textContent = lines.join('\n');
+    els.log.scrollTop = els.log.scrollHeight;
+  }
+
+  function attach(input) {
+    input.onmidimessage = show;
+    setConnected(input.name);
+  }
+
+  async function connect() {
+    if (!navigator.requestMIDIAccess) { els.noMidi.style.display = 'block'; return; }
+    try {
+      const access = await navigator.requestMIDIAccess({ sysex: false });
+      const inputs = [...access.inputs.values()];
+      const found = inputs.find(i => CONNECTABLE.test(i.name || ''));
+      if (found) attach(found);
+      else { els.device.textContent = 'Kein XDJ/DJM-Gerät gefunden — Gerät anschließen und erneut verbinden.'; }
+      access.onstatechange = e => {
+        if (e.port.type === 'input' && e.port.state === 'connected' && CONNECTABLE.test(e.port.name || '')) attach(e.port);
+      };
+    } catch (err) {
+      els.device.textContent = 'MIDI-Zugriff verweigert: ' + err.message;
+    }
+  }
+
+  els.btn.addEventListener('click', connect);
+})();
+</script>
+</body>
+</html>
