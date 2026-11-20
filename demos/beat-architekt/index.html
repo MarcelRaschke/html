@@ -15160,7 +15160,10 @@ document.addEventListener('DOMContentLoaded', () => {
   `;
   collaborationToggleBtn.onclick = () => {
     const panel = document.getElementById('collaborationPanel');
-    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    const opening = panel.style.display === 'none';
+    panel.style.display = opening ? 'block' : 'none';
+    // Setlist- und Collaboration-Panel ueberlappen sich (rechts unten): jeweils nur eines offen
+    if (opening) document.getElementById('phase34SetlistPanel').style.display = 'none';
   };
   collaborationToggleBtn.onmouseover = () => {
     collaborationToggleBtn.style.transform = 'scale(1.1)';
@@ -15197,6 +15200,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const panel = document.getElementById('phase34SetlistPanel');
     const opening = panel.style.display === 'none';
     panel.style.display = opening ? 'block' : 'none';
+    if (opening) document.getElementById('collaborationPanel').style.display = 'none';
     if (opening) { renderSetlistTable(); renderRGBWaveform(); updateDeckSyncWidget(); }
   };
   setlistToggleBtn.onmouseover = () => {
