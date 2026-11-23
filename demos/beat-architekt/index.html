@@ -1509,6 +1509,9 @@ let mutedTracks = new Set();
 let soloTrack = null;
 let grid = {};
 let isPlaying = false;
+let noiseBuffer = null;
+// Wiedergabestatus fuer Export/Distribution/Performance-Module (wird in togglePlay synchronisiert)
+const playbackState = { playing: false, audioBuffer: null, masterGain: null };
 let currentStep = -1;
 let bpm = 125;
 let intervalId = null;
@@ -2663,11 +2666,13 @@ let masteringState = {
     correlation: { value: 0.95, range: [-1, 1], status: 'ok' },
     crestFactor: { value: 9.0, headroom: 5.0 }
   },
+  activeStandard: 'spotify',
   standards: {
     spotify: { target: -14.0, unit: 'LUFS', truePeakMax: -1.0 },
     appleMusic: { target: -16.0, unit: 'LKFS', truePeakMax: -1.0 },
     youtube: { target: -13.0, unit: 'LUFS', truePeakMax: 0.0 },
-    broadcast: { target: -23.0, unit: 'LUFS', truePeakMax: -1.0 }
+    broadcast: { target: -23.0, unit: 'LUFS', truePeakMax: -1.0 },
+    reference: { target: -18.0, unit: 'LUFS', truePeakMax: -1.0 }
   },
   limiter: { enabled: false, threshold: -0.5, release: 50, lookahead: 5 },
   metering: { active: false, lastUpdate: 0 }
@@ -4091,6 +4096,7 @@ function togglePlay() {
     initModulationMatrixUI();
   }
   isPlaying = !isPlaying;
+  playbackState.playing = isPlaying;
   const btn = document.getElementById('playBtn');
   if (isPlaying) {
     btn.innerHTML = '■ STOP';
