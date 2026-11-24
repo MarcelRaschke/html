@@ -2324,6 +2324,85 @@ function initMasteringMeters() {
   console.log('✓ Mastering meters initialized');
 }
 
+// Verbindet die Analyser mit dem Master-Ausgang (Summe aus Dry-Pfad eqTreble und Reverb-Wet).
+// Idempotent; erst nach initEffectsChain() aufrufbar, da audioCtx vorher nicht existiert.
+function connectMasteringMeters() {
+  if (!audioCtx || !effectsNodes.eqTreble || !effectsNodes.reverbWet) return false;
+  if (masteringState.meterBus) return true;
+  if (!masteringState.analyser) initMasteringMeters();
+
+  const bus = audioCtx.createGain();
+  bus.gain.value = 1.0;
+  effectsNodes.eqTreble.connect(bus);
+  effectsNodes.reverbWet.connect(bus);
+  bus.connect(masteringState.analyser);
+  bus.connect(masteringState.analyserIntegrated);
+
+  // Stereo-Analyser fuer Korrelation, True Peak und Dynamik
+  const splitter = audioCtx.createChannelSplitter(2);
+  bus.connect(splitter);
+  masteringState.analyserL = audioCtx.createAnalyser();
+  masteringState.analyserR = audioCtx.createAnalyser();
+  masteringState.analyserL.fftSize = 8192;
+  masteringState.analyserR.fftSize = 8192;
+  splitter.connect(masteringState.analyserL, 0);
+  splitter.connect(masteringState.analyserR, 1);
+  masteringState.meterFrameL = new Float32Array(8192);
+  masteringState.meterFrameR = new Float32Array(8192);
+
+  masteringState.meterBus = bus;
+  masteringState.metering.active = true;
+  playbackState.masterGain = globalMasterGain;
+  return true;
+}
+
+// Liest ein Fenster (8192 Samples, ca. 170 ms bei 48 kHz) vom Master-Ausgang
+// und speist updateLoudnessMeter / analyzeAudioMetrics.
+function captureMeteringFrame() {
+  if (!masteringState.analyserL || !masteringState.analyserR) return false;
+  const L = masteringState.meterFrameL, R = masteringState.meterFrameR;
+  masteringState.analyserL.getFloatTimeDomainData(L);
+  masteringState.analyserR.getFloatTimeDomainData(R);
+  const frame = { numberOfChannels: 2, length: L.length, getChannelData: ch => (ch === 0 ? L : R) };
+
+  let energy = 0;
+  for (let i = 0; i < L.length; i++) energy += L[i] * L[i] + R[i] * R[i];
+
+  // Momentary Loudness: Leistungsmittel ueber 400 ms (ITU-R BS.1770 Momentary-Fenster),
+  // damit Pausen zwischen einzelnen Noten den Pegel nicht auf -80 LUFS fallen lassen
+  const now = performance.now();
+  const hist = masteringState.meterHistory || (masteringState.meterHistory = []);
+  hist.push({ t: now, ms: energy / (2 * L.length) });
+  while (hist.length && now - hist[0].t > 400) hist.shift();
+  applyLoudnessFromMeanSquare(hist.reduce((a, h) => a + h.ms, 0) / hist.length);
+
+  // Peak, Dynamik und Korrelation nur bei Signal (RMS 0 wuerde durch 0 teilen)
+  if (energy > 0) analyzeAudioMetrics(frame);
+  masteringState.metering.lastUpdate = now;
+  updateMeteringReadouts();
+  return true;
+}
+
+// Tabellenwerte im Mastering-Panel aus masteringState.meters schreiben
+function updateMeteringReadouts() {
+  const m = masteringState.meters;
+  const set = (id, text, color) => { const el = document.getElementById(id); if (el) { el.textContent = text; if (color) el.style.color = color; } };
+  const ok = '#00ff00', warn = '#ffaa00', bad = '#ff5555';
+  const loudColor = m.loudness.status === 'meeting' ? ok : (m.loudness.status === 'high' ? warn : bad);
+  set('loudnessReadout', m.loudness.value <= -80 ? '-inf LUFS' : m.loudness.value.toFixed(1) + ' LUFS', loudColor);
+  set('loudnessStatus', { meeting: 'Target', high: 'High', low: 'Low' }[m.loudness.status] || m.loudness.status, loudColor);
+  const peakColor = m.truePeak.status === 'ok' ? ok : bad;
+  set('truePeakReadout', m.truePeak.value.toFixed(1) + ' dBFS', peakColor);
+  set('truePeakStatus', m.truePeak.status === 'ok' ? 'OK' : 'Clip', peakColor);
+  const drColor = m.dynamicRange.status === 'good' ? ok : warn;
+  set('drReadout', m.dynamicRange.value.toFixed(1) + ' dB', drColor);
+  set('drStatus', m.dynamicRange.status === 'good' ? 'Good' : 'Low', drColor);
+  const corr = +m.correlation.value;
+  const corrColor = m.correlation.status === 'phase_issue' ? bad : ok;
+  set('corrReadout', corr.toFixed(2), corrColor);
+  set('corrStatus', { mono_like: 'Mono', stereo_ok: 'Stereo', phase_issue: 'Phase!' }[m.correlation.status] || m.correlation.status, corrColor);
+}
+
 // Calculate loudness in LUFS using ITU-R BS.1770-4
 function updateLoudnessMeter(audioBuffer) {
   if (!audioCtx || !audioBuffer || audioBuffer.length === 0) return;
@@ -2349,8 +2428,12 @@ function updateLoudnessMeter(audioBuffer) {
     }
   }
 
+  applyLoudnessFromMeanSquare(sumSquared / sampleCount);
+}
+
+// LUFS aus mittlerer Leistung setzen und Status gegen den aktiven Standard pruefen
+function applyLoudnessFromMeanSquare(meanSquare) {
   // Calculate LUFS: -0.691 + 10 * log10(mean_square)
-  const meanSquare = sumSquared / sampleCount;
   const loudnessLUFS = meanSquare > 0 ? -0.691 + 10 * Math.log10(meanSquare) : -Infinity;
 
   // Update meter
@@ -4088,6 +4171,7 @@ function togglePlay() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     initEffectsChain();
+    connectMasteringMeters();
     if (!noiseBuffer) noiseBuffer = createNoiseBuffer();
     initVoicePool();
     initBeatViz();
@@ -15540,8 +15624,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Update metering during playback
     setInterval(() => {
       if (isPlaying) {
-        // Get current audio buffer for metering
-        // This would need to be connected to the actual audio output
+        if (connectMasteringMeters()) captureMeteringFrame();
         updateMeteringDisplay();
       }
     }, 33.33); // ~30 FPS
