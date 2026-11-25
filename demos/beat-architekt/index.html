@@ -2411,6 +2411,158 @@ function captureMeteringFrame() {
   return true;
 }
 
+// === Phase 30.2: Master-Recorder ===
+// Nimmt den Master-Ausgang (Meter-Bus) verlustfrei als Float32-PCM auf.
+// Jeder Play->Stop-Durchlauf ist ein Take; der letzte Take steht in playbackState.audioBuffer
+// und ist die Quelle fuer den Export. AudioWorklet bevorzugt, ScriptProcessor als Fallback.
+const masterRecorder = {
+  node: null, mode: null, ready: null,
+  recording: false, chunksL: [], chunksR: [], frames: 0,
+  maxSeconds: 300, truncated: false, pendingStop: null, stopTimer: null
+};
+
+const MASTER_RECORDER_WORKLET = `
+class MasterRecorderProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.rec = false; this.n = 0;
+    this.bufL = new Float32Array(4096); this.bufR = new Float32Array(4096);
+    this.port.onmessage = (e) => {
+      if (e.data === 'start') { this.rec = true; this.n = 0; }
+      else if (e.data === 'stop') { this.flush(); this.rec = false; this.port.postMessage({ done: true }); }
+    };
+  }
+  flush() {
+    if (!this.n) return;
+    this.port.postMessage({ l: this.bufL.slice(0, this.n), r: this.bufR.slice(0, this.n) });
+    this.n = 0;
+  }
+  process(inputs) {
+    if (!this.rec) return true;
+    const inp = inputs[0];
+    const frames = (inp && inp[0]) ? inp[0].length : 128;
+    const l = inp && inp[0], r = inp && (inp[1] || inp[0]);
+    for (let i = 0; i < frames; i++) {
+      // Ohne aktive Quelle liefert der Graph 0 Kanaele: Stille aufnehmen, damit die Zeitachse stimmt
+      this.bufL[this.n] = l ? l[i] : 0;
+      this.bufR[this.n] = r ? r[i] : 0;
+      if (++this.n === 4096) this.flush();
+    }
+    return true;
+  }
+}
+registerProcessor('master-recorder', MasterRecorderProcessor);
+`;
+
+function masterRecorderPush(l, r) {
+  if (!masterRecorder.recording) return;
+  const max = masterRecorder.maxSeconds * audioCtx.sampleRate;
+  if (masterRecorder.frames >= max) { masterRecorder.truncated = true; return; }
+  const take = Math.min(l.length, max - masterRecorder.frames);
+  masterRecorder.chunksL.push(take === l.length ? l : l.slice(0, take));
+  masterRecorder.chunksR.push(take === r.length ? r : r.slice(0, take));
+  masterRecorder.frames += take;
+}
+
+// Baut den Recorder einmalig auf (nach connectMasteringMeters, da er am Meter-Bus haengt)
+function initMasterRecorder() {
+  if (masterRecorder.ready) return masterRecorder.ready;
+  if (!audioCtx || !masteringState.meterBus) return Promise.resolve(false);
+
+  const useWorklet = !!(audioCtx.audioWorklet && window.AudioWorkletNode);
+  if (useWorklet) {
+    const url = URL.createObjectURL(new Blob([MASTER_RECORDER_WORKLET], { type: 'application/javascript' }));
+    masterRecorder.ready = audioCtx.audioWorklet.addModule(url).then(() => {
+      URL.revokeObjectURL(url);
+      const node = new AudioWorkletNode(audioCtx, 'master-recorder', {
+        numberOfInputs: 1, numberOfOutputs: 0, channelCount: 2, channelCountMode: 'explicit'
+      });
+      node.port.onmessage = (e) => {
+        if (e.data && e.data.done) { if (masterRecorder.pendingStop) masterRecorder.pendingStop(); }
+        else if (e.data && e.data.l) masterRecorderPush(e.data.l, e.data.r);
+      };
+      masteringState.meterBus.connect(node);
+      masterRecorder.node = node;
+      masterRecorder.mode = 'worklet';
+      if (masterRecorder.recording) node.port.postMessage('start');
+      return true;
+    }).catch(err => {
+      console.warn('AudioWorklet nicht verfuegbar, ScriptProcessor-Fallback:', err);
+      return initScriptProcessorRecorder();
+    });
+  } else {
+    masterRecorder.ready = Promise.resolve(initScriptProcessorRecorder());
+  }
+  return masterRecorder.ready;
+}
+
+function initScriptProcessorRecorder() {
+  const node = audioCtx.createScriptProcessor(4096, 2, 2);
+  node.onaudioprocess = (e) => {
+    const inp = e.inputBuffer;
+    masterRecorderPush(new Float32Array(inp.getChannelData(0)),
+      new Float32Array(inp.getChannelData(inp.numberOfChannels > 1 ? 1 : 0)));
+  };
+  // ScriptProcessor laeuft nur mit Ausgang; stummer Gain verhindert Doppelsignal
+  const mute = audioCtx.createGain();
+  mute.gain.value = 0;
+  masteringState.meterBus.connect(node);
+  node.connect(mute);
+  mute.connect(audioCtx.destination);
+  masterRecorder.node = node;
+  masterRecorder.mode = 'scriptprocessor';
+  return true;
+}
+
+function startMasterRecording() {
+  if (masterRecorder.stopTimer) { clearTimeout(masterRecorder.stopTimer); masterRecorder.stopTimer = null; }
+  // Laeuft noch ein Take (Play kurz nach Stop), diesen zuerst abschliessen
+  if (masterRecorder.recording) return stopMasterRecording().then(startMasterRecording);
+  masterRecorder.chunksL = []; masterRecorder.chunksR = [];
+  masterRecorder.frames = 0; masterRecorder.truncated = false;
+  masterRecorder.recording = true;
+  updateRecordingInfo('Aufnahme laeuft ...');
+  initMasterRecorder().then(() => {
+    if (masterRecorder.mode === 'worklet' && masterRecorder.recording) masterRecorder.node.port.postMessage('start');
+  });
+}
+
+// Beendet den Take und legt ihn als AudioBuffer in playbackState.audioBuffer ab
+function stopMasterRecording() {
+  if (!masterRecorder.recording) return Promise.resolve(playbackState.audioBuffer);
+  const finalize = () => {
+    masterRecorder.recording = false;
+    masterRecorder.pendingStop = null;
+    const frames = masterRecorder.frames;
+    if (!frames) { updateRecordingInfo('Kein Signal aufgenommen'); return playbackState.audioBuffer; }
+    const buf = audioCtx.createBuffer(2, frames, audioCtx.sampleRate);
+    const L = buf.getChannelData(0), R = buf.getChannelData(1);
+    let off = 0;
+    for (let i = 0; i < masterRecorder.chunksL.length; i++) {
+      L.set(masterRecorder.chunksL[i], off);
+      R.set(masterRecorder.chunksR[i], off);
+      off += masterRecorder.chunksL[i].length;
+    }
+    masterRecorder.chunksL = []; masterRecorder.chunksR = [];
+    playbackState.audioBuffer = buf;
+    updateRecordingInfo(`Take: ${buf.duration.toFixed(1)} s, ${buf.sampleRate / 1000} kHz Stereo` +
+      (masterRecorder.truncated ? ` (auf ${masterRecorder.maxSeconds} s begrenzt)` : ''));
+    return buf;
+  };
+  if (masterRecorder.mode === 'worklet' && masterRecorder.node) {
+    return new Promise(resolve => {
+      masterRecorder.pendingStop = () => resolve(finalize());
+      masterRecorder.node.port.postMessage('stop');
+    });
+  }
+  return Promise.resolve(finalize());
+}
+
+function updateRecordingInfo(text) {
+  const el = document.getElementById('phase30RecordingInfo');
+  if (el) el.textContent = text;
+}
+
 // Tabellenwerte im Mastering-Panel aus masteringState.meters schreiben
 function updateMeteringReadouts() {
   const m = masteringState.meters;
@@ -4521,12 +4673,15 @@ function togglePlay() {
     nextStepTime = audioCtx.currentTime;
     renderTrackMuteButtons();
     startSequencer();
+    startMasterRecording();
   } else {
     btn.innerHTML = '▶ PLAY';
     btn.classList.remove('playing');
     if (sequencerAnimId) cancelAnimationFrame(sequencerAnimId);
     clearInterval(intervalId);
     clearCurrent();
+    // Ausklingende Effekte (Delay/Reverb) noch 1 s mitschneiden, dann Take abschliessen
+    masterRecorder.stopTimer = setTimeout(() => { masterRecorder.stopTimer = null; stopMasterRecording(); }, 1000);
   }
 }
 
@@ -11594,6 +11749,7 @@ function toggleVideoExportVisualizer(analyzer) {
 
   <div style="margin-bottom:10px;padding:8px;background:rgba(170,255,0,0.05);border-radius:4px;border:1px solid rgba(170,255,0,0.2)">
     <div style="font-size:9px;color:var(--text-secondary);margin-bottom:4px">📊 Loudness: <span id="phase30Loudness" style="color:var(--lime);font-weight:600">-20.0 LUFS</span></div>
+    <div style="font-size:9px;color:var(--text-secondary);margin-bottom:4px">🎙️ Master-Take: <span id="phase30RecordingInfo" style="color:var(--cyan);font-weight:600">noch keine Aufnahme (Play/Stop)</span></div>
     <div id="phase30ProgressBar" style="width:100%;height:4px;background:rgba(100,100,100,0.3);border-radius:2px;overflow:hidden">
       <div style="width:0%;height:100%;background:linear-gradient(90deg,var(--lime),var(--cyan));transition:width 0.2s"></div>
     </div>
@@ -12542,7 +12698,7 @@ function exportStemAsWAV(stemName) {
   const processedData = normResult.normalized;
 
   // Step 2: Encode with quality-aware settings (handles dithering + soft clipping)
-  const buffer = encodeWAV(processedData, sampleRate, quality);
+  const buffer = encodeStemWAV(processedData, sampleRate, quality);
 
   // Step 3: Download as WAV file
   const blob = new Blob([buffer], { type: 'audio/wav' });
@@ -12590,7 +12746,8 @@ function normalizeAudio(audioData, headroomDb = -3) {
   return { scale, normalized, peakDb: 20 * Math.log10(maxAbsolute) };
 }
 
-function encodeWAV(audioData, sampleRate, useQuality = 'balanced') {
+// Mono-PCM fuer den Stem-Export; eigener Name, damit encodeWAV(buffer) aus Phase 30.2 nicht ueberschrieben wird
+function encodeStemWAV(audioData, sampleRate, useQuality = 'balanced') {
   const bitDepth = useQuality === 'hq' ? 24 : 16;
   const bytesPerSample = bitDepth / 8;
   const buffer = new ArrayBuffer(44 + audioData.length * bytesPerSample);
@@ -12691,7 +12848,7 @@ function exportStemMix() {
   const processedData = normResult.normalized;
 
   // Step 3: Encode with quality-aware settings (handles dithering + soft clipping)
-  const buffer = encodeWAV(processedData, sampleRate, quality);
+  const buffer = encodeStemWAV(processedData, sampleRate, quality);
 
   // Step 4: Download as WAV file
   const blob = new Blob([buffer], { type: 'audio/wav' });
@@ -13403,7 +13560,7 @@ async function processExportQueue() {
 
 async function performExport(exportTask) {
   if (!playbackState.audioBuffer) {
-    alert('No audio buffer loaded. Play a mix first.');
+    alert('Noch kein Master-Take vorhanden. Bitte Play druecken, den Mix laufen lassen und Stop druecken.');
     throw new Error('No audio buffer');
   }
 
