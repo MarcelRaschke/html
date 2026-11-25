@@ -7809,6 +7809,13 @@ function uploadAndAnalyzeSample(file) {
 }
 
 // Phase 23f: Play Sample with Time-Stretch
+// Ziel fuer die Sample-Player: Master-Summe vor dem Live-Limiter. Samples laufen weiter ohne die
+// Effektkette (Klang unveraendert), werden aber jetzt begrenzt, gemessen und aufgenommen.
+// Fallback auf den Ausgang, falls die Effektkette noch nicht aufgebaut ist.
+function sampleOutputNode() {
+  return (effectsNodes && effectsNodes.masterOut) || audioCtx.destination;
+}
+
 function playSample(sampleId, time = audioCtx.currentTime, velocity = 1.0, stretchFactor = 1.0) {
   const sample = sampleLibrary.find(s => s.id === sampleId);
   if (!sample) return;
@@ -7824,7 +7831,7 @@ function playSample(sampleId, time = audioCtx.currentTime, velocity = 1.0, stret
   gain.gain.setValueAtTime(velocity, time);
 
   source.connect(gain);
-  gain.connect(audioCtx.destination);
+  gain.connect(sampleOutputNode());
   source.start(time);
 }
 
@@ -7996,7 +8003,7 @@ function previewLoop(sampleId, loopIndex) {
   const gain = audioCtx.createGain();
 
   source.connect(gain);
-  gain.connect(audioCtx.destination);
+  gain.connect(sampleOutputNode());
 
   const playCount = 2;
   const playDuration = (loop.endTime - loop.startTime) * playCount;
@@ -8171,7 +8178,7 @@ function playSlice(sliceId, time, velocity = 1.0, effectsOverrides = {}) {
   gain.gain.exponentialRampToValueAtTime(0.001, compensatedTime + duration - 0.01);
 
   source.connect(gain);
-  gain.connect(audioCtx.destination);
+  gain.connect(sampleOutputNode());
 
   source.start(compensatedTime, startTime, duration);
   source.stop(compensatedTime + duration);
