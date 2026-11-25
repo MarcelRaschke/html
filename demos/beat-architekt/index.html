@@ -5043,6 +5043,41 @@ function drawToneCurve() {
 }
 
 // Phase 17: AI-Assisted Mixing
+// === Master-Lautstaerke: Nutzer-Lautstaerke x KI-Trim ===
+// globalMasterGain hat drei Eingriffe: den MIDI-Volume-Regler (Nutzer), die KI-Mix-Loudness-Empfehlung
+// und das Ausblenden beim Pattern-Crossfade. Damit sie sich nicht gegenseitig ueberschreiben, ist der
+// Sollwert ein Produkt: user (nur der Regler) x aiTrim (nur die KI, begrenzt auf -6 bis +3,5 dB).
+// Der Crossfade blendet von diesem Sollwert aus und kehrt danach dorthin zurueck.
+const masterGainState = { user: 1.0, aiTrim: 1.0, aiTrimMin: 0.5, aiTrimMax: 1.5 };
+
+function masterGainTarget() {
+  return masterGainState.user * masterGainState.aiTrim;
+}
+
+// Sollwert anwenden. Laeuft ein Crossfade, wird der neue Wert erst danach wirksam (startGain).
+function applyMasterGain(timeConstant = 0.01) {
+  if (!globalMasterGain || !audioCtx) return;
+  if (crossfadeInProgress()) {
+    sequencerState.crossfade.startGain = masterGainTarget();
+    return;
+  }
+  globalMasterGain.gain.setTargetAtTime(masterGainTarget(), audioCtx.currentTime, timeConstant);
+}
+
+function setUserMasterVolume(value) {
+  masterGainState.user = Math.max(0, Math.min(2, value));
+  applyMasterGain(0.01);
+  updateAITrimDisplay();
+}
+
+function updateAITrimDisplay() {
+  const el = document.getElementById('aiTrimDisplay');
+  if (!el) return;
+  const db = 20 * Math.log10(masterGainState.aiTrim);
+  const atLimit = masterGainState.aiTrim <= masterGainState.aiTrimMin + 1e-6 || masterGainState.aiTrim >= masterGainState.aiTrimMax - 1e-6;
+  el.textContent = `${db >= 0 ? '+' : ''}${db.toFixed(1)} dB${atLimit ? ' (Grenze)' : ''}`;
+}
+
 // Laeuft gerade das Ausblenden eines Pattern-Crossfades? Dann misst die KI-Analyse hinter
 // globalMasterGain einen kuenstlich leiser werdenden Mix und wuerde ihn "korrigieren".
 function crossfadeInProgress() {
@@ -5089,10 +5124,15 @@ function analyzeCurrentMix() {
   aiMixing.frequencyBalance.treble = trebleAvg;
 
   // Calculate loudness (simplified LUFS calculation)
-  const rmsValue = Math.sqrt(frequencyData.reduce((a, b) => a + b * b, 0) / frequencyData.length) / 127;
-  const loudnessDB = 20 * Math.log10(Math.max(rmsValue, 0.00001));
+  // Loudness aus dem Mastering-Meter (Momentary LUFS, 400 ms). Der hier frisch angelegte Analyser hat beim
+  // sofortigen Auslesen noch keine Daten und lieferte immer -100 dB ("Very quiet" bei jedem Signal).
+  // Die Nutzer-Lautstaerke wird herausgerechnet, sonst wuerde die KI jede Absenkung am Regler als
+  // "zu leise" werten und wieder anheben (der KI-Trim bleibt enthalten). Ohne gueltige Messung: -Infinity.
+  const userDb = 20 * Math.log10(Math.max(masterGainState.user, 0.001));
+  const meterLufs = (masteringState.metering && masteringState.metering.active) ? masteringState.meters.loudness.value : -Infinity;
+  const loudnessDB = meterLufs > -70 ? meterLufs - userDb : -Infinity;
 
-  aiMixing.loudnessMeasure.integrated = Math.round(loudnessDB * 10) / 10;
+  aiMixing.loudnessMeasure.integrated = isFinite(loudnessDB) ? Math.round(loudnessDB * 10) / 10 : -Infinity;
   aiMixing.loudnessMeasure.short = aiMixing.loudnessMeasure.integrated - 1;
   aiMixing.loudnessMeasure.momentary = aiMixing.loudnessMeasure.integrated - 0.5;
 
@@ -5194,9 +5234,11 @@ function generateMixRecommendations() {
     });
   }
 
-  // Loudness recommendations
+  // Loudness recommendations (nicht bei stummgeschaltetem Regler: dort ist "leise" gewollt)
   const loudness = aiMixing.loudnessMeasure.integrated;
-  if (loudness < -30) {
+  if (masterGainState.user < 0.01 || !isFinite(loudness)) {
+    // keine Loudness-Empfehlung (stumm geschaltet oder keine gueltige Messung)
+  } else if (loudness < -30) {
     aiMixing.recommendations.push({
       type: 'loudness',
       priority: 'high',
@@ -5228,10 +5270,11 @@ function applyRecommendation(recommendation) {
   } else if (recommendation.type === 'treble' && recommendation.bandIndex !== undefined) {
     updateToneCurvePoint(recommendation.bandIndex, recommendation.suggestion);
   } else if (recommendation.type === 'loudness') {
-    if (globalMasterGain) {
-      const newGain = Math.max(0.1, Math.min(2, globalMasterGain.gain.value + recommendation.suggestion * 0.1));
-      globalMasterGain.gain.setTargetAtTime(newGain, audioCtx.currentTime, 0.01);
-    }
+    // Nur der KI-Trim wird veraendert (suggestion in dB), nie die Nutzer-Lautstaerke
+    const s = masterGainState;
+    s.aiTrim = Math.max(s.aiTrimMin, Math.min(s.aiTrimMax, s.aiTrim * Math.pow(10, recommendation.suggestion / 20)));
+    applyMasterGain(0.05);
+    updateAITrimDisplay();
   }
 }
 
@@ -5554,8 +5597,9 @@ function updateAIMixingDisplay() {
   const loudnessInt = document.getElementById('loudnessInt');
   const loudnessShort = document.getElementById('loudnessShort');
 
-  if (loudnessInt) loudnessInt.textContent = aiMixing.loudnessMeasure.integrated.toFixed(1);
-  if (loudnessShort) loudnessShort.textContent = aiMixing.loudnessMeasure.short.toFixed(1);
+  const fmtL = v => (isFinite(v) ? v.toFixed(1) : '--');
+  if (loudnessInt) loudnessInt.textContent = fmtL(aiMixing.loudnessMeasure.integrated);
+  if (loudnessShort) loudnessShort.textContent = fmtL(aiMixing.loudnessMeasure.short);
 
   // Update recommendations list
   const recList = document.getElementById('recommendationsList');
@@ -5877,12 +5921,8 @@ function handleMIDIKnob(cc, value) {
       setSwing(newSwing);
       break;
     case midiMapping.knobs.volume:
-      if (sequencerState.crossfade.active && sequencerState.crossfade.rampScheduled) {
-        // Waehrend eines Crossfades gilt der neue Wert ab dem naechsten Pattern
-        sequencerState.crossfade.startGain = value;
-      } else if (globalMasterGain) {
-        globalMasterGain.gain.setValueAtTime(value, audioCtx.currentTime);
-      }
+      // Nutzer-Lautstaerke; waehrend eines Crossfades gilt sie ab dem naechsten Pattern (applyMasterGain)
+      setUserMasterVolume(value);
       break;
     case midiMapping.knobs.compressor:
       updateCompressor(-40 + value * 40, 4); // Threshold -40 to 0
@@ -6217,7 +6257,7 @@ function performCrossfade(now) {
   // Einmalig als lineare Rampe im Audio-Takt geplant: sample-genau, ohne Treppenstufen pro Scheduler-Tick.
   if (globalMasterGain && !crossfade.rampScheduled) {
     const g = globalMasterGain.gain, t = audioCtx.currentTime;
-    crossfade.startGain = g.value;
+    crossfade.startGain = masterGainTarget();
     const remaining = Math.max(0.01, (totalDurationMs - elapsedMs) / 1000);
     g.cancelScheduledValues(t);
     g.setValueAtTime(crossfade.startGain * (1 - progress), t);
@@ -10963,6 +11003,7 @@ function toggleVideoExportVisualizer(analyzer) {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10px">
       <div><span style="color:var(--text-secondary)">Integrated:</span> <span id="loudnessInt" style="color:#fff;font-weight:600">--</span></div>
       <div><span style="color:var(--text-secondary)">Short:</span> <span id="loudnessShort" style="color:#fff;font-weight:600">--</span></div>
+      <div style="grid-column:1/-1"><span style="color:var(--text-secondary)">KI-Trim (Master):</span> <span id="aiTrimDisplay" style="color:#fff;font-weight:600">+0.0 dB</span></div>
     </div>
   </div>
 
