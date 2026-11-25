@@ -2327,14 +2327,14 @@ function initMasteringMeters() {
 // Verbindet die Analyser mit dem Master-Ausgang (Summe aus Dry-Pfad eqTreble und Reverb-Wet).
 // Idempotent; erst nach initEffectsChain() aufrufbar, da audioCtx vorher nicht existiert.
 function connectMasteringMeters() {
-  if (!audioCtx || !effectsNodes.eqTreble || !effectsNodes.reverbWet) return false;
+  if (!audioCtx || !effectsNodes.masterPost) return false;
   if (masteringState.meterBus) return true;
   if (!masteringState.analyser) initMasteringMeters();
 
+  // Gemessen (und aufgenommen) wird das Signal, das tatsaechlich am Ausgang ankommt: hinter dem Live-Limiter
   const bus = audioCtx.createGain();
   bus.gain.value = 1.0;
-  effectsNodes.eqTreble.connect(bus);
-  effectsNodes.reverbWet.connect(bus);
+  effectsNodes.masterPost.connect(bus);
   bus.connect(masteringState.analyser);
   bus.connect(masteringState.analyserIntegrated);
 
@@ -2637,6 +2637,15 @@ function updateMeteringReadouts() {
   const fmt = v => (isFinite(v) ? v.toFixed(1) : '-inf');
   set('truePeakReadout', `${fmt(tp.value)} dBTP (max ${fmt(tp.max)})`, peakColor);
   set('truePeakStatus', { ok: 'OK', over: 'Ueber Ziel', clipped: 'Clip' }[tp.status] || tp.status, peakColor);
+  if (!liveLimiter.node) {
+    set('limiterGrReadout', 'nicht aktiv', '#aaa'); set('limiterGrStatus', '—', '#aaa');
+  } else if (!liveLimiter.enabled) {
+    set('limiterGrReadout', 'aus', '#aaa'); set('limiterGrStatus', 'Bypass', '#aaa');
+  } else {
+    const gr = liveLimiter.grDb, active = gr < -0.05;
+    set('limiterGrReadout', `${active ? gr.toFixed(1) : '0.0'} dB · ${liveLimiter.ceilingDb.toFixed(1)} dBTP`, active ? warn : ok);
+    set('limiterGrStatus', active ? 'Greift' : 'Bereit', active ? warn : ok);
+  }
   const drColor = m.dynamicRange.status === 'good' ? ok : warn;
   set('drReadout', m.dynamicRange.value.toFixed(1) + ' dB', drColor);
   set('drStatus', m.dynamicRange.status === 'good' ? 'Good' : 'Low', drColor);
@@ -3361,6 +3370,156 @@ function masterForDelivery(source, targetLUFS, ceilingDbTP = -1.0, onProgress = 
   }
   report(1, 'fertig');
   return result;
+}
+
+// === Live-Limiter: True-Peak-Limiter im Audio-Thread (AudioWorklet) ===
+// Gleiches Verfahren wie limitTruePeak() im Export, aber blockweise: True-Peak-Huellkurve per
+// 4-fach-Oversampling (TRUE_PEAK_FIR), gleitendes Minimum ueber 5 ms Lookahead, Release 50 ms,
+// Rechteckglaettung ueber das Lookahead-Fenster. Latenz: Interpolator-Laufzeit + Lookahead (ca. 5,3 ms).
+// Ausgeschaltet bleibt die Latenz gleich (Verstaerkung 1), damit das Umschalten nicht springt.
+const LIVE_LIMITER_WORKLET = `
+class LiveTruePeakLimiter extends AudioWorkletProcessor {
+  constructor(options) {
+    super({ numberOfInputs: 1, numberOfOutputs: 1 });
+    const o = options.processorOptions;
+    this.ph = o.phases.map(p => Float64Array.from(p)); this.T = this.ph[0].length;
+    this.l1 = o.l1; this.dly = o.delay;
+    this.W = Math.max(1, Math.round(sampleRate * o.lookaheadMs / 1000)) + 2;
+    this.rel = Math.exp(-1 / (sampleRate * o.releaseMs / 1000));
+    this.ceil = Math.pow(10, o.ceilingDb / 20);
+    this.enabled = o.enabled;
+    let N = 1; while (N < 2 * (this.W + this.dly + this.T + 8)) N <<= 1;
+    this.N = N; this.m = N - 1;
+    this.x = [new Float32Array(N), new Float32Array(N)];
+    this.req = new Float32Array(N); this.h = new Float32Array(N).fill(1);
+    this.dq = new Float64Array(N); this.dqH = 0; this.dqT = 0;   // Indizes (absolut) als Ringpuffer
+    this.i = 0; this.g = 1; this.box = this.W; this.minG = 1;
+    this.reportEvery = Math.round(sampleRate * 0.05); this.sinceReport = 0;
+    this.port.onmessage = (e) => {
+      if (e.data.ceilingDb !== undefined) this.ceil = Math.pow(10, e.data.ceilingDb / 20);
+      if (e.data.enabled !== undefined) this.enabled = e.data.enabled;
+    };
+  }
+  process(inputs, outputs) {
+    const inp = inputs[0], out = outputs[0];
+    const frames = out[0].length, m = this.m, T = this.T, W = this.W, dly = this.dly, ph = this.ph;
+    const in0 = inp && inp[0], in1 = inp && (inp[1] || inp[0]);
+    const skip = this.ceil / this.l1;
+    for (let t = 0; t < frames; t++) {
+      const i = this.i;
+      this.x[0][i & m] = in0 ? in0[t] : 0;
+      this.x[1][i & m] = in1 ? in1[t] : 0;
+      // True-Peak-Huellkurve fuer o = i - dly (Interpolator braucht x bis i)
+      const o = i - dly;
+      let env = 0;
+      for (let ch = 0; ch < 2; ch++) {
+        const x = this.x[ch];
+        let wmax = 0;
+        for (let k = 0; k < T; k++) { const a = Math.abs(x[(i - k) & m]); if (a > wmax) wmax = a; }
+        let v = Math.abs(x[o & m]);
+        if (wmax > skip) {
+          for (let p = 0; p < 4; p++) {
+            const c = ph[p]; let acc = 0;
+            for (let k = 0; k < T; k++) acc += c[k] * x[(i - k) & m];
+            const a = Math.abs(acc); if (a > v) v = a;
+          }
+        }
+        if (v > env) env = v;
+      }
+      const r = env > this.ceil ? this.ceil / env : 1;
+      this.req[o & m] = r;
+      // gleitendes Minimum ueber [o-W+1, o] (monotone Deque)
+      while (this.dqT > this.dqH && this.req[this.dq[(this.dqT - 1) & m] & m] >= r) this.dqT--;
+      this.dq[this.dqT & m] = o; this.dqT++;
+      while (this.dq[this.dqH & m] <= o - W) this.dqH++;
+      const minF = this.req[this.dq[this.dqH & m] & m];
+      // Release: sofort absenken, exponentiell zurueck
+      this.g = minF < this.g ? minF : minF + (this.g - minF) * this.rel;
+      const j = o - W + 1;
+      // gleitende Summe der letzten W Werte: neuen Wert addieren, den von vor W Samples abziehen
+      this.box += this.g - this.h[(j - W) & m];
+      this.h[j & m] = this.g;
+      if ((i & 0xffff) === 0) { let s = 0; for (let k = 0; k < W; k++) s += this.h[(j - k) & m]; this.box = s; }
+      const gain = this.enabled ? Math.min(1, this.box / W) : 1;
+      if (gain < this.minG) this.minG = gain;
+      out[0][t] = this.x[0][j & m] * gain;
+      if (out[1]) out[1][t] = this.x[1][j & m] * gain;
+      this.i++;
+    }
+    this.sinceReport += frames;
+    if (this.sinceReport >= this.reportEvery) {
+      this.port.postMessage({ grDb: 20 * Math.log10(this.minG) });
+      this.minG = 1; this.sinceReport = 0;
+    }
+    return true;
+  }
+}
+registerProcessor('live-true-peak-limiter', LiveTruePeakLimiter);
+`;
+
+const liveLimiter = { node: null, ready: null, enabled: true, ceilingDb: -1.0, grDb: 0, latencyMs: 0 };
+
+function liveLimiterCeiling() {
+  const std = masteringState.standards[masteringState.activeStandard];
+  return std && std.truePeakMax !== undefined ? std.truePeakMax : -1.0;
+}
+
+function liveLimiterOptions(sampleRate) {
+  const lookaheadMs = 5;
+  const W = Math.max(1, Math.round(sampleRate * lookaheadMs / 1000)) + 2;
+  return {
+    processorOptions: {
+      phases: TRUE_PEAK_FIR.phases.map(p => Array.from(p)), l1: TRUE_PEAK_FIR.l1, delay: TRUE_PEAK_FIR.delay,
+      lookaheadMs, releaseMs: 50, ceilingDb: liveLimiter.ceilingDb, enabled: liveLimiter.enabled
+    },
+    numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit',
+    latencySamples: TRUE_PEAK_FIR.delay + W - 1
+  };
+}
+
+// Laedt den Worklet und haengt ihn zwischen masterOut und masterPost. Ohne AudioWorklet bleibt der
+// Pfad direkt verbunden (kein Limiter), die Anzeige meldet das.
+function initLiveLimiter() {
+  if (liveLimiter.ready) return liveLimiter.ready;
+  if (!audioCtx || !effectsNodes.masterOut || !(audioCtx.audioWorklet && window.AudioWorkletNode)) {
+    liveLimiter.ready = Promise.resolve(false);
+    return liveLimiter.ready;
+  }
+  liveLimiter.ceilingDb = liveLimiterCeiling();
+  const url = URL.createObjectURL(new Blob([LIVE_LIMITER_WORKLET], { type: 'application/javascript' }));
+  liveLimiter.ready = audioCtx.audioWorklet.addModule(url).then(() => {
+    URL.revokeObjectURL(url);
+    const opts = liveLimiterOptions(audioCtx.sampleRate);
+    const node = new AudioWorkletNode(audioCtx, 'live-true-peak-limiter', opts);
+    // Pegelreduktion fuer die Anzeige: staerksten Wert 1 s halten, sonst flackert sie zwischen den Schlaegen
+    node.port.onmessage = (e) => {
+      if (e.data.grDb === undefined) return;
+      const now = performance.now();
+      if (e.data.grDb <= liveLimiter.grDb || now - (liveLimiter.grAt || 0) > 1000) { liveLimiter.grDb = e.data.grDb; liveLimiter.grAt = now; }
+    };
+    effectsNodes.masterOut.disconnect(effectsNodes.masterPost);
+    effectsNodes.masterOut.connect(node);
+    node.connect(effectsNodes.masterPost);
+    liveLimiter.node = node;
+    liveLimiter.latencyMs = opts.latencySamples / audioCtx.sampleRate * 1000;
+    return true;
+  }).catch((err) => {
+    console.warn('Live-Limiter nicht verfuegbar, Ausgang ohne Limiter:', err);
+    return false;
+  });
+  return liveLimiter.ready;
+}
+
+function setLiveLimiterEnabled(on) {
+  liveLimiter.enabled = !!on;
+  if (liveLimiter.node) liveLimiter.node.port.postMessage({ enabled: liveLimiter.enabled });
+  // Signalweg geaendert: True-Peak-Maximum neu beginnen, sonst bleibt ein Wert aus dem anderen Modus stehen
+  resetLiveTruePeak();
+}
+
+function setLiveLimiterCeiling(db) {
+  liveLimiter.ceilingDb = db;
+  if (liveLimiter.node) liveLimiter.node.port.postMessage({ ceilingDb: db });
 }
 
 // === Export-Worker: Mastering (LUFS, True Peak, Limiter) ausserhalb des Haupt-Threads ===
@@ -5051,7 +5210,14 @@ function initEffectsChain() {
 
   effectsNodes.reverbDry.connect(effectsNodes.reverb);
   effectsNodes.reverb.connect(effectsNodes.reverbWet);
-  effectsNodes.reverbWet.connect(audioCtx.destination);
+
+  // Master-Summe (Dry + Reverb) -> [Live-Limiter] -> masterPost -> Ausgang.
+  // Bis der Limiter-Worklet geladen ist, laeuft masterOut direkt auf masterPost.
+  effectsNodes.masterOut = audioCtx.createGain();
+  effectsNodes.masterPost = audioCtx.createGain();
+  effectsNodes.masterOut.connect(effectsNodes.masterPost);
+  effectsNodes.masterPost.connect(audioCtx.destination);
+  effectsNodes.reverbWet.connect(effectsNodes.masterOut);
 
   // Phase 16b: Spectral Analyzer
   advancedAudio.analyser = audioCtx.createAnalyser();
@@ -5072,7 +5238,9 @@ function initEffectsChain() {
   effectsNodes.stereoGainR.gain.value = 1;
 
   // Dry signal path (bypass effects)
-  effectsNodes.eqTreble.connect(audioCtx.destination);
+  effectsNodes.eqTreble.connect(effectsNodes.masterOut);
+
+  initLiveLimiter();
 }
 
 function createReverbImpulse(duration, decayShape = 2, diffusion = 0.6) {
@@ -16338,6 +16506,7 @@ document.addEventListener('DOMContentLoaded', () => {
       masteringState.activeStandard = standardSelector.value;
       const standard = masteringState.standards[masteringState.activeStandard];
       masteringState.meters.loudness.target = standard.target;
+      setLiveLimiterCeiling(liveLimiterCeiling());
       console.log(`✓ Mastering standard changed to: ${standard.name} (Target: ${standard.target})`);
     };
   }
@@ -16346,6 +16515,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (limiterEnable) {
     limiterEnable.onchange = () => {
       masteringState.limiter.enabled = limiterEnable.checked;
+      setLiveLimiterEnabled(limiterEnable.checked);
       console.log(`✓ Soft limiter ${limiterEnable.checked ? 'enabled' : 'disabled'}`);
     };
   }
@@ -16445,6 +16615,11 @@ document.addEventListener('DOMContentLoaded', () => {
       <td style="padding:6px;text-align:right;color:#aaa" id="corrReadout">—</td>
       <td style="padding:6px;text-align:right;font-size:0.8em;color:#aaa" id="corrStatus">—</td>
     </tr>
+    <tr>
+      <td style="padding:6px;color:#fff">Limiter</td>
+      <td style="padding:6px;text-align:right;color:#aaa" id="limiterGrReadout">—</td>
+      <td style="padding:6px;text-align:right;font-size:0.8em;color:#aaa" id="limiterGrStatus">—</td>
+    </tr>
   </table>
 
   <label style="display:block;margin:12px 0;color:#fff;font-size:0.9em">
@@ -16459,7 +16634,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </label>
 
   <label style="display:flex;align-items:center;margin:12px 0;color:#fff;font-size:0.9em;cursor:pointer">
-    <input type="checkbox" id="limiterEnable" style="margin-right:8px;cursor:pointer"> Enable Soft Limiter
+    <input type="checkbox" id="limiterEnable" checked style="margin-right:8px;cursor:pointer"> Live-Limiter (True Peak, Ziel des Standards)
   </label>
 </div>
 
