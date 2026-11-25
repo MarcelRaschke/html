@@ -2350,6 +2350,23 @@ function connectMasteringMeters() {
   masteringState.meterFrameL = new Float32Array(8192);
   masteringState.meterFrameR = new Float32Array(8192);
 
+  // K-gewichteter Zweig fuer die Momentary Loudness (BS.1770-4) ueber IIRFilterNodes
+  if (typeof audioCtx.createIIRFilter === 'function') {
+    const { shelf, highpass } = kWeightingCoefficients(audioCtx.sampleRate);
+    const kShelf = audioCtx.createIIRFilter(shelf.b, shelf.a);
+    const kHigh = audioCtx.createIIRFilter(highpass.b, highpass.a);
+    const kSplit = audioCtx.createChannelSplitter(2);
+    bus.connect(kShelf); kShelf.connect(kHigh); kHigh.connect(kSplit);
+    masteringState.analyserKL = audioCtx.createAnalyser();
+    masteringState.analyserKR = audioCtx.createAnalyser();
+    masteringState.analyserKL.fftSize = 8192;
+    masteringState.analyserKR.fftSize = 8192;
+    kSplit.connect(masteringState.analyserKL, 0);
+    kSplit.connect(masteringState.analyserKR, 1);
+    masteringState.meterFrameKL = new Float32Array(8192);
+    masteringState.meterFrameKR = new Float32Array(8192);
+  }
+
   masteringState.meterBus = bus;
   masteringState.metering.active = true;
   playbackState.masterGain = globalMasterGain;
@@ -2368,11 +2385,22 @@ function captureMeteringFrame() {
   let energy = 0;
   for (let i = 0; i < L.length; i++) energy += L[i] * L[i] + R[i] * R[i];
 
+  // Loudness aus dem K-gewichteten Zweig; ohne IIRFilterNode ungewichtet als Naeherung
+  let kEnergy = energy;
+  if (masteringState.analyserKL) {
+    const KL = masteringState.meterFrameKL, KR = masteringState.meterFrameKR;
+    masteringState.analyserKL.getFloatTimeDomainData(KL);
+    masteringState.analyserKR.getFloatTimeDomainData(KR);
+    kEnergy = 0;
+    for (let i = 0; i < KL.length; i++) kEnergy += KL[i] * KL[i] + KR[i] * KR[i];
+  }
+
   // Momentary Loudness: Leistungsmittel ueber 400 ms (ITU-R BS.1770 Momentary-Fenster),
-  // damit Pausen zwischen einzelnen Noten den Pegel nicht auf -80 LUFS fallen lassen
+  // damit Pausen zwischen einzelnen Noten den Pegel nicht auf -80 LUFS fallen lassen.
+  // Kanalleistungen werden summiert (BS.1770), nicht gemittelt.
   const now = performance.now();
   const hist = masteringState.meterHistory || (masteringState.meterHistory = []);
-  hist.push({ t: now, ms: energy / (2 * L.length) });
+  hist.push({ t: now, ms: kEnergy / L.length });
   while (hist.length && now - hist[0].t > 400) hist.shift();
   applyLoudnessFromMeanSquare(hist.reduce((a, h) => a + h.ms, 0) / hist.length);
 
@@ -2403,38 +2431,19 @@ function updateMeteringReadouts() {
   set('corrStatus', { mono_like: 'Mono', stereo_ok: 'Stereo', phase_issue: 'Phase!' }[m.correlation.status] || m.correlation.status, corrColor);
 }
 
-// Calculate loudness in LUFS using ITU-R BS.1770-4
+// Integrated Loudness eines AudioBuffers (ITU-R BS.1770-4, siehe calculateLUFS) ins Meter schreiben
 function updateLoudnessMeter(audioBuffer) {
-  if (!audioCtx || !audioBuffer || audioBuffer.length === 0) return;
-
-  const sampleRate = audioCtx.sampleRate;
-  const channels = audioBuffer.numberOfChannels;
-
-  if (channels === 0) return;
-
-  // K-weighting filter coefficients (simplified)
-  const highShelf_gain = 4.0; // dB (approximation)
-
-  let sumSquared = 0;
-  let sampleCount = 0;
-
-  // Calculate RMS per channel
-  for (let ch = 0; ch < channels; ch++) {
-    const data = audioBuffer.getChannelData(ch);
-    for (let i = 0; i < data.length; i++) {
-      const sample = data[i];
-      sumSquared += sample * sample;
-      sampleCount++;
-    }
-  }
-
-  applyLoudnessFromMeanSquare(sumSquared / sampleCount);
+  if (!audioBuffer || audioBuffer.length === 0 || audioBuffer.numberOfChannels === 0) return;
+  applyLoudnessValue(calculateLUFS(audioBuffer));
 }
 
 // LUFS aus mittlerer Leistung setzen und Status gegen den aktiven Standard pruefen
+// meanSquare: Summe der mittleren Quadrate aller Kanaele nach K-Gewichtung (BS.1770: Summe, nicht Mittel)
 function applyLoudnessFromMeanSquare(meanSquare) {
-  // Calculate LUFS: -0.691 + 10 * log10(mean_square)
-  const loudnessLUFS = meanSquare > 0 ? -0.691 + 10 * Math.log10(meanSquare) : -Infinity;
+  applyLoudnessValue(meanSquare > 0 ? -0.691 + 10 * Math.log10(meanSquare) : -Infinity);
+}
+
+function applyLoudnessValue(loudnessLUFS) {
 
   // Update meter
   masteringState.meters.loudness.value = Math.max(-80, Math.min(loudnessLUFS, 0));
@@ -2959,16 +2968,73 @@ function normalizeToLoudness(buffer, targetLUFS, currentLUFS) {
 }
 
 // Phase 30.2: Calculate LUFS loudness
+// === ITU-R BS.1770-4 / EBU R128: Integrated Loudness ===
+// K-Gewichtung = Stufe 1 (High-Shelf, ca. +4 dB ueber 1,5 kHz) + Stufe 2 (RLB-Hochpass, ca. 38 Hz).
+// Koeffizienten fuer beliebige Abtastraten ueber die bilineare Transformation (wie libebur128);
+// bei 48 kHz ergeben sich exakt die Tabellenwerte aus BS.1770-4, Tabelle 1 und 2.
+function kWeightingCoefficients(fs) {
+  let f0 = 1681.974450955533, G = 3.999843853973347, Q = 0.7071752369554196;
+  let K = Math.tan(Math.PI * f0 / fs);
+  const Vh = Math.pow(10, G / 20), Vb = Math.pow(Vh, 0.4996667741545416);
+  let a0 = 1 + K / Q + K * K;
+  const shelf = {
+    b: [(Vh + Vb * K / Q + K * K) / a0, 2 * (K * K - Vh) / a0, (Vh - Vb * K / Q + K * K) / a0],
+    a: [1, 2 * (K * K - 1) / a0, (1 - K / Q + K * K) / a0]
+  };
+  f0 = 38.13547087602444; Q = 0.5003270373238773;
+  K = Math.tan(Math.PI * f0 / fs);
+  a0 = 1 + K / Q + K * K;
+  const highpass = {
+    b: [1, -2, 1],
+    a: [1, 2 * (K * K - 1) / a0, (1 - K / Q + K * K) / a0]
+  };
+  return { shelf, highpass };
+}
+
+// Integrated Loudness in LUFS: 400-ms-Bloecke mit 75 % Ueberlappung, absolutes Gate -70 LUFS,
+// relatives Gate -10 LU. Kanalgewichte L/R/C = 1,0 (Surround wird hier nicht genutzt).
+// Liefert -Infinity, wenn kein Block das absolute Gate passiert (Stille).
 function calculateLUFS(buffer) {
-  let sum = 0;
-  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-    const data = buffer.getChannelData(ch);
-    for (let i = 0; i < data.length; i++) {
-      sum += data[i] * data[i];
+  const fs = buffer.sampleRate || (audioCtx ? audioCtx.sampleRate : 48000);
+  const channels = Math.min(buffer.numberOfChannels, 3);
+  const { shelf, highpass } = kWeightingCoefficients(fs);
+  const seg = Math.round(fs * 0.1);                 // 100-ms-Segmente (Blockschritt)
+  const nSeg = Math.floor(buffer.length / seg);
+  const segPower = new Float64Array(Math.max(nSeg, 1)); // Summe der Kanal-Quadratsummen je Segment
+
+  for (let ch = 0; ch < channels; ch++) {
+    const x = buffer.getChannelData(ch);
+    // Direktform I, zwei Biquads in Reihe, Zustand in double
+    let x1 = 0, x2 = 0, y1 = 0, y2 = 0, z1 = 0, z2 = 0;
+    const [sb0, sb1, sb2] = shelf.b, [, sa1, sa2] = shelf.a;
+    const [hb0, hb1, hb2] = highpass.b, [, ha1, ha2] = highpass.a;
+    const limit = nSeg > 0 ? nSeg * seg : x.length;
+    for (let i = 0; i < limit; i++) {
+      const xi = x[i];
+      const y = sb0 * xi + sb1 * x1 + sb2 * x2 - sa1 * y1 - sa2 * y2;
+      x2 = x1; x1 = xi;
+      const z = hb0 * y + hb1 * y1 + hb2 * y2 - ha1 * z1 - ha2 * z2;
+      y2 = y1; y1 = y;
+      z2 = z1; z1 = z;
+      segPower[nSeg > 0 ? (i / seg) | 0 : 0] += z * z;
     }
   }
-  const rms = Math.sqrt(sum / (buffer.numberOfChannels * buffer.length));
-  return 20 * Math.log10(Math.max(rms, 0.00001));
+
+  // Kuerzer als ein Block: das ganze Signal als ein Block
+  const blocks = [];
+  if (nSeg < 4) {
+    blocks.push(segPower.reduce((a, b) => a + b, 0) / Math.max(1, nSeg > 0 ? nSeg * seg : buffer.length));
+  } else {
+    for (let j = 0; j + 4 <= nSeg; j++) {
+      blocks.push((segPower[j] + segPower[j + 1] + segPower[j + 2] + segPower[j + 3]) / (4 * seg));
+    }
+  }
+  const lk = ms => -0.691 + 10 * Math.log10(ms);
+  const absGated = blocks.filter(ms => ms > 0 && lk(ms) > -70);
+  if (!absGated.length) return -Infinity;
+  const relThreshold = lk(absGated.reduce((a, b) => a + b, 0) / absGated.length) - 10;
+  const relGated = absGated.filter(ms => lk(ms) > relThreshold);
+  return lk(relGated.reduce((a, b) => a + b, 0) / relGated.length);
 }
 
 // Phase 30.2: Encode to WAV (built-in)
@@ -13084,9 +13150,13 @@ async function performExport(exportTask) {
       document.getElementById('phase30ProgressBar').querySelector('div').style.width = '50%';
     }
 
+    // Integrated Loudness nach ITU-R BS.1770-4 (K-Gewichtung, Gating)
     const currentLUFS = calculateLUFS(buffer);
-    masteringState.meters.loudness.value = currentLUFS;
-    document.getElementById('phase30Loudness').textContent = currentLUFS.toFixed(1) + ' LUFS';
+    if (!isFinite(currentLUFS)) {
+      throw new Error('Master-Take ist still (unter -70 LUFS); keine Normalisierung moeglich');
+    }
+    applyLoudnessValue(currentLUFS);
+    document.getElementById('phase30Loudness').textContent = currentLUFS.toFixed(1) + ' LUFS (integrated)';
 
     if (Math.abs(currentLUFS - exportTask.loudness) > 0.5) {
       buffer = normalizeToLoudness(buffer, exportTask.loudness, currentLUFS);
