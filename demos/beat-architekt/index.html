@@ -3126,7 +3126,7 @@ function normalizeToLoudness(buffer, targetLUFS, currentLUFS) {
 // (4 Phasen x 24, ungerade Laenge, damit das Raster exakt auf Viertel-Samples liegt), Grenzfrequenz =
 // Original-Nyquist. Jede Phase ist auf Gleichanteil-Verstaerkung 1 normiert.
 const TRUE_PEAK_OS = 4, TRUE_PEAK_TAPS = 24;
-const TRUE_PEAK_FIR = (() => {
+function buildTruePeakFir() {
   const N = TRUE_PEAK_OS * TRUE_PEAK_TAPS - 1, fc = 0.5 / TRUE_PEAK_OS, mid = (N - 1) / 2, beta = 6;
   const i0 = x => { let s = 1, t = 1; for (let k = 1; k < 30; k++) { t *= (x / 2 / k) * (x / 2 / k); s += t; } return s; };
   const h = new Float64Array(N + 1); // letzter Koeffizient bleibt 0 (Polyphasen-Auffuellung)
@@ -3148,7 +3148,25 @@ const TRUE_PEAK_FIR = (() => {
   }
   // Interpolator-Laufzeit mid/OS = 11,75 Samples: Ausgang (i, p) liegt bei i - 11,75 + p/4
   return { phases, l1, delay: Math.round(mid / TRUE_PEAK_OS) };
-})();
+}
+const TRUE_PEAK_FIR = buildTruePeakFir();
+
+// Plattformunabhaengiger PCM-Puffer mit AudioBuffer-Schnittstelle (numberOfChannels, length,
+// sampleRate, getChannelData); funktioniert im Haupt-Thread und im Export-Worker ohne AudioContext.
+function makePcmBuffer(numberOfChannels, length, sampleRate, channels) {
+  const data = channels || Array.from({ length: numberOfChannels }, () => new Float32Array(length));
+  return { numberOfChannels, length, sampleRate, channels: data, getChannelData: ch => data[ch] };
+}
+
+function applyGainPcm(buffer, gainDb) {
+  const g = Math.pow(10, gainDb / 20);
+  const out = makePcmBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const x = buffer.getChannelData(ch), y = out.getChannelData(ch);
+    for (let i = 0; i < x.length; i++) y[i] = x[i] * g;
+  }
+  return out;
+}
 
 // Betrag des oversampelten Signals je Original-Sample (Maximum ueber Kanaele, verkoppelt), zeitlich
 // auf das Original ausgerichtet. Liegt der Sample-Betrag im Filterfenster so tief, dass selbst die
@@ -3245,8 +3263,7 @@ function limitTruePeak(buffer, ceilingDbTP = -1.0, lookaheadMs = 5, releaseMs = 
     gain[i] = sum / Math.min(i + 1, W);
   }
 
-  const ctx = audioCtx || new OfflineAudioContext(buffer.numberOfChannels, n, fs);
-  const out = ctx.createBuffer(buffer.numberOfChannels, n, fs);
+  const out = makePcmBuffer(buffer.numberOfChannels, n, fs);
   let minGain = 1;
   for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
     const x = buffer.getChannelData(ch), y = out.getChannelData(ch);
@@ -3258,12 +3275,15 @@ function limitTruePeak(buffer, ceilingDbTP = -1.0, lookaheadMs = 5, releaseMs = 
 
 // Lieferfertiges Master: auf Ziel-LUFS normalisieren und auf True-Peak-Ziel limitieren.
 // Weil der Limiter die Lautheit leicht senkt, wird die Normalisierung bis zu 3-mal nachgefuehrt.
-function masterForDelivery(source, targetLUFS, ceilingDbTP = -1.0) {
+function masterForDelivery(source, targetLUFS, ceilingDbTP = -1.0, onProgress = null) {
+  const report = (f, step) => { if (onProgress) onProgress(f, step); };
+  report(0.05, 'Lautheit messen');
   const sourceLUFS = calculateLUFS(source);
   if (!isFinite(sourceLUFS)) throw new Error('Master-Take ist still (unter -70 LUFS); keine Normalisierung moeglich');
   let gainDb = targetLUFS - sourceLUFS, result = null;
   for (let iter = 0; iter < 3; iter++) {
-    const normalized = normalizeToLoudness(source, sourceLUFS + gainDb, sourceLUFS);
+    report(0.15 + iter * 0.28, `Durchlauf ${iter + 1}: Normalisieren und Limiter`);
+    const normalized = applyGainPcm(source, gainDb);
     const limited = limitTruePeak(normalized, ceilingDbTP);
     // Sicherheitsabstand, falls die Glaettung eine Spitze minimal verfehlt
     let out = limited.buffer, tp = measureTruePeak(out);
@@ -3276,7 +3296,94 @@ function masterForDelivery(source, targetLUFS, ceilingDbTP = -1.0) {
     if (Math.abs(lufs - targetLUFS) <= 0.2) break;
     gainDb += targetLUFS - lufs;
   }
+  report(1, 'fertig');
   return result;
+}
+
+// === Export-Worker: Mastering (LUFS, True Peak, Limiter) ausserhalb des Haupt-Threads ===
+// Der Worker-Quelltext wird aus denselben Funktionen erzeugt, die auch im Haupt-Thread laufen,
+// damit es nur eine Implementierung gibt.
+let exportWorker = null, exportWorkerSeq = 0;
+const exportWorkerJobs = new Map();
+
+function getExportWorker() {
+  if (exportWorker !== null) return exportWorker;
+  try {
+    const src = [
+      'const audioCtx = null;',
+      `const TRUE_PEAK_OS = ${TRUE_PEAK_OS}, TRUE_PEAK_TAPS = ${TRUE_PEAK_TAPS};`,
+      buildTruePeakFir.toString(),
+      'const TRUE_PEAK_FIR = buildTruePeakFir();',
+      makePcmBuffer.toString(), applyGainPcm.toString(), kWeightingCoefficients.toString(),
+      calculateLUFS.toString(), truePeakEnvelope.toString(), measureTruePeak.toString(),
+      limitTruePeak.toString(), masterForDelivery.toString(),
+      `self.onmessage = (e) => {
+        const { id, channels, sampleRate, targetLUFS, ceiling } = e.data;
+        try {
+          const src = makePcmBuffer(channels.length, channels[0].length, sampleRate, channels);
+          const r = masterForDelivery(src, targetLUFS, ceiling,
+            (f, step) => self.postMessage({ id, progress: f, step }));
+          const out = r.buffer.channels;
+          self.postMessage({ id, done: true, channels: out, lufs: r.lufs, truePeak: r.truePeak,
+            gainDb: r.gainDb, limitedDb: r.limitedDb, iterations: r.iterations }, out.map(c => c.buffer));
+        } catch (err) {
+          self.postMessage({ id, error: String(err && err.message || err) });
+        }
+      };`
+    ].join('\n');
+    const url = URL.createObjectURL(new Blob([src], { type: 'application/javascript' }));
+    exportWorker = new Worker(url);
+    URL.revokeObjectURL(url);
+    exportWorker.onmessage = (e) => {
+      const job = exportWorkerJobs.get(e.data.id);
+      if (!job) return;
+      if (e.data.progress !== undefined) { if (job.onProgress) job.onProgress(e.data.progress, e.data.step); return; }
+      exportWorkerJobs.delete(e.data.id);
+      if (e.data.error) job.reject(new Error(e.data.error));
+      else job.resolve(e.data);
+    };
+    exportWorker.onerror = (e) => {
+      // Worker defekt: offene Auftraege abbrechen, kuenftig im Haupt-Thread rechnen
+      for (const job of exportWorkerJobs.values()) job.reject(new Error('Export-Worker: ' + (e.message || 'Fehler')));
+      exportWorkerJobs.clear();
+      exportWorker = false;
+    };
+  } catch (err) {
+    console.warn('Export-Worker nicht verfuegbar, Mastering im Haupt-Thread:', err);
+    exportWorker = false;
+  }
+  return exportWorker;
+}
+
+// Asynchrones Mastering. Mit Worker blockiert die Oberflaeche nicht; ohne Worker Fallback im Haupt-Thread.
+// Ergebnis: { buffer (PCM), lufs, truePeak, gainDb, limitedDb, iterations, mode }
+function masterForDeliveryAsync(buffer, targetLUFS, ceilingDbTP = -1.0, onProgress = null) {
+  const worker = window.Worker ? getExportWorker() : false;
+  if (!worker) {
+    return new Promise((resolve, reject) => setTimeout(() => {
+      try { resolve({ ...masterForDelivery(buffer, targetLUFS, ceilingDbTP, onProgress), mode: 'main-thread' }); }
+      catch (err) { reject(err); }
+    }, 0));
+  }
+  const id = ++exportWorkerSeq;
+  // Kopien uebertragen; das Original (z. B. playbackState.audioBuffer) bleibt unveraendert
+  const channels = [];
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) channels.push(new Float32Array(buffer.getChannelData(ch)));
+  return new Promise((resolve, reject) => {
+    exportWorkerJobs.set(id, { onProgress, reject, resolve: (d) => resolve({
+      buffer: makePcmBuffer(d.channels.length, d.channels[0].length, buffer.sampleRate, d.channels),
+      lufs: d.lufs, truePeak: d.truePeak, gainDb: d.gainDb, limitedDb: d.limitedDb, iterations: d.iterations, mode: 'worker' }) });
+    worker.postMessage({ id, channels, sampleRate: buffer.sampleRate, targetLUFS, ceiling: ceilingDbTP },
+      channels.map(c => c.buffer));
+  });
+}
+
+// PCM-Puffer in einen echten AudioBuffer kopieren (fuer Encoder, die einen AudioBuffer erwarten)
+function pcmToAudioBuffer(pcm) {
+  const ctx = audioCtx || new OfflineAudioContext(pcm.numberOfChannels, pcm.length, pcm.sampleRate);
+  const ab = ctx.createBuffer(pcm.numberOfChannels, pcm.length, pcm.sampleRate);
+  for (let ch = 0; ch < pcm.numberOfChannels; ch++) ab.copyToChannel(pcm.getChannelData(ch), ch);
+  return ab;
 }
 
 // === ITU-R BS.1770-4 / EBU R128: Integrated Loudness ===
@@ -13469,10 +13576,14 @@ async function performExport(exportTask) {
 
     // Normalisierung auf Ziel-LUFS (BS.1770-4) und True-Peak-Limiter auf das Preset-Ziel
     const ceiling = exportTask.truePeak !== undefined ? exportTask.truePeak : -1.0;
-    const mastered = masterForDelivery(buffer, exportTask.loudness, ceiling);
-    buffer = mastered.buffer;
+    const bar = document.getElementById('phase30ProgressBar').querySelector('div');
+    const mastered = await masterForDeliveryAsync(buffer, exportTask.loudness, ceiling, (f, step) => {
+      bar.style.width = (50 + f * 25).toFixed(0) + '%';
+      document.getElementById('phase30Loudness').textContent = `Mastering: ${step} ...`;
+    });
+    buffer = pcmToAudioBuffer(mastered.buffer);
     applyLoudnessValue(mastered.lufs);
-    exportTask.result = { lufs: mastered.lufs, truePeak: mastered.truePeak, gainDb: mastered.gainDb, limitedDb: mastered.limitedDb };
+    exportTask.result = { lufs: mastered.lufs, truePeak: mastered.truePeak, gainDb: mastered.gainDb, limitedDb: mastered.limitedDb, mode: mastered.mode };
     document.getElementById('phase30Loudness').textContent =
       `${mastered.lufs.toFixed(1)} LUFS · ${mastered.truePeak.toFixed(1)} dBTP` +
       (mastered.limitedDb < -0.05 ? ` · Limiter ${mastered.limitedDb.toFixed(1)} dB` : '');
