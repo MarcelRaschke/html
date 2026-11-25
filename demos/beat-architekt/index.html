@@ -4591,6 +4591,7 @@ function togglePlay() {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     initEffectsChain();
     connectMasteringMeters();
+    ensureAIMixTap();
     if (!noiseBuffer) noiseBuffer = createNoiseBuffer();
     initVoicePool();
     initBeatViz();
@@ -5290,6 +5291,90 @@ function showAIMixPausedNotice() {
   if (recList) recList.innerHTML = '<div style="color:var(--text-secondary);font-style:italic">KI-Mix pausiert: Pattern-Crossfade laeuft</div>';
 }
 
+// === KI-Mix-Messabgriff direkt hinter globalMasterGain ===
+// Hier misst die KI, und hier wirkt auch ihr Trim. Der Abgriff liegt vor dem Kompressor der Effektkette:
+// Dahinter (am Master-Bus) senkt Leiserdrehen den Pegel um weniger als die eingestellten dB, das
+// Herausrechnen der Nutzer-Lautstaerke wuerde ueberkompensieren. Vor dem Kompressor ist es exakt.
+// Er wird beim Play angelegt und laeuft durchgehend, damit beim Auslesen Daten vorliegen.
+function ensureAIMixTap() {
+  if (aiMixing.tap) return aiMixing.tap;
+  if (!audioCtx || !globalMasterGain) return null;
+  const spec = audioCtx.createAnalyser();
+  spec.fftSize = 8192;
+  spec.smoothingTimeConstant = 0.8;
+  globalMasterGain.connect(spec);
+  const tap = { spec, kL: null, kR: null, createdAt: audioCtx.currentTime };
+  // K-gewichteter Stereo-Zweig fuer die Loudness (BS.1770-4, Fenster 16384 Samples, ca. 0,37 s)
+  if (typeof audioCtx.createIIRFilter === 'function') {
+    const { shelf, highpass } = kWeightingCoefficients(audioCtx.sampleRate);
+    const k1 = audioCtx.createIIRFilter(shelf.b, shelf.a), k2 = audioCtx.createIIRFilter(highpass.b, highpass.a);
+    const split = audioCtx.createChannelSplitter(2);
+    globalMasterGain.connect(k1); k1.connect(k2); k2.connect(split);
+    tap.kL = audioCtx.createAnalyser(); tap.kR = audioCtx.createAnalyser();
+    tap.kL.fftSize = 16384; tap.kR.fftSize = 16384;
+    split.connect(tap.kL, 0); split.connect(tap.kR, 1);
+    tap.bufL = new Float32Array(16384); tap.bufR = new Float32Array(16384);
+  }
+  aiMixing.tap = tap;
+  return tap;
+}
+
+// Erst auswerten, wenn das Messfenster einmal gefuellt ist
+function aiMixTapReady(tap) {
+  return !!tap && audioCtx.currentTime - tap.createdAt > 16384 / audioCtx.sampleRate;
+}
+
+// Frequenzbalance als Abweichung von rosa Rauschen (gleiche Energie je Oktave) in dB.
+// Je Band wird die Leistung energetisch gemittelt (nicht dB je Bin: das Mittel wurde von den vielen fast
+// leeren Bins am Rauschboden bestimmt und hatte mit der Musik kaum zu tun) und ins Verhaeltnis zur
+// Gesamtleistung 20 Hz - 16 kHz gesetzt. Damit ist das Mass unabhaengig von Nutzer-Lautstaerke und KI-Trim.
+// Baender: Bass 20-250 Hz, Mitten 250 Hz - 4 kHz, Hoehen 4-16 kHz. Rueckgabe null ohne Abgriff/Signal.
+const AI_MIX_BANDS = { bass: [20, 250], mids: [250, 4000], treble: [4000, 16000] };
+
+function measureFrequencyBalance() {
+  const tap = ensureAIMixTap();
+  if (!aiMixTapReady(tap)) return null;
+  const an = tap.spec;
+  const data = new Float32Array(an.frequencyBinCount);
+  an.getFloatFrequencyData(data);
+  const hzPerBin = audioCtx.sampleRate / an.fftSize;
+  const power = (lo, hi) => {
+    let p = 0;
+    for (let i = Math.max(1, Math.ceil(lo / hzPerBin)); i < Math.min(data.length, Math.floor(hi / hzPerBin)); i++) {
+      if (isFinite(data[i])) p += Math.pow(10, data[i] / 10);
+    }
+    return p;
+  };
+  const octaves = ([lo, hi]) => Math.log2(hi / lo);
+  const totalOct = octaves([20, 16000]);
+  const total = power(20, 16000);
+  // unter ca. -90 dB Gesamtleistung: keine verwertbare Messung
+  if (!(total > 1e-9)) return null;
+  const result = {};
+  for (const [band, range] of Object.entries(AI_MIX_BANDS)) {
+    const share = power(range[0], range[1]) / total;
+    const pinkShare = octaves(range) / totalOct;
+    result[band] = share > 0 ? 10 * Math.log10(share / pinkShare) : -Infinity;
+  }
+  return result;
+}
+
+// K-gewichtete Loudness am Abgriff (Kanalleistungen summiert), Nutzer-Lautstaerke herausgerechnet.
+// -Infinity ohne gueltige Messung (kein Abgriff, Fenster nicht gefuellt, unter -70 LUFS).
+function measureAIMixLoudness() {
+  const tap = ensureAIMixTap();
+  if (!aiMixTapReady(tap) || !tap.kL) return -Infinity;
+  tap.kL.getFloatTimeDomainData(tap.bufL);
+  tap.kR.getFloatTimeDomainData(tap.bufR);
+  let eL = 0, eR = 0;
+  for (let i = 0; i < tap.bufL.length; i++) { eL += tap.bufL[i] * tap.bufL[i]; eR += tap.bufR[i] * tap.bufR[i]; }
+  const ms = (eL + eR) / tap.bufL.length;
+  if (!(ms > 0)) return -Infinity;
+  const lufs = -0.691 + 10 * Math.log10(ms);
+  if (lufs <= -70) return -Infinity;
+  return lufs - 20 * Math.log10(Math.max(masterGainState.user, 0.001));
+}
+
 function analyzeCurrentMix() {
   if (!audioCtx || !isPlaying) {
     console.log('Cannot analyze: audio context or sequencer not ready');
@@ -5303,35 +5388,13 @@ function analyzeCurrentMix() {
   aiMixing.analysisRunning = true;
   aiMixing.lastAnalysisTime = Date.now();
 
-  // Perform FFT analysis
-  const analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 2048;
-  globalMasterGain.connect(analyser);
+  // Frequenzbalance und Loudness aus dem KI-Messabgriff (ensureAIMixTap). Der zuvor hier jedes Mal frisch
+  // angelegte Analyser lieferte beim sofortigen Auslesen nur Nullen bzw. -100 dB.
+  aiMixing.frequencyBalance = measureFrequencyBalance();
 
-  const frequencyData = new Uint8Array(analyser.frequencyBinCount);
-  analyser.getByteFrequencyData(frequencyData);
-
-  // Analyze frequency balance across 3 bands (bass, mids, treble)
-  const bassEnd = Math.floor(frequencyData.length * 0.1); // 20Hz-2kHz
-  const midEnd = Math.floor(frequencyData.length * 0.5);  // 2kHz-10kHz
-  const trebleEnd = frequencyData.length;                 // 10kHz-20kHz
-
-  const bassAvg = frequencyData.slice(0, bassEnd).reduce((a, b) => a + b, 0) / bassEnd;
-  const midsAvg = frequencyData.slice(bassEnd, midEnd).reduce((a, b) => a + b, 0) / (midEnd - bassEnd);
-  const trebleAvg = frequencyData.slice(midEnd, trebleEnd).reduce((a, b) => a + b, 0) / (trebleEnd - midEnd);
-
-  aiMixing.frequencyBalance.bass = bassAvg;
-  aiMixing.frequencyBalance.mids = midsAvg;
-  aiMixing.frequencyBalance.treble = trebleAvg;
-
-  // Calculate loudness (simplified LUFS calculation)
-  // Loudness aus dem Mastering-Meter (Momentary LUFS, 400 ms). Der hier frisch angelegte Analyser hat beim
-  // sofortigen Auslesen noch keine Daten und lieferte immer -100 dB ("Very quiet" bei jedem Signal).
-  // Die Nutzer-Lautstaerke wird herausgerechnet, sonst wuerde die KI jede Absenkung am Regler als
-  // "zu leise" werten und wieder anheben (der KI-Trim bleibt enthalten). Ohne gueltige Messung: -Infinity.
-  const userDb = 20 * Math.log10(Math.max(masterGainState.user, 0.001));
-  const meterLufs = (masteringState.metering && masteringState.metering.active) ? masteringState.meters.loudness.value : -Infinity;
-  const loudnessDB = meterLufs > -70 ? meterLufs - userDb : -Infinity;
+  // Loudness (K-gewichtet) am selben Abgriff; die Nutzer-Lautstaerke ist herausgerechnet, sonst wuerde die
+  // KI jede Absenkung am Regler als "zu leise" werten (der KI-Trim bleibt enthalten).
+  const loudnessDB = measureAIMixLoudness();
 
   aiMixing.loudnessMeasure.integrated = isFinite(loudnessDB) ? Math.round(loudnessDB * 10) / 10 : -Infinity;
   aiMixing.loudnessMeasure.short = aiMixing.loudnessMeasure.integrated - 1;
@@ -5358,8 +5421,6 @@ function analyzeCurrentMix() {
 
   aiMixing.analysisRunning = false;
 
-  // Disconnect temporary analyser
-  globalMasterGain.disconnect(analyser);
 
   // Update UI display
   updateAIMixingDisplay();
@@ -5374,12 +5435,15 @@ function analyzeCurrentMix() {
 function generateMixRecommendations() {
   aiMixing.recommendations = [];
 
-  const bass = aiMixing.frequencyBalance.bass;
-  const mids = aiMixing.frequencyBalance.mids;
-  const treble = aiMixing.frequencyBalance.treble;
+  // Ohne gueltige Messung keine EQ-Empfehlungen (NaN faellt durch alle Schwellen)
+  const fb = aiMixing.frequencyBalance || { bass: NaN, mids: NaN, treble: NaN };
+  const bass = fb.bass;
+  const mids = fb.mids;
+  const treble = fb.treble;
 
   // Bass recommendations
-  if (bass < 40) {
+  // Schwellen: Abweichung von rosa Rauschen (dB), Toleranz +/-6 dB
+  if (bass < -6) {
     aiMixing.recommendations.push({
       type: 'bass',
       priority: 'high',
@@ -5387,7 +5451,7 @@ function generateMixRecommendations() {
       suggestion: 3,
       bandIndex: 0
     });
-  } else if (bass > 100) {
+  } else if (bass > 6) {
     aiMixing.recommendations.push({
       type: 'bass',
       priority: 'medium',
@@ -5398,7 +5462,7 @@ function generateMixRecommendations() {
   }
 
   // Mids recommendations
-  if (mids < 50) {
+  if (mids < -6) {
     aiMixing.recommendations.push({
       type: 'mids',
       priority: 'medium',
@@ -5406,7 +5470,7 @@ function generateMixRecommendations() {
       suggestion: 3,
       bandIndex: 2
     });
-  } else if (mids > 120) {
+  } else if (mids > 6) {
     aiMixing.recommendations.push({
       type: 'mids',
       priority: 'high',
@@ -5417,7 +5481,7 @@ function generateMixRecommendations() {
   }
 
   // Treble recommendations
-  if (treble < 30) {
+  if (treble < -6) {
     aiMixing.recommendations.push({
       type: 'treble',
       priority: 'high',
@@ -5425,7 +5489,7 @@ function generateMixRecommendations() {
       suggestion: 5,
       bandIndex: 4
     });
-  } else if (treble > 110) {
+  } else if (treble > 6) {
     aiMixing.recommendations.push({
       type: 'treble',
       priority: 'medium',
@@ -5790,9 +5854,11 @@ function updateAIMixingDisplay() {
   const midsLevel = document.getElementById('midsLevel');
   const trebleLevel = document.getElementById('trebleLevel');
 
-  if (bassLevel) bassLevel.textContent = Math.round(aiMixing.frequencyBalance.bass);
-  if (midsLevel) midsLevel.textContent = Math.round(aiMixing.frequencyBalance.mids);
-  if (trebleLevel) trebleLevel.textContent = Math.round(aiMixing.frequencyBalance.treble);
+  const fb = aiMixing.frequencyBalance;
+  const fmtB = v => (fb && isFinite(v) ? `${v >= 0 ? '+' : ''}${v.toFixed(1)} dB` : '--');
+  if (bassLevel) bassLevel.textContent = fmtB(fb && fb.bass);
+  if (midsLevel) midsLevel.textContent = fmtB(fb && fb.mids);
+  if (trebleLevel) trebleLevel.textContent = fmtB(fb && fb.treble);
 
   // Update loudness display
   const loudnessInt = document.getElementById('loudnessInt');
@@ -11040,7 +11106,7 @@ function toggleVideoExportVisualizer(analyzer) {
 
   <!-- Frequency Balance Display -->
   <div style="margin-bottom:14px;padding:10px;background:var(--bg-secondary);border-radius:6px;border-left:3px solid #ff8844">
-    <div style="font-size:10px;font-weight:600;color:#ff8844;margin-bottom:8px">Frequency Balance</div>
+    <div style="font-size:10px;font-weight:600;color:#ff8844;margin-bottom:8px">Frequency Balance <span style="font-weight:400;color:var(--text-secondary)">(dB gg. rosa Rauschen)</span></div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
       <div style="text-align:center">
         <div style="font-size:9px;color:var(--text-secondary)">Bass</div>
