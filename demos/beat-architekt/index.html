@@ -2772,10 +2772,11 @@ let masteringState = {
 
 let exportState = {
   presets: {
-    spotify: { format: 'mp3', bitrate: 320, sampleRate: 44100, loudness: -14.0 },
-    appleMusic: { format: 'aac', bitrate: 256, sampleRate: 48000, loudness: -16.0 },
-    youtube: { format: 'wav', bitrate: null, sampleRate: 48000, loudness: -13.0 },
-    archiveQuality: { format: 'aiff', bitrate: null, sampleRate: 48000, loudness: -18.0 }
+    // truePeak: Obergrenze in dBTP nach dem Limiter (-1 dBTP laut Plattform-Vorgaben bzw. AES TD1004)
+    spotify: { format: 'mp3', bitrate: 320, sampleRate: 44100, loudness: -14.0, truePeak: -1.0 },
+    appleMusic: { format: 'aac', bitrate: 256, sampleRate: 48000, loudness: -16.0, truePeak: -1.0 },
+    youtube: { format: 'wav', bitrate: null, sampleRate: 48000, loudness: -13.0, truePeak: -1.0 },
+    archiveQuality: { format: 'aiff', bitrate: null, sampleRate: 48000, loudness: -18.0, truePeak: -1.0 }
   },
   queue: [],
   currentFormat: null,
@@ -2968,6 +2969,164 @@ function normalizeToLoudness(buffer, targetLUFS, currentLUFS) {
 }
 
 // Phase 30.2: Calculate LUFS loudness
+// === True Peak (ITU-R BS.1770-4 Annex 2) und True-Peak-Limiter fuer den Export ===
+// 4-fach-Oversampling mit polyphasem FIR-Interpolator: Kaiser-gefensterter Sinc (beta = 6), 95 Taps
+// (4 Phasen x 24, ungerade Laenge, damit das Raster exakt auf Viertel-Samples liegt), Grenzfrequenz =
+// Original-Nyquist. Jede Phase ist auf Gleichanteil-Verstaerkung 1 normiert.
+const TRUE_PEAK_OS = 4, TRUE_PEAK_TAPS = 24;
+const TRUE_PEAK_FIR = (() => {
+  const N = TRUE_PEAK_OS * TRUE_PEAK_TAPS - 1, fc = 0.5 / TRUE_PEAK_OS, mid = (N - 1) / 2, beta = 6;
+  const i0 = x => { let s = 1, t = 1; for (let k = 1; k < 30; k++) { t *= (x / 2 / k) * (x / 2 / k); s += t; } return s; };
+  const h = new Float64Array(N + 1); // letzter Koeffizient bleibt 0 (Polyphasen-Auffuellung)
+  for (let n = 0; n < N; n++) {
+    const t = n - mid, r = 2 * n / (N - 1) - 1;
+    const sinc = t === 0 ? 2 * fc : Math.sin(2 * Math.PI * fc * t) / (Math.PI * t);
+    h[n] = sinc * i0(beta * Math.sqrt(1 - r * r)) / i0(beta);
+  }
+  const phases = [];
+  let l1 = 0; // groesste Betragssumme einer Phase: |y| <= l1 * max|x| im Fenster (strenge Schranke)
+  for (let p = 0; p < TRUE_PEAK_OS; p++) {
+    const ph = new Float64Array(TRUE_PEAK_TAPS);
+    let sum = 0;
+    for (let k = 0; k < TRUE_PEAK_TAPS; k++) { ph[k] = h[k * TRUE_PEAK_OS + p]; sum += ph[k]; }
+    let a = 0;
+    for (let k = 0; k < TRUE_PEAK_TAPS; k++) { ph[k] /= sum; a += Math.abs(ph[k]); }
+    if (a > l1) l1 = a;
+    phases.push(ph);
+  }
+  // Interpolator-Laufzeit mid/OS = 11,75 Samples: Ausgang (i, p) liegt bei i - 11,75 + p/4
+  return { phases, l1, delay: Math.round(mid / TRUE_PEAK_OS) };
+})();
+
+// Betrag des oversampelten Signals je Original-Sample (Maximum ueber Kanaele, verkoppelt), zeitlich
+// auf das Original ausgerichtet. Liegt der Sample-Betrag im Filterfenster so tief, dass selbst die
+// strenge Schranke l1 * max|x| die Schwelle nicht erreicht, wird nicht interpoliert (Sample-Betrag
+// als Wert). Mit threshold = 0 wird ueberall interpoliert.
+function truePeakEnvelope(buffer, threshold = 0) {
+  const n = buffer.length, env = new Float32Array(n);
+  const { phases, l1, delay } = TRUE_PEAK_FIR, T = TRUE_PEAK_TAPS;
+  const skipBelow = threshold / l1;
+  const dq = new Int32Array(n);
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const x = buffer.getChannelData(ch);
+    let head = 0, tail = 0; // gleitendes Maximum von |x| ueber [i-T+1, i]
+    for (let i = 0; i < n + delay; i++) {
+      if (i < n) {
+        const ai = Math.abs(x[i]);
+        while (tail > head && Math.abs(x[dq[tail - 1]]) <= ai) tail--;
+        dq[tail++] = i;
+      }
+      while (tail > head && dq[head] <= i - T) head++;
+      const winMax = tail > head ? Math.abs(x[dq[head]]) : 0;
+      const o = i - delay;
+      let m = 0;
+      if (winMax > skipBelow) {
+        for (let p = 0; p < TRUE_PEAK_OS; p++) {
+          const ph = phases[p];
+          let acc = 0;
+          const kMax = Math.min(T, i + 1);
+          for (let k = (i >= n ? i - n + 1 : 0); k < kMax; k++) acc += ph[k] * x[i - k];
+          const a = acc < 0 ? -acc : acc;
+          if (a > m) m = a;
+        }
+      }
+      if (o >= 0 && o < n) {
+        // Sample-Spitze immer mitnehmen, damit die Huellkurve nie unter dem Sample-Peak liegt
+        const xs = Math.abs(x[o]);
+        const v = m > xs ? m : xs;
+        if (v > env[o]) env[o] = v;
+      }
+    }
+  }
+  return env;
+}
+
+// True Peak in dBTP. Untergrenze ist der Sample-Peak; interpoliert wird nur, wo die Schranke ihn
+// ueberschreiten koennte.
+function measureTruePeak(buffer) {
+  let sp = 0;
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const x = buffer.getChannelData(ch);
+    for (let i = 0; i < x.length; i++) { const a = x[i] < 0 ? -x[i] : x[i]; if (a > sp) sp = a; }
+  }
+  if (sp === 0) return -Infinity;
+  const env = truePeakEnvelope(buffer, sp);
+  let m = 0;
+  for (let i = 0; i < env.length; i++) if (env[i] > m) m = env[i];
+  return 20 * Math.log10(m);
+}
+
+// Lookahead-Limiter auf True-Peak-Basis (offline, verkoppelte Kanaele).
+// 1) noetige Verstaerkung je Sample aus der True-Peak-Huellkurve, 2) gleitendes Minimum ueber das
+// Lookahead-Fenster (vorausschauend), 3) exponentielles Release, 4) Rechteckglaettung ueber das Fenster.
+// Schritt 2+4 garantieren, dass die Verstaerkung an jeder Spitze den Grenzwert nicht ueberschreitet.
+function limitTruePeak(buffer, ceilingDbTP = -1.0, lookaheadMs = 5, releaseMs = 50) {
+  const n = buffer.length, fs = buffer.sampleRate;
+  const ceil = Math.pow(10, ceilingDbTP / 20);
+  const env = truePeakEnvelope(buffer, ceil);
+  const W = Math.max(1, Math.round(fs * lookaheadMs / 1000)) + 2; // +2 Samples fuer die Interpolator-Ausrichtung
+
+  const req = new Float32Array(n);
+  let needed = false;
+  for (let i = 0; i < n; i++) { req[i] = env[i] > ceil ? ceil / env[i] : 1; if (req[i] < 1) needed = true; }
+  if (!needed) return { buffer, maxReductionDb: 0 };
+
+  // Gleitendes Minimum ueber [i, i+W) mit monotoner Deque (O(n))
+  const minF = new Float32Array(n), dq = new Int32Array(n);
+  let head = 0, tail = 0;
+  for (let i = n - 1; i >= 0; i--) {
+    while (tail > head && req[dq[tail - 1]] >= req[i]) tail--;
+    dq[tail++] = i;
+    while (dq[head] >= i + W) head++;
+    minF[i] = req[dq[head]];
+  }
+  // Release: Absenkung sofort, Rueckkehr exponentiell
+  const rel = Math.exp(-1 / (fs * releaseMs / 1000));
+  let g = 1;
+  for (let i = 0; i < n; i++) { g = minF[i] < g ? minF[i] : minF[i] + (g - minF[i]) * rel; minF[i] = g; }
+  // Rechteckglaettung ueber [i-W+1, i]
+  const gain = new Float32Array(n);
+  let sum = 0;
+  for (let i = 0; i < n; i++) {
+    sum += minF[i];
+    if (i >= W) sum -= minF[i - W];
+    gain[i] = sum / Math.min(i + 1, W);
+  }
+
+  const ctx = audioCtx || new OfflineAudioContext(buffer.numberOfChannels, n, fs);
+  const out = ctx.createBuffer(buffer.numberOfChannels, n, fs);
+  let minGain = 1;
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const x = buffer.getChannelData(ch), y = out.getChannelData(ch);
+    for (let i = 0; i < n; i++) y[i] = x[i] * gain[i];
+  }
+  for (let i = 0; i < n; i++) if (gain[i] < minGain) minGain = gain[i];
+  return { buffer: out, maxReductionDb: 20 * Math.log10(minGain) };
+}
+
+// Lieferfertiges Master: auf Ziel-LUFS normalisieren und auf True-Peak-Ziel limitieren.
+// Weil der Limiter die Lautheit leicht senkt, wird die Normalisierung bis zu 3-mal nachgefuehrt.
+function masterForDelivery(source, targetLUFS, ceilingDbTP = -1.0) {
+  const sourceLUFS = calculateLUFS(source);
+  if (!isFinite(sourceLUFS)) throw new Error('Master-Take ist still (unter -70 LUFS); keine Normalisierung moeglich');
+  let gainDb = targetLUFS - sourceLUFS, result = null;
+  for (let iter = 0; iter < 3; iter++) {
+    const normalized = normalizeToLoudness(source, sourceLUFS + gainDb, sourceLUFS);
+    const limited = limitTruePeak(normalized, ceilingDbTP);
+    // Sicherheitsabstand, falls die Glaettung eine Spitze minimal verfehlt
+    let out = limited.buffer, tp = measureTruePeak(out);
+    if (tp > ceilingDbTP + 0.05) {
+      out = limitTruePeak(out, ceilingDbTP - (tp - ceilingDbTP)).buffer;
+      tp = measureTruePeak(out);
+    }
+    const lufs = calculateLUFS(out);
+    result = { buffer: out, lufs, truePeak: tp, gainDb, limitedDb: limited.maxReductionDb, iterations: iter + 1 };
+    if (Math.abs(lufs - targetLUFS) <= 0.2) break;
+    gainDb += targetLUFS - lufs;
+  }
+  return result;
+}
+
 // === ITU-R BS.1770-4 / EBU R128: Integrated Loudness ===
 // K-Gewichtung = Stufe 1 (High-Shelf, ca. +4 dB ueber 1,5 kHz) + Stufe 2 (RLB-Hochpass, ca. 38 Hz).
 // Koeffizienten fuer beliebige Abtastraten ueber die bilineare Transformation (wie libebur128);
@@ -13077,6 +13236,7 @@ function queueExport(preset) {
     bitrate: presetData.bitrate,
     sampleRate: presetData.sampleRate,
     loudness: presetData.loudness,
+    truePeak: presetData.truePeak !== undefined ? presetData.truePeak : -1.0,
     status: 'queued',
     progress: 0
   });
@@ -13150,18 +13310,16 @@ async function performExport(exportTask) {
       document.getElementById('phase30ProgressBar').querySelector('div').style.width = '50%';
     }
 
-    // Integrated Loudness nach ITU-R BS.1770-4 (K-Gewichtung, Gating)
-    const currentLUFS = calculateLUFS(buffer);
-    if (!isFinite(currentLUFS)) {
-      throw new Error('Master-Take ist still (unter -70 LUFS); keine Normalisierung moeglich');
-    }
-    applyLoudnessValue(currentLUFS);
-    document.getElementById('phase30Loudness').textContent = currentLUFS.toFixed(1) + ' LUFS (integrated)';
-
-    if (Math.abs(currentLUFS - exportTask.loudness) > 0.5) {
-      buffer = normalizeToLoudness(buffer, exportTask.loudness, currentLUFS);
-      document.getElementById('phase30ProgressBar').querySelector('div').style.width = '75%';
-    }
+    // Normalisierung auf Ziel-LUFS (BS.1770-4) und True-Peak-Limiter auf das Preset-Ziel
+    const ceiling = exportTask.truePeak !== undefined ? exportTask.truePeak : -1.0;
+    const mastered = masterForDelivery(buffer, exportTask.loudness, ceiling);
+    buffer = mastered.buffer;
+    applyLoudnessValue(mastered.lufs);
+    exportTask.result = { lufs: mastered.lufs, truePeak: mastered.truePeak, gainDb: mastered.gainDb, limitedDb: mastered.limitedDb };
+    document.getElementById('phase30Loudness').textContent =
+      `${mastered.lufs.toFixed(1)} LUFS · ${mastered.truePeak.toFixed(1)} dBTP` +
+      (mastered.limitedDb < -0.05 ? ` · Limiter ${mastered.limitedDb.toFixed(1)} dB` : '');
+    document.getElementById('phase30ProgressBar').querySelector('div').style.width = '75%';
 
     const blob = await encodeToFormat(buffer, exportTask.format, exportTask.bitrate, {
       title: exportTask.filename,
