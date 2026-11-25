@@ -1690,6 +1690,7 @@ let analyser = null;
 let dataArray = null;
 let isRecording = false;
 let mediaRecorder = null;
+let videoExportAudioDest = null; // MediaStream-Abzweig des Master-Ausgangs fuer den Video-Export
 let recordedChunks = [];
 let videoExportAnalyzer = {
   waveform: { enabled: true, smoothing: 0.8 },
@@ -10378,13 +10379,13 @@ function initVideoExportCanvas() {
   videoExportCanvas.height = 720;
   videoExportCtx = videoExportCanvas.getContext('2d');
 
-  if (!analyser && audioCtx) {
+  if (!analyser && audioCtx && masteringState.meterBus) {
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 2048;
     analyser.smoothingTimeConstant = videoExportAnalyzer.waveform.smoothing;
 
     const splitter = audioCtx.createChannelSplitter();
-    masterGain.connect(splitter);
+    masteringState.meterBus.connect(splitter);
     splitter.connect(analyser, 0);
 
     dataArray = new Uint8Array(analyser.frequencyBinCount);
@@ -10502,23 +10503,39 @@ function updateVideoCanvas() {
 }
 
 function startVideoExport() {
-  if (!audioCtx) {
-    alert('Start playback first');
+  // Master-Ausgang (Meter-Bus aus Phase 30) ist die Audioquelle; er existiert erst nach dem ersten Play
+  if (!audioCtx || !connectMasteringMeters()) {
+    alert('Bitte zuerst Play druecken, damit der Master-Ausgang existiert.');
     return;
   }
+  if (isRecording) return;
 
   initVideoExportCanvas();
 
   const canvas = videoExportCanvas;
   const stream = canvas.captureStream(30);
 
-  const audioDestination = audioCtx.createMediaStreamAudioDestination();
-  masterGain.connect(audioDestination);
+  // Audio: Abzweig vom Master-Ausgang als MediaStream-Spur. Fehlt die API (manche Builds ohne
+  // WebRTC/MediaStream), wird nur das Bild aufgenommen und das im Status vermerkt.
+  let audioNote = '';
+  if (typeof audioCtx.createMediaStreamAudioDestination === 'function') {
+    videoExportAudioDest = audioCtx.createMediaStreamAudioDestination();
+    masteringState.meterBus.connect(videoExportAudioDest);
+    const track = videoExportAudioDest.stream.getAudioTracks()[0];
+    if (track) stream.addTrack(track); else audioNote = ' (ohne Ton: keine Audiospur verfuegbar)';
+  } else {
+    audioNote = ' (ohne Ton: Browser bietet keine MediaStream-Audioausgabe)';
+  }
+  const withAudio = stream.getAudioTracks().length > 0;
 
-  stream.addTrack(audioDestination.stream.getAudioTracks()[0]);
+  // VP9 ist nicht ueberall verfuegbar; auf den ersten unterstuetzten WebM-Typ zurueckfallen
+  const candidates = withAudio
+    ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+    : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+  const mimeType = candidates.find(t => !MediaRecorder.isTypeSupported || MediaRecorder.isTypeSupported(t));
 
   mediaRecorder = new MediaRecorder(stream, {
-    mimeType: 'video/webm;codecs=vp9,opus',
+    mimeType,
     videoBitsPerSecond: 5000000,
     audioBitsPerSecond: 192000
   });
@@ -10530,7 +10547,7 @@ function startVideoExport() {
   mediaRecorder.start();
   isRecording = true;
 
-  updateVideoExportStatus('Recording video...', 'recording');
+  updateVideoExportStatus('Recording video...' + audioNote, 'recording');
   document.getElementById('videoExportStartBtn').disabled = true;
   document.getElementById('videoExportStopBtn').disabled = false;
 
@@ -10554,6 +10571,10 @@ function stopVideoExport() {
 }
 
 function completeVideoExport() {
+  if (videoExportAudioDest) {
+    try { masteringState.meterBus.disconnect(videoExportAudioDest); } catch (e) {}
+    videoExportAudioDest = null;
+  }
   const blob = new Blob(recordedChunks, { type: 'video/webm' });
   const url = URL.createObjectURL(blob);
 
@@ -12162,7 +12183,7 @@ function playStemMix(startTime = 0) {
       source.connect(gainNode);
     }
 
-    gainNode.connect(masterGain);
+    gainNode.connect(globalMasterGain || audioCtx.destination);
 
     stemSeparationState.stemSources[name] = source;
     stemSeparationState.stemGainNodes[name] = gainNode;
