@@ -5791,7 +5791,10 @@ function handleMIDIKnob(cc, value) {
       setSwing(newSwing);
       break;
     case midiMapping.knobs.volume:
-      if (globalMasterGain) {
+      if (sequencerState.crossfade.active && sequencerState.crossfade.rampScheduled) {
+        // Waehrend eines Crossfades gilt der neue Wert ab dem naechsten Pattern
+        sequencerState.crossfade.startGain = value;
+      } else if (globalMasterGain) {
         globalMasterGain.gain.setValueAtTime(value, audioCtx.currentTime);
       }
       break;
@@ -6096,7 +6099,8 @@ function queuePattern(patternId, durationBars = 4) {
     duration: durationBars,
     sourcePattern: currentPattern.id,
     targetPattern: patternId,
-    startGain: 1.0
+    startGain: 1.0,          // wird beim Fade-Start auf den aktuellen globalMasterGain-Wert gesetzt
+    rampScheduled: false
   };
 
   patternQueue.push({
@@ -6123,6 +6127,18 @@ function performCrossfade(now) {
   const elapsedMs = Math.abs(timeUntilStart * 1000);
   const progress = Math.min(1, elapsedMs / totalDurationMs);
 
+  // Ausblenden des laufenden Patterns ueber globalMasterGain (Eingang der Effektkette, alle Synth-Stimmen).
+  // Einmalig als lineare Rampe im Audio-Takt geplant: sample-genau, ohne Treppenstufen pro Scheduler-Tick.
+  if (globalMasterGain && !crossfade.rampScheduled) {
+    const g = globalMasterGain.gain, t = audioCtx.currentTime;
+    crossfade.startGain = g.value;
+    const remaining = Math.max(0.01, (totalDurationMs - elapsedMs) / 1000);
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(crossfade.startGain * (1 - progress), t);
+    g.linearRampToValueAtTime(0, t + remaining);
+    crossfade.rampScheduled = true;
+  }
+
   if (progress >= 1) {
     if (!currentPattern) return;
 
@@ -6137,19 +6153,20 @@ function performCrossfade(now) {
       updatePatternQueueUI();
     }
 
-    if (voicePool && voicePool.master) {
-      voicePool.master.gain.setValueAtTime(1.0, audioCtx.currentTime);
-    }
-
+    // Neues Pattern mit der Lautstaerke von vor dem Fade einsetzen (5 ms Glaettung gegen Knacken)
+    restoreCrossfadeGain(crossfade, 0.005);
     return;
   }
+}
 
-  const sourceVol = Math.max(0, 1 - progress);
-  const targetVol = Math.min(1, progress);
-
-  if (voicePool && voicePool.master) {
-    voicePool.master.gain.setValueAtTime(sourceVol, audioCtx.currentTime);
-  }
+// Setzt globalMasterGain nach Ende oder Abbruch des Crossfades auf den Wert vor dem Fade zurueck
+function restoreCrossfadeGain(crossfade, timeConstant) {
+  if (!globalMasterGain || !crossfade || !crossfade.rampScheduled) return;
+  const g = globalMasterGain.gain, t = audioCtx.currentTime;
+  g.cancelScheduledValues(t);
+  g.setValueAtTime(g.value, t);
+  g.setTargetAtTime(crossfade.startGain !== undefined ? crossfade.startGain : 1.0, t, timeConstant);
+  crossfade.rampScheduled = false;
 }
 
 function updatePatternQueueUI() {
@@ -6184,9 +6201,8 @@ function abortCrossfade() {
   patternQueue = [];
   updatePatternQueueUI();
 
-  if (voicePool && voicePool.master) {
-    voicePool.master.gain.setValueAtTime(1.0, audioCtx.currentTime);
-  }
+  // Laufenden Fade abbrechen, Lautstaerke weich zuruecksetzen
+  restoreCrossfadeGain(sequencerState.crossfade, 0.01);
 }
 
 function showQueueDurationMenu(patternId) {
