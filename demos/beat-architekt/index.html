@@ -2406,9 +2406,70 @@ function captureMeteringFrame() {
 
   // Peak, Dynamik und Korrelation nur bei Signal (RMS 0 wuerde durch 0 teilen)
   if (energy > 0) analyzeAudioMetrics(frame);
+  updateLiveTruePeak(frame, energy > 0, now);
   masteringState.metering.lastUpdate = now;
   updateMeteringReadouts();
   return true;
+}
+
+// Live-True-Peak: 4-fach-Oversampling wie im Export (measureTruePeak), interpoliert nur nahe der
+// Spitzen. Anzeige haelt den Hoechstwert 2 s und faellt dann mit 10 dB/s; max gilt seit Play.
+const TRUE_PEAK_HOLD_MS = 2000, TRUE_PEAK_FALL_DB_PER_S = 10;
+function updateLiveTruePeak(frame, hasSignal, now) {
+  const tp = masteringState.meters.truePeak;
+  // Direkt nach Play enthaelt der Analyser noch Samples des vorigen Laufs: ein Fenster lang verwerfen
+  if (tp.ignoreUntil && now < tp.ignoreUntil) return;
+  // Nur die seit dem letzten Aufruf neuen Samples auswerten (aufeinanderfolgende Fenster ueberlappen)
+  const fs = audioCtx ? audioCtx.sampleRate : 48000;
+  const fresh = tp.lastUpdate ? Math.ceil(fs * (now - tp.lastUpdate) / 1000) + 256 : frame.length;
+  const current = hasSignal ? frameTruePeak(frame, fresh) : -Infinity;
+  if (current >= tp.held || now - tp.heldAt > TRUE_PEAK_HOLD_MS) {
+    if (current >= tp.held) { tp.held = current; tp.heldAt = now; }
+    else {
+      // nach der Haltezeit mit fester Rate abfallen, nie unter den aktuellen Wert
+      const fallen = tp.held - TRUE_PEAK_FALL_DB_PER_S * (now - (tp.lastUpdate || now)) / 1000;
+      tp.held = Math.max(current, fallen);
+    }
+  }
+  tp.lastUpdate = now;
+  tp.value = tp.held;
+  if (current > tp.max) tp.max = current;
+  const std = masteringState.standards[masteringState.activeStandard];
+  const ceiling = std && std.truePeakMax !== undefined ? std.truePeakMax : -1.0;
+  tp.status = tp.max > 0 ? 'clipped' : (tp.max > ceiling ? 'over' : 'ok');
+}
+
+// True Peak eines Analyser-Fensters. Das Fenster ist an beiden Enden hart abgeschnitten; der
+// Interpolator wuerde dort kuenstliches Ueberschwingen erzeugen. Deshalb zaehlen nur Positionen,
+// deren Filterfenster vollstaendig im Signal liegt (je TRUE_PEAK_TAPS Samples Rand).
+// freshSamples: Anzahl der neuen Samples am Fensterende; ausgewertet wird nur dieser Teil (plus Rand,
+// damit die beim letzten Mal ausgesparten letzten TRUE_PEAK_TAPS Positionen jetzt erfasst werden).
+function frameTruePeak(frame, freshSamples = frame.length) {
+  const n = frame.length, margin = TRUE_PEAK_TAPS;
+  if (n <= 2 * margin) return measureTruePeak(frame);
+  const from = Math.max(margin, n - margin - Math.min(freshSamples, n)), to = n - margin;
+  // Teilfenster inkl. Filtervorlauf, damit der Interpolator eingeschwungen ist
+  const start = from - margin, len = n - start;
+  const chans = [];
+  let sp = 0;
+  for (let ch = 0; ch < frame.numberOfChannels; ch++) {
+    const x = frame.getChannelData(ch).subarray(start);
+    chans.push(x);
+    for (let i = margin; i < to - start; i++) { const a = x[i] < 0 ? -x[i] : x[i]; if (a > sp) sp = a; }
+  }
+  if (sp === 0) return -Infinity;
+  const sub = { numberOfChannels: chans.length, length: len, getChannelData: ch => chans[ch] };
+  const env = truePeakEnvelope(sub, sp);
+  let m = 0;
+  for (let i = margin; i < to - start; i++) if (env[i] > m) m = env[i];
+  return 20 * Math.log10(m);
+}
+
+function resetLiveTruePeak() {
+  const fs = audioCtx ? audioCtx.sampleRate : 48000;
+  const windowMs = (masteringState.meterFrameL ? masteringState.meterFrameL.length : 8192) / fs * 1000;
+  Object.assign(masteringState.meters.truePeak, { value: -Infinity, max: -Infinity, held: -Infinity, heldAt: 0, status: 'ok',
+    lastUpdate: 0, ignoreUntil: performance.now() + windowMs });
 }
 
 // === Phase 30.2: Master-Recorder ===
@@ -2571,9 +2632,11 @@ function updateMeteringReadouts() {
   const loudColor = m.loudness.status === 'meeting' ? ok : (m.loudness.status === 'high' ? warn : bad);
   set('loudnessReadout', m.loudness.value <= -80 ? '-inf LUFS' : m.loudness.value.toFixed(1) + ' LUFS', loudColor);
   set('loudnessStatus', { meeting: 'Target', high: 'High', low: 'Low' }[m.loudness.status] || m.loudness.status, loudColor);
-  const peakColor = m.truePeak.status === 'ok' ? ok : bad;
-  set('truePeakReadout', m.truePeak.value.toFixed(1) + ' dBFS', peakColor);
-  set('truePeakStatus', m.truePeak.status === 'ok' ? 'OK' : 'Clip', peakColor);
+  const tp = m.truePeak;
+  const peakColor = tp.status === 'ok' ? ok : (tp.status === 'over' ? warn : bad);
+  const fmt = v => (isFinite(v) ? v.toFixed(1) : '-inf');
+  set('truePeakReadout', `${fmt(tp.value)} dBTP (max ${fmt(tp.max)})`, peakColor);
+  set('truePeakStatus', { ok: 'OK', over: 'Ueber Ziel', clipped: 'Clip' }[tp.status] || tp.status, peakColor);
   const drColor = m.dynamicRange.status === 'good' ? ok : warn;
   set('drReadout', m.dynamicRange.value.toFixed(1) + ' dB', drColor);
   set('drStatus', m.dynamicRange.status === 'good' ? 'Good' : 'Low', drColor);
@@ -2643,10 +2706,9 @@ function analyzeAudioMetrics(audioBuffer) {
   masteringState.meters.dynamicRange.value = dynamicRange;
   masteringState.meters.dynamicRange.status = dynamicRange >= 8 ? 'good' : 'low';
 
-  // Crest factor
+  // Crest factor (Sample-Peak); der True Peak wird in updateLiveTruePeak() gemessen
   const peakdB = 20 * Math.log10(peakValue || 1e-6);
-  masteringState.meters.truePeak.value = peakdB;
-  masteringState.meters.truePeak.status = peakdB <= 0 ? 'ok' : 'clipped';
+  masteringState.meters.samplePeak = peakdB;
   masteringState.meters.crestFactor.value = peakValue / rmsValue;
   masteringState.meters.crestFactor.headroom = 0 - peakdB;
 
@@ -2905,7 +2967,8 @@ let stemSeparationState = {
 let masteringState = {
   meters: {
     loudness: { value: -20, target: -14, unit: 'LUFS', status: 'ok' },
-    truePeak: { value: -3.0, unit: 'dBFS', max: 0.0, status: 'ok' },
+    // value: angezeigter Wert mit Halten, max: Maximum seit Play (dBTP nach BS.1770-4 Annex 2)
+    truePeak: { value: -Infinity, unit: 'dBTP', max: -Infinity, status: 'ok', held: -Infinity, heldAt: 0 },
     dynamicRange: { value: 12, unit: 'dB', status: 'ok' },
     correlation: { value: 0.95, range: [-1, 1], status: 'ok' },
     crestFactor: { value: 9.0, headroom: 5.0 }
@@ -4672,6 +4735,7 @@ function togglePlay() {
     currentStep = -1;
     nextStepTime = audioCtx.currentTime;
     renderTrackMuteButtons();
+    resetLiveTruePeak();
     startSequencer();
     startMasterRecording();
   } else {
@@ -16368,7 +16432,7 @@ document.addEventListener('DOMContentLoaded', () => {
     </tr>
     <tr style="border-bottom:1px solid #1a2438">
       <td style="padding:6px;color:#fff">True Peak</td>
-      <td style="padding:6px;text-align:right;color:#00ff00" id="truePeakReadout">-6.0 dBFS</td>
+      <td style="padding:6px;text-align:right;color:#00ff00" id="truePeakReadout">-inf dBTP</td>
       <td style="padding:6px;text-align:right;font-size:0.8em;color:#00ff00" id="truePeakStatus">OK</td>
     </tr>
     <tr style="border-bottom:1px solid #1a2438">
