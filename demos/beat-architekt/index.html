@@ -5043,9 +5043,24 @@ function drawToneCurve() {
 }
 
 // Phase 17: AI-Assisted Mixing
+// Laeuft gerade das Ausblenden eines Pattern-Crossfades? Dann misst die KI-Analyse hinter
+// globalMasterGain einen kuenstlich leiser werdenden Mix und wuerde ihn "korrigieren".
+function crossfadeInProgress() {
+  return !!(sequencerState.crossfade && sequencerState.crossfade.active && sequencerState.crossfade.rampScheduled);
+}
+
+function showAIMixPausedNotice() {
+  const recList = document.getElementById('recommendationsList');
+  if (recList) recList.innerHTML = '<div style="color:var(--text-secondary);font-style:italic">KI-Mix pausiert: Pattern-Crossfade laeuft</div>';
+}
+
 function analyzeCurrentMix() {
   if (!audioCtx || !isPlaying) {
     console.log('Cannot analyze: audio context or sequencer not ready');
+    return;
+  }
+  if (crossfadeInProgress()) {
+    showAIMixPausedNotice();
     return;
   }
 
@@ -5200,6 +5215,11 @@ function generateMixRecommendations() {
 
 function applyRecommendation(recommendation) {
   if (!recommendation) return;
+  // Waehrend eines Crossfades keine Eingriffe (auch nicht per Apply-Button oder Auto-Apply)
+  if (crossfadeInProgress()) {
+    showAIMixPausedNotice();
+    return;
+  }
 
   if (recommendation.type === 'bass' && recommendation.bandIndex !== undefined) {
     updateToneCurvePoint(recommendation.bandIndex, recommendation.suggestion);
