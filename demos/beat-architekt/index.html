@@ -1608,6 +1608,7 @@ let aiMixing = {
   ],
   loudnessMeasure: { integrated: -23, short: -20, momentary: -18 },
   frequencyBalance: { bass: 0, mids: 0, treble: 0 },
+  balanceProfile: 'electronic', // Zielprofil der Frequenzbalance (AI_MIX_BALANCE_PROFILES), beim Start aus localStorage
   recommendations: [],
   autoApplyEnabled: false,
   analysisHistory: [],
@@ -5301,9 +5302,13 @@ function ensureAIMixTap() {
   if (!audioCtx || !globalMasterGain) return null;
   const spec = audioCtx.createAnalyser();
   spec.fftSize = 8192;
-  spec.smoothingTimeConstant = 0.8;
+  // Keine Analyser-Glaettung: sie wirkt nur zwischen zwei Abfragen. Bei der Analyse auf Knopfdruck stammten
+  // so 80 % jedes Werts aus der vorigen Abfrage, egal wie alt sie war. Gemittelt wird in sampleAIMixSpectrum().
+  spec.smoothingTimeConstant = 0;
   globalMasterGain.connect(spec);
-  const tap = { spec, kL: null, kR: null, createdAt: audioCtx.currentTime };
+  const tap = { spec, specBuf: new Float32Array(spec.frequencyBinCount), avg: null, wasPlaying: false,
+    kL: null, kR: null, createdAt: audioCtx.currentTime };
+  tap.timer = setInterval(sampleAIMixSpectrum, AI_MIX_SAMPLE_MS);
   // K-gewichteter Stereo-Zweig fuer die Loudness (BS.1770-4, Fenster 16384 Samples, ca. 0,37 s)
   if (typeof audioCtx.createIIRFilter === 'function') {
     const { shelf, highpass } = kWeightingCoefficients(audioCtx.sampleRate);
@@ -5319,25 +5324,23 @@ function ensureAIMixTap() {
   return tap;
 }
 
-// Erst auswerten, wenn das Messfenster einmal gefuellt ist
-function aiMixTapReady(tap) {
-  return !!tap && audioCtx.currentTime - tap.createdAt > 16384 / audioCtx.sampleRate;
-}
+// Laufendes Spektrum-Mittel fuer die Frequenzbalance: alle 100 ms ein FFT-Frame (8192 Samples), Bandleistungen
+// exponentiell gemittelt mit Zeitkonstante 2 s (etwa ein Takt bei 120 BPM). Ein einzelner Frame ist fuer die
+// Balance zu kurz: faellt er zwischen zwei Kicks, fehlt der Bass. Bei jedem Play-Start wird neu begonnen,
+// gemessen wird nur waehrend der Wiedergabe.
+const AI_MIX_SAMPLE_MS = 100;
+const AI_MIX_AVG_SECONDS = 2;
 
-// Frequenzbalance als Abweichung von rosa Rauschen (gleiche Energie je Oktave) in dB.
-// Je Band wird die Leistung energetisch gemittelt (nicht dB je Bin: das Mittel wurde von den vielen fast
-// leeren Bins am Rauschboden bestimmt und hatte mit der Musik kaum zu tun) und ins Verhaeltnis zur
-// Gesamtleistung 20 Hz - 16 kHz gesetzt. Damit ist das Mass unabhaengig von Nutzer-Lautstaerke und KI-Trim.
-// Baender: Bass 20-250 Hz, Mitten 250 Hz - 4 kHz, Hoehen 4-16 kHz. Rueckgabe null ohne Abgriff/Signal.
-const AI_MIX_BANDS = { bass: [20, 250], mids: [250, 4000], treble: [4000, 16000] };
-
-function measureFrequencyBalance() {
-  const tap = ensureAIMixTap();
-  if (!aiMixTapReady(tap)) return null;
-  const an = tap.spec;
-  const data = new Float32Array(an.frequencyBinCount);
-  an.getFloatFrequencyData(data);
-  const hzPerBin = audioCtx.sampleRate / an.fftSize;
+function sampleAIMixSpectrum() {
+  const tap = aiMixing.tap;
+  if (!tap || !audioCtx) return;
+  if (!isPlaying) { tap.wasPlaying = false; return; }
+  if (!tap.wasPlaying) { tap.avg = null; tap.wasPlaying = true; }
+  const now = audioCtx.currentTime;
+  if (now - tap.createdAt < tap.spec.fftSize / audioCtx.sampleRate) return;
+  const data = tap.specBuf;
+  tap.spec.getFloatFrequencyData(data);
+  const hzPerBin = audioCtx.sampleRate / tap.spec.fftSize;
   const power = (lo, hi) => {
     let p = 0;
     for (let i = Math.max(1, Math.ceil(lo / hzPerBin)); i < Math.min(data.length, Math.floor(hi / hzPerBin)); i++) {
@@ -5345,17 +5348,98 @@ function measureFrequencyBalance() {
     }
     return p;
   };
-  const octaves = ([lo, hi]) => Math.log2(hi / lo);
-  const totalOct = octaves([20, 16000]);
-  const total = power(20, 16000);
-  // unter ca. -90 dB Gesamtleistung: keine verwertbare Messung
-  if (!(total > 1e-9)) return null;
-  const result = {};
-  for (const [band, range] of Object.entries(AI_MIX_BANDS)) {
-    const share = power(range[0], range[1]) / total;
-    const pinkShare = octaves(range) / totalOct;
-    result[band] = share > 0 ? 10 * Math.log10(share / pinkShare) : -Infinity;
+  const frame = { total: power(20, 16000) };
+  for (const [band, range] of Object.entries(AI_MIX_BANDS)) frame[band] = power(range[0], range[1]);
+  if (!tap.avg) {
+    tap.avg = { norm: 0, t: now - AI_MIX_SAMPLE_MS / 1000 };
+    for (const k of Object.keys(frame)) tap.avg[k] = 0;
   }
+  // Gewicht nach tatsaechlich vergangener Zeit (Timer koennen im Hintergrund-Tab gedrosselt werden)
+  const dt = Math.min(Math.max(now - tap.avg.t, 0), 1);
+  tap.avg.t = now;
+  const a = 1 - Math.exp(-dt / AI_MIX_AVG_SECONDS);
+  for (const k of Object.keys(frame)) tap.avg[k] = tap.avg[k] * (1 - a) + frame[k] * a;
+  tap.avg.norm = tap.avg.norm * (1 - a) + a;
+}
+
+// Mittel neu beginnen (z. B. nach einem Signalwechsel)
+function resetAIMixSpectrum() {
+  if (aiMixing.tap) aiMixing.tap.avg = null;
+}
+
+// Erst auswerten, wenn das Messfenster einmal gefuellt ist
+function aiMixTapReady(tap) {
+  return !!tap && audioCtx.currentTime - tap.createdAt > 16384 / audioCtx.sampleRate;
+}
+
+// Frequenzbalance als Abweichung von rosa Rauschen (gleiche Energie je Oktave) in dB.
+// Je Band wird die Leistung energetisch summiert (nicht dB je Bin: das Mittel wurde von den vielen fast
+// leeren Bins am Rauschboden bestimmt und hatte mit der Musik kaum zu tun) und durch die Bandbreite in
+// Oktaven geteilt. Wert je Band = Leistung je Oktave in dB minus Mittel der drei Baender; rosa Rauschen
+// ergibt 0/0/0, die Summe der drei Werte ist immer 0. Unabhaengig von Nutzer-Lautstaerke und KI-Trim.
+// Das fruehere Mass (Leistungsanteil am Gesamtspektrum) war nach oben begrenzt: der Bass konnte hoechstens
+// +4,2 dB erreichen (Anteil 100 %), "Bass zu laut" also nie ausloesen.
+// Baender: Bass 20-250 Hz, Mitten 250 Hz - 4 kHz, Hoehen 4-16 kHz. Rueckgabe null ohne Abgriff/Signal.
+const AI_MIX_BANDS = { bass: [20, 250], mids: [250, 4000], treble: [4000, 16000] };
+
+// Zielfenster [min, max] in dB je Band (Mass wie oben). Ausserhalb gibt die KI eine EQ-Empfehlung.
+// neutral: rosa Rauschen +/-6 dB.
+// electronic: Club-Referenz. Kick und Sub tragen dort deutlich mehr Energie als rosa Rauschen.
+//   Bass -1 ... +12 dB: -1 entspricht einem Bass-Shelf von -1,5 dB gegenueber rosa Rauschen (fuer
+//   Club-Material zu duenn), +12 einem Shelf von +18 dB. Ein Shelf von B dB hebt den Basswert um 2B/3 und
+//   senkt Mitten und Hoehen um je B/3, bei +12 also auf -6 dB. Deshalb reichen die unteren Grenzen von
+//   Mitten und Hoehen bis -10 dB (-6 dB plus 4 dB Spielraum), sonst loeste viel Bass "Mitten dumpf" und
+//   "Hoehen fehlen" aus. Die oberen Grenzen bleiben bei +6 dB: Haerte in Mitten und Hoehen ist kein
+//   Genre-Merkmal.
+const AI_MIX_BALANCE_PROFILES = {
+  electronic: { label: 'Elektronisch (Club)', bass: [-1, 12], mids: [-10, 6], treble: [-10, 6] },
+  neutral: { label: 'Neutral (rosa Rauschen)', bass: [-6, 6], mids: [-6, 6], treble: [-6, 6] }
+};
+const AI_MIX_PROFILE_STORAGE_KEY = 'beatArchitekt.aiMixBalanceProfile';
+
+function loadAIMixBalanceProfile() {
+  try {
+    const v = localStorage.getItem(AI_MIX_PROFILE_STORAGE_KEY);
+    if (v && AI_MIX_BALANCE_PROFILES[v]) return v;
+  } catch (e) { /* kein Speicher verfuegbar: Standard */ }
+  return 'electronic';
+}
+
+function aiMixBalanceProfile() {
+  return AI_MIX_BALANCE_PROFILES[aiMixing.balanceProfile] || AI_MIX_BALANCE_PROFILES.electronic;
+}
+
+// Profil wechseln: Empfehlungen aus der letzten Messung neu bewerten, ohne Auto-Apply auszuloesen
+// (ein Profilwechsel soll den Mix nicht selbst veraendern).
+function setAIMixBalanceProfile(name) {
+  if (!AI_MIX_BALANCE_PROFILES[name]) return false;
+  aiMixing.balanceProfile = name;
+  try { localStorage.setItem(AI_MIX_PROFILE_STORAGE_KEY, name); } catch (e) { /* nur fuer diese Sitzung */ }
+  const sel = document.getElementById('aiMixProfileSelect');
+  if (sel && sel.value !== name) sel.value = name;
+  generateMixRecommendations();
+  updateAIMixingDisplay(true);
+  return true;
+}
+
+function measureFrequencyBalance() {
+  const tap = ensureAIMixTap();
+  if (!aiMixTapReady(tap)) return null;
+  // Mittel aus sampleAIMixSpectrum(); ohne Frame seit Play-Start keine Messung
+  const avg = tap.avg;
+  if (!avg || !(avg.norm > 0)) return null;
+  const octaves = ([lo, hi]) => Math.log2(hi / lo);
+  // unter ca. -90 dB Gesamtleistung: keine verwertbare Messung
+  if (!(avg.total / avg.norm > 1e-9)) return null;
+  const density = {};
+  for (const [band, range] of Object.entries(AI_MIX_BANDS)) {
+    // leeres Band: Untergrenze statt -Infinity, damit das Mittel endlich bleibt
+    density[band] = 10 * Math.log10(Math.max(avg[band] / avg.norm, 1e-15) / octaves(range));
+  }
+  const bands = Object.keys(density);
+  const mean = bands.reduce((a, b) => a + density[b], 0) / bands.length;
+  const result = {};
+  for (const band of bands) result[band] = density[band] - mean;
   return result;
 }
 
@@ -5441,61 +5525,34 @@ function generateMixRecommendations() {
   const mids = fb.mids;
   const treble = fb.treble;
 
-  // Bass recommendations
-  // Schwellen: Abweichung von rosa Rauschen (dB), Toleranz +/-6 dB
-  if (bass < -6) {
+  // EQ-Empfehlungen gegen das Zielfenster des gewaehlten Profils (AI_MIX_BALANCE_PROFILES)
+  const profile = aiMixBalanceProfile();
+  const fmt = v => `${v >= 0 ? '+' : ''}${v.toFixed(1)}`;
+  const fmtW = v => `${v >= 0 ? '+' : ''}${v}`;
+  const why = (v, w) => ` [${fmt(v)} dB, Ziel ${fmtW(w[0])}…${fmtW(w[1])} dB]`;
+  const eqRules = [
+    { band: 'bass', value: bass, bandIndex: 0,
+      low: { priority: 'high', message: 'Bass is too quiet (+3 to +6 dB)', suggestion: 3 },
+      high: { priority: 'medium', message: 'Bass is too loud (-2 to -4 dB)', suggestion: -3 } },
+    { band: 'mids', value: mids, bandIndex: 2,
+      low: { priority: 'medium', message: 'Mids are dull (+2 to +4 dB)', suggestion: 3 },
+      high: { priority: 'high', message: 'Mids are harsh (-2 to -5 dB)', suggestion: -3 } },
+    { band: 'treble', value: treble, bandIndex: 4,
+      low: { priority: 'high', message: 'Treble lacks air (+4 to +6 dB)', suggestion: 5 },
+      high: { priority: 'medium', message: 'Treble is harsh (-3 to -5 dB)', suggestion: -4 } }
+  ];
+  for (const rule of eqRules) {
+    const w = profile[rule.band];
+    const side = rule.value < w[0] ? rule.low : rule.value > w[1] ? rule.high : null;
+    if (!side) continue;
     aiMixing.recommendations.push({
-      type: 'bass',
-      priority: 'high',
-      message: 'Bass is too quiet (+3 to +6 dB)',
-      suggestion: 3,
-      bandIndex: 0
-    });
-  } else if (bass > 6) {
-    aiMixing.recommendations.push({
-      type: 'bass',
-      priority: 'medium',
-      message: 'Bass is too loud (-2 to -4 dB)',
-      suggestion: -3,
-      bandIndex: 0
-    });
-  }
-
-  // Mids recommendations
-  if (mids < -6) {
-    aiMixing.recommendations.push({
-      type: 'mids',
-      priority: 'medium',
-      message: 'Mids are dull (+2 to +4 dB)',
-      suggestion: 3,
-      bandIndex: 2
-    });
-  } else if (mids > 6) {
-    aiMixing.recommendations.push({
-      type: 'mids',
-      priority: 'high',
-      message: 'Mids are harsh (-2 to -5 dB)',
-      suggestion: -3,
-      bandIndex: 2
-    });
-  }
-
-  // Treble recommendations
-  if (treble < -6) {
-    aiMixing.recommendations.push({
-      type: 'treble',
-      priority: 'high',
-      message: 'Treble lacks air (+4 to +6 dB)',
-      suggestion: 5,
-      bandIndex: 4
-    });
-  } else if (treble > 6) {
-    aiMixing.recommendations.push({
-      type: 'treble',
-      priority: 'medium',
-      message: 'Treble is harsh (-3 to -5 dB)',
-      suggestion: -4,
-      bandIndex: 4
+      type: rule.band,
+      priority: side.priority,
+      message: side.message + why(rule.value, w),
+      suggestion: side.suggestion,
+      bandIndex: rule.bandIndex,
+      measured: Math.round(rule.value * 10) / 10,
+      target: w.slice()
     });
   }
 
@@ -5848,7 +5905,7 @@ function toggleAutoSnapshot() {
   aiMixing.autoSnapshotOnAnalysis = checkbox.checked;
 }
 
-function updateAIMixingDisplay() {
+function updateAIMixingDisplay(skipAutoApply = false) {
   // Update frequency balance display
   const bassLevel = document.getElementById('bassLevel');
   const midsLevel = document.getElementById('midsLevel');
@@ -5859,6 +5916,13 @@ function updateAIMixingDisplay() {
   if (bassLevel) bassLevel.textContent = fmtB(fb && fb.bass);
   if (midsLevel) midsLevel.textContent = fmtB(fb && fb.mids);
   if (trebleLevel) trebleLevel.textContent = fmtB(fb && fb.treble);
+  // Zielfenster des Profils unter jedem Wert
+  const profile = aiMixBalanceProfile();
+  const fmtW = w => `${w[0] >= 0 ? '+' : ''}${w[0]}…${w[1] >= 0 ? '+' : ''}${w[1]}`;
+  for (const band of ['bass', 'mids', 'treble']) {
+    const el = document.getElementById(band + 'Target');
+    if (el) el.textContent = 'Ziel ' + fmtW(profile[band]);
+  }
 
   // Update loudness display
   const loudnessInt = document.getElementById('loudnessInt');
@@ -5884,7 +5948,7 @@ function updateAIMixingDisplay() {
   }
 
   // Auto-apply if enabled
-  if (aiMixing.autoApplyEnabled && aiMixing.recommendations.length > 0) {
+  if (!skipAutoApply && aiMixing.autoApplyEnabled && aiMixing.recommendations.length > 0) {
     aiMixing.recommendations.forEach(rec => {
       if (rec.priority === 'high') {
         applyRecommendation(rec);
@@ -11106,19 +11170,28 @@ function toggleVideoExportVisualizer(analyzer) {
 
   <!-- Frequency Balance Display -->
   <div style="margin-bottom:14px;padding:10px;background:var(--bg-secondary);border-radius:6px;border-left:3px solid #ff8844">
-    <div style="font-size:10px;font-weight:600;color:#ff8844;margin-bottom:8px">Frequency Balance <span style="font-weight:400;color:var(--text-secondary)">(dB gg. rosa Rauschen)</span></div>
+    <div style="font-size:10px;font-weight:600;color:#ff8844;margin-bottom:6px">Frequency Balance <span style="font-weight:400;color:var(--text-secondary)">(dB gg. rosa Rauschen)</span></div>
+    <label style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:9px;color:var(--text-secondary)">Zielprofil
+      <select id="aiMixProfileSelect" onchange="setAIMixBalanceProfile(this.value)" style="flex:1;padding:3px;background:var(--bg-input);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;font-size:9px">
+        <option value="electronic">Elektronisch (Club)</option>
+        <option value="neutral">Neutral (rosa Rauschen)</option>
+      </select>
+    </label>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
       <div style="text-align:center">
         <div style="font-size:9px;color:var(--text-secondary)">Bass</div>
         <div id="bassLevel" style="font-size:12px;font-weight:600;color:#ff6b6b">--</div>
+        <div id="bassTarget" style="font-size:8px;color:var(--text-secondary)">Ziel -1…+12</div>
       </div>
       <div style="text-align:center">
         <div style="font-size:9px;color:var(--text-secondary)">Mids</div>
         <div id="midsLevel" style="font-size:12px;font-weight:600;color:#ffd700">--</div>
+        <div id="midsTarget" style="font-size:8px;color:var(--text-secondary)">Ziel -10…+6</div>
       </div>
       <div style="text-align:center">
         <div style="font-size:9px;color:var(--text-secondary)">Treble</div>
         <div id="trebleLevel" style="font-size:12px;font-weight:600;color:#00f0ff">--</div>
+        <div id="trebleTarget" style="font-size:8px;color:var(--text-secondary)">Ziel -10…+6</div>
       </div>
     </div>
   </div>
@@ -15869,6 +15942,11 @@ document.addEventListener('DOMContentLoaded', () => {
     perfToggleBtn.style.boxShadow = '0 0 20px rgba(68,136,255,0.2)';
   };
   document.body.appendChild(perfToggleBtn);
+
+  // KI-Mix: gespeichertes Zielprofil der Frequenzbalance uebernehmen
+  aiMixing.balanceProfile = loadAIMixBalanceProfile();
+  const aiMixProfileSelect = document.getElementById('aiMixProfileSelect');
+  if (aiMixProfileSelect) aiMixProfileSelect.value = aiMixing.balanceProfile;
 
   // AI Mixing toggle button (Phase 17)
   const aiMixingToggleBtn = document.createElement('button');
