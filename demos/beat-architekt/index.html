@@ -1245,19 +1245,9 @@ body::before {
         </div>
       </div>
 
-      <!-- Phase 20a: Real-Time Spectral & Waveform Visualization -->
+      <!-- Phase 20c: Performance-Metriken (die Phase-20a-Spektralanzeige war nie angeschlossen und ist entfernt) -->
       <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
         <div style="font-size:12px;color:var(--cyan);font-weight:600;margin-bottom:12px">📊 Visual Performance</div>
-
-        <div style="display:flex;gap:8px;margin-bottom:12px">
-          <button class="ai-pat-btn" id="specToggle" onclick="toggleSpectralDisplay()" style="flex:1;padding:6px;font-size:10px">👁️ Spectrum</button>
-          <button class="ai-pat-btn" id="waveToggle" onclick="toggleWaveformDisplay()" style="flex:1;padding:6px;font-size:10px">〰️ Waveform</button>
-        </div>
-
-        <div id="visualizationPanel" style="display:none;background:rgba(0,240,255,0.02);border:1px solid rgba(0,240,255,0.2);border-radius:4px;padding:8px;margin-bottom:12px">
-          <canvas id="spectralCanvas" width="280" height="120" style="display:none;width:100%;height:120px;background:#000;border-radius:2px;margin-bottom:8px;border:1px solid rgba(0,240,255,0.1)"></canvas>
-          <canvas id="waveformCanvas" width="280" height="80" style="display:none;width:100%;height:80px;background:#000;border-radius:2px;border:1px solid rgba(0,240,255,0.1)"></canvas>
-        </div>
 
         <div id="performanceMetricsPanel" style="font-size:9px;padding:8px;background:rgba(0,240,255,0.05);border-radius:4px">
           <div style="display:flex;justify-content:space-between;margin-bottom:6px">
@@ -1665,12 +1655,6 @@ let sequencerState = {
 };
 
 // === PHASE 20: GENERATIVE AI & VISUAL SUITE ===
-let spectralAnalyzer = null;
-let spectralCanvas = null;
-let waveformCanvas = null;
-let spectralCtx = null;
-let waveformCtx = null;
-let spectralAnimId = null;
 let automationHistory = [];
 let generationRules = {};
 
@@ -1691,6 +1675,7 @@ let analyser = null;
 let dataArray = null;
 let isRecording = false;
 let mediaRecorder = null;
+let videoExportAudioDest = null; // MediaStream-Abzweig des Master-Ausgangs fuer den Video-Export
 let recordedChunks = [];
 let videoExportAnalyzer = {
   waveform: { enabled: true, smoothing: 0.8 },
@@ -3650,56 +3635,6 @@ function generateProbabilisticPattern(baseGrid, probabilityMap) {
   }
 
   return generated;
-}
-
-// === PHASE 20a: SPECTRAL ANALYZER ===
-class SpectralAnalyzer {
-  constructor(analyserNode, bands = 64) {
-    this.analyser = analyserNode;
-    this.bands = bands;
-    this.fftSize = 2048;
-    this.analyser.fftSize = this.fftSize;
-    this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
-    this.frequencyData = new Array(bands).fill(0);
-    this.smoothingFactor = 0.85;
-    this.peaks = [];
-  }
-
-  getFrequencyData() {
-    this.analyser.getByteFrequencyData(this.dataArray);
-    const binWidth = this.dataArray.length / this.bands;
-
-    for (let i = 0; i < this.bands; i++) {
-      let sum = 0;
-      for (let j = 0; j < binWidth; j++) {
-        const idx = Math.floor(i * binWidth + j);
-        if (idx < this.dataArray.length) sum += this.dataArray[idx];
-      }
-      const avg = (sum / binWidth) / 255;
-      this.frequencyData[i] = this.frequencyData[i] * this.smoothingFactor + avg * (1 - this.smoothingFactor);
-    }
-
-    return this.frequencyData;
-  }
-
-  getPeaks(count = 3) {
-    const data = this.frequencyData;
-    const peaks = [];
-
-    for (let i = 0; i < data.length; i++) {
-      if (data[i] > 0.3) {
-        peaks.push({index: i, value: data[i]});
-      }
-    }
-
-    peaks.sort((a, b) => b.value - a.value);
-    return peaks.slice(0, count);
-  }
-
-  indexToFrequency(index) {
-    const nyquist = 20000;
-    return (index / this.bands) * nyquist;
-  }
 }
 
 // === PHASE 20c: AUTOMATION VISUALIZATION & PERFORMANCE DASHBOARD ===
@@ -6474,167 +6409,6 @@ function showQueueDurationMenu(patternId) {
   } else {
     alert('Invalid duration. Use 1, 2, 4, or 8 bars');
   }
-}
-
-// === PHASE 20a: SPECTRAL ANALYZER & REAL-TIME VISUALIZATION ===
-
-function initSpectralDisplay() {
-  if (!audioCtx) return;
-
-  spectralCanvas = document.getElementById('spectralCanvas');
-  waveformCanvas = document.getElementById('waveformCanvas');
-
-  if (!spectralCanvas || !waveformCanvas) return;
-
-  spectralCtx = spectralCanvas.getContext('2d');
-  waveformCtx = waveformCanvas.getContext('2d');
-
-  if (!voicePool || !voicePool.master) return;
-
-  const analyser = audioCtx.createAnalyser();
-  voicePool.master.connect(analyser);
-  analyser.connect(audioCtx.destination);
-
-  spectralAnalyzer = new SpectralAnalyzer(analyser, 64);
-
-  startSpectralAnimation();
-}
-
-function toggleSpectralDisplay() {
-  const panel = document.getElementById('visualizationPanel');
-  const canvas = document.getElementById('spectralCanvas');
-  const toggle = document.getElementById('specToggle');
-
-  if (canvas.style.display === 'none') {
-    canvas.style.display = 'block';
-    toggle.style.background = 'rgba(0,240,255,0.2)';
-    panel.style.display = 'block';
-    if (!spectralAnimId) startSpectralAnimation();
-  } else {
-    canvas.style.display = 'none';
-    toggle.style.background = '';
-    if (!document.getElementById('waveformCanvas').style.display ||
-        document.getElementById('waveformCanvas').style.display === 'none') {
-      panel.style.display = 'none';
-    }
-  }
-}
-
-function toggleWaveformDisplay() {
-  const panel = document.getElementById('visualizationPanel');
-  const canvas = document.getElementById('waveformCanvas');
-  const toggle = document.getElementById('waveToggle');
-
-  if (canvas.style.display === 'none') {
-    canvas.style.display = 'block';
-    toggle.style.background = 'rgba(0,240,255,0.2)';
-    panel.style.display = 'block';
-    if (!spectralAnimId) startSpectralAnimation();
-  } else {
-    canvas.style.display = 'none';
-    toggle.style.background = '';
-    if (!document.getElementById('spectralCanvas').style.display ||
-        document.getElementById('spectralCanvas').style.display === 'none') {
-      panel.style.display = 'none';
-    }
-  }
-}
-
-function startSpectralAnimation() {
-  if (!spectralAnalyzer || !spectralCtx || !waveformCtx) return;
-
-  function animate() {
-    const freqData = spectralAnalyzer.getFrequencyData();
-
-    if (document.getElementById('spectralCanvas').style.display !== 'none') {
-      drawSpectralBars(spectralCtx, freqData);
-    }
-
-    if (document.getElementById('waveformCanvas').style.display !== 'none') {
-      drawWaveform(waveformCtx, spectralAnalyzer.analyser);
-    }
-
-    updatePerformanceMetricsDisplay();
-
-    spectralAnimId = requestAnimationFrame(animate);
-  }
-
-  animate();
-}
-
-function drawSpectralBars(ctx, frequencyData) {
-  const canvas = ctx.canvas;
-  const width = canvas.width;
-  const height = canvas.height;
-
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, width, height);
-
-  const bandWidth = width / frequencyData.length;
-
-  for (let i = 0; i < frequencyData.length; i++) {
-    const value = Math.pow(frequencyData[i], 1.2);
-    const barHeight = value * height;
-    const x = i * bandWidth;
-
-    const hue = (i / frequencyData.length) * 360;
-    ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
-    ctx.globalAlpha = 0.8;
-    ctx.fillRect(x, height - barHeight, bandWidth - 1, barHeight);
-
-    ctx.globalAlpha = 1;
-  }
-
-  ctx.strokeStyle = 'rgba(0,240,255,0.1)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(0, 0, width, height);
-}
-
-function drawWaveform(ctx, analyser) {
-  const canvas = ctx.canvas;
-  const width = canvas.width;
-  const height = canvas.height;
-  const bufferLength = 2048;
-  const dataArray = new Uint8Array(bufferLength);
-
-  analyser.getByteTimeDomainData(dataArray);
-
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, width, height);
-
-  ctx.strokeStyle = '#00ff00';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-
-  const sliceWidth = width / bufferLength;
-  let x = 0;
-
-  for (let i = 0; i < bufferLength; i++) {
-    const v = dataArray[i] / 128;
-    const y = (v * height) / 2;
-
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-
-    x += sliceWidth;
-  }
-
-  ctx.lineTo(width, height / 2);
-  ctx.stroke();
-
-  if (isPlaying && audioCtx) {
-    const playheadX = (nextStepTime % (audioCtx.baseLatency + 0.1)) / (audioCtx.baseLatency + 0.1) * width;
-    ctx.strokeStyle = 'rgba(255,0,0,0.5)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(playheadX, 0);
-    ctx.lineTo(playheadX, height);
-    ctx.stroke();
-  }
-
-  ctx.strokeStyle = 'rgba(0,240,255,0.1)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(0, 0, width, height);
 }
 
 function updatePerformanceMetricsDisplay() {
@@ -10805,13 +10579,13 @@ function initVideoExportCanvas() {
   videoExportCanvas.height = 720;
   videoExportCtx = videoExportCanvas.getContext('2d');
 
-  if (!analyser && audioCtx) {
+  if (!analyser && audioCtx && masteringState.meterBus) {
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 2048;
     analyser.smoothingTimeConstant = videoExportAnalyzer.waveform.smoothing;
 
     const splitter = audioCtx.createChannelSplitter();
-    masterGain.connect(splitter);
+    masteringState.meterBus.connect(splitter);
     splitter.connect(analyser, 0);
 
     dataArray = new Uint8Array(analyser.frequencyBinCount);
@@ -10929,23 +10703,39 @@ function updateVideoCanvas() {
 }
 
 function startVideoExport() {
-  if (!audioCtx) {
-    alert('Start playback first');
+  // Master-Ausgang (Meter-Bus aus Phase 30) ist die Audioquelle; er existiert erst nach dem ersten Play
+  if (!audioCtx || !connectMasteringMeters()) {
+    alert('Bitte zuerst Play druecken, damit der Master-Ausgang existiert.');
     return;
   }
+  if (isRecording) return;
 
   initVideoExportCanvas();
 
   const canvas = videoExportCanvas;
   const stream = canvas.captureStream(30);
 
-  const audioDestination = audioCtx.createMediaStreamAudioDestination();
-  masterGain.connect(audioDestination);
+  // Audio: Abzweig vom Master-Ausgang als MediaStream-Spur. Fehlt die API (manche Builds ohne
+  // WebRTC/MediaStream), wird nur das Bild aufgenommen und das im Status vermerkt.
+  let audioNote = '';
+  if (typeof audioCtx.createMediaStreamAudioDestination === 'function') {
+    videoExportAudioDest = audioCtx.createMediaStreamAudioDestination();
+    masteringState.meterBus.connect(videoExportAudioDest);
+    const track = videoExportAudioDest.stream.getAudioTracks()[0];
+    if (track) stream.addTrack(track); else audioNote = ' (ohne Ton: keine Audiospur verfuegbar)';
+  } else {
+    audioNote = ' (ohne Ton: Browser bietet keine MediaStream-Audioausgabe)';
+  }
+  const withAudio = stream.getAudioTracks().length > 0;
 
-  stream.addTrack(audioDestination.stream.getAudioTracks()[0]);
+  // VP9 ist nicht ueberall verfuegbar; auf den ersten unterstuetzten WebM-Typ zurueckfallen
+  const candidates = withAudio
+    ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+    : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+  const mimeType = candidates.find(t => !MediaRecorder.isTypeSupported || MediaRecorder.isTypeSupported(t));
 
   mediaRecorder = new MediaRecorder(stream, {
-    mimeType: 'video/webm;codecs=vp9,opus',
+    mimeType,
     videoBitsPerSecond: 5000000,
     audioBitsPerSecond: 192000
   });
@@ -10957,7 +10747,7 @@ function startVideoExport() {
   mediaRecorder.start();
   isRecording = true;
 
-  updateVideoExportStatus('Recording video...', 'recording');
+  updateVideoExportStatus('Recording video...' + audioNote, 'recording');
   document.getElementById('videoExportStartBtn').disabled = true;
   document.getElementById('videoExportStopBtn').disabled = false;
 
@@ -10981,6 +10771,10 @@ function stopVideoExport() {
 }
 
 function completeVideoExport() {
+  if (videoExportAudioDest) {
+    try { masteringState.meterBus.disconnect(videoExportAudioDest); } catch (e) {}
+    videoExportAudioDest = null;
+  }
   const blob = new Blob(recordedChunks, { type: 'video/webm' });
   const url = URL.createObjectURL(blob);
 
@@ -12600,7 +12394,7 @@ function playStemMix(startTime = 0) {
       source.connect(gainNode);
     }
 
-    gainNode.connect(masterGain);
+    gainNode.connect(globalMasterGain || audioCtx.destination);
 
     stemSeparationState.stemSources[name] = source;
     stemSeparationState.stemGainNodes[name] = gainNode;
@@ -15944,11 +15738,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Phase 19: Initialize Macro Controls
   initMacroControls();
-
-  // Phase 20: Initialize Spectral Display
-  setTimeout(() => {
-    initSpectralDisplay();
-  }, 100);
 
   // Phase 20c: Initialize Automation Visualizers
   setTimeout(() => {
