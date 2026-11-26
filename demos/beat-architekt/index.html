@@ -2823,23 +2823,9 @@ function applySoftLimiter(audioBuffer, threshold, lookahead) {
   return output;
 }
 
-// === PHASE 30.2: MULTI-FORMAT EXPORT (STUBS) ===
+// === PHASE 30.2: MULTI-FORMAT EXPORT ===
 
-// Placeholder for export functions (to be implemented)
-function resampleAudio(buffer, targetSampleRate) {
-  // Stub: actual resampling would use OfflineAudioContext
-  return buffer;
-}
-
-function normalizeToLoudness(buffer, targetLUFS) {
-  // Stub: actual loudness normalization would calculate and apply gain
-  return buffer;
-}
-
-function encodeToFormat(buffer, format, bitrate, metadata) {
-  // Stub: actual encoding would use wasm libraries
-  return new Blob([buffer], {type: 'audio/wav'});
-}
+// Implementierungen: resampleAudio/normalizeToLoudness weiter unten, Encoder siehe Phase 35 (Delivery-Encoder)
 
 // === PHASE 30.3: DISTRIBUTION INTEGRATION (STUBS) ===
 
@@ -2983,10 +2969,12 @@ let masteringState = {
 let exportState = {
   presets: {
     // truePeak: Obergrenze in dBTP nach dem Limiter (-1 dBTP laut Plattform-Vorgaben bzw. AES TD1004)
+    // bitDepth: Wortbreite fuer WAV/AIFF (Phase 35); verlustbehaftete Formate ignorieren sie
     spotify: { format: 'mp3', bitrate: 320, sampleRate: 44100, loudness: -14.0, truePeak: -1.0 },
     appleMusic: { format: 'aac', bitrate: 256, sampleRate: 48000, loudness: -16.0, truePeak: -1.0 },
-    youtube: { format: 'wav', bitrate: null, sampleRate: 48000, loudness: -13.0, truePeak: -1.0 },
-    archiveQuality: { format: 'aiff', bitrate: null, sampleRate: 48000, loudness: -18.0, truePeak: -1.0 }
+    youtube: { format: 'wav', bitrate: null, sampleRate: 48000, loudness: -13.0, truePeak: -1.0, bitDepth: 24 },
+    archiveQuality: { format: 'aiff', bitrate: null, sampleRate: 48000, loudness: -18.0, truePeak: -1.0, bitDepth: 24 },
+    webOpus: { format: 'opus', bitrate: 160, sampleRate: 48000, loudness: -14.0, truePeak: -1.0 }
   },
   queue: [],
   currentFormat: null,
@@ -3663,183 +3651,467 @@ function calculateLUFS(buffer) {
   return lk(relGated.reduce((a, b) => a + b, 0) / relGated.length);
 }
 
-// Phase 30.2: Encode to WAV (built-in)
-function encodeWAV(buffer) {
-  const channelData = [];
-  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-    channelData.push(buffer.getChannelData(ch));
-  }
+// ===== Phase 35: Delivery-Encoder =====
+// Echte Dateien statt umetikettiertem WAV. Jeder Encoder liefert { blob, ext, mime, info } oder wirft
+// DeliveryEncodeError mit einer Meldung fuer die Export-Queue. Es gibt keinen stillen WAV-Ersatz mehr:
+// eine .mp3, die in Wahrheit WAV enthaelt, faellt erst beim Empfaenger auf.
+//   WAV   PCM 16/24 Bit, TPDF-Dither, LIST/INFO-Metadaten
+//   AIFF  PCM 16/24 Bit big-endian, COMM/SSND, NAME/AUTH/ANNO
+//   MP3   lamejs (CBR), ID3v2.4 inkl. Cover (APIC) und ISRC (TSRC)
+//   AAC   WebCodecs (mp4a.40.2) im M4A-Container, iTunes-Tags inkl. Cover; Encoder fehlt in manchen Browsern
+//   Opus  WebCodecs im Ogg-Container (RFC 7845), Vorbis-Kommentare
 
-  const length = buffer.length * buffer.numberOfChannels * 2;
-  const arrayBuffer = new ArrayBuffer(44 + length);
-  const view = new DataView(arrayBuffer);
+class DeliveryEncodeError extends Error {
+  constructor(message) { super(message); this.name = 'DeliveryEncodeError'; }
+}
 
-  const writeString = (offset, string) => {
-    for (let i = 0; i < string.length; i++) {
-      view.setUint8(offset + i, string.charCodeAt(i));
-    }
+const DELIVERY_FORMATS = {
+  wav: { ext: 'wav', mime: 'audio/wav', label: 'WAV' },
+  aiff: { ext: 'aiff', mime: 'audio/aiff', label: 'AIFF' },
+  mp3: { ext: 'mp3', mime: 'audio/mpeg', label: 'MP3' },
+  aac: { ext: 'm4a', mime: 'audio/mp4', label: 'AAC (M4A)' },
+  opus: { ext: 'opus', mime: 'audio/ogg; codecs=opus', label: 'Opus (Ogg)' }
+};
+const DELIVERY_ENCODER_NAME = 'Beat Architekt (Phase 35 Delivery-Encoder)';
+const LAMEJS_URL = 'https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js';
+
+// Metadaten aus dem Release-Editor (Phase 30.3), mit Rueckfall auf den Dateinamen
+function deliveryMetadata(fallbackTitle) {
+  const m = (typeof distributionState !== 'undefined' && distributionState.releaseMetadata) || {};
+  const s = v => (typeof v === 'string' ? v.trim() : '');
+  return {
+    title: s(m.title) || fallbackTitle || 'Untitled',
+    artist: s(m.artist) || 'Beat Architekt',
+    album: s(m.album),
+    genre: s(m.genre),
+    date: s(m.releaseDate),
+    isrc: s(m.isrc).replace(/-/g, '').toUpperCase(),
+    coverFile: m.coverArtFile || null
   };
-
-  writeString(0, 'RIFF');
-  view.setUint32(4, 36 + length, true);
-  writeString(8, 'WAVE');
-  writeString(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, buffer.numberOfChannels, true);
-  view.setUint32(24, buffer.sampleRate, true);
-  view.setUint32(28, buffer.sampleRate * buffer.numberOfChannels * 2, true);
-  view.setUint16(32, buffer.numberOfChannels * 2, true);
-  view.setUint16(34, 16, true);
-  writeString(36, 'data');
-  view.setUint32(40, length, true);
-
-  let offset = 44;
-  for (let i = 0; i < buffer.length; i++) {
-    for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-      const sample = Math.max(-1, Math.min(1, channelData[ch][i]));
-      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
-      offset += 2;
-    }
-  }
-
-  return new Blob([arrayBuffer], { type: 'audio/wav' });
 }
 
-// Phase 30.2: MP3 encoding (WASM with fallback)
-async function encodeMP3(buffer, bitrate = 320) {
-  try {
-    if (!window.lamejs) {
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/lamejs@1.2.0/lame.min.js';
-      await new Promise((resolve, reject) => {
-        script.onload = resolve;
-        script.onerror = reject;
-        document.head.appendChild(script);
-      });
-    }
-
-    const encoder = new window.lamejs.Mp3Encoder(buffer.numberOfChannels, buffer.sampleRate, bitrate);
-    const samples = [];
-    for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-      samples.push(Array.from(buffer.getChannelData(ch)));
-    }
-
-    const mp3Data = [];
-    const sampleBlockSize = 1152;
-    for (let i = 0; i < buffer.length; i += sampleBlockSize) {
-      const left = samples[0].slice(i, i + sampleBlockSize);
-      const right = samples.length > 1 ? samples[1].slice(i, i + sampleBlockSize) : left;
-      const mp3buf = encoder.encodeBuffer(left, right);
-      if (mp3buf.length > 0) mp3Data.push(mp3buf);
-    }
-    mp3Data.push(encoder.flush());
-
-    return new Blob(mp3Data, { type: 'audio/mpeg' });
-  } catch (e) {
-    console.warn('MP3 encoding failed, returning WAV fallback:', e);
-    return encodeWAV(buffer);
-  }
+async function deliveryCover(meta) {
+  const f = meta && meta.coverFile;
+  if (!f || typeof f.arrayBuffer !== 'function') return null;
+  const type = (f.type || '').toLowerCase();
+  if (type !== 'image/jpeg' && type !== 'image/png') return null;
+  return { mime: type, bytes: new Uint8Array(await f.arrayBuffer()) };
 }
 
-// Phase 30.2: AIFF encoding
-async function encodeAIFF(buffer) {
-  const wav = encodeWAV(buffer);
-  const wavBuffer = await wav.arrayBuffer();
-  const view = new DataView(wavBuffer);
-
-  const aiffBuffer = new ArrayBuffer(wavBuffer.byteLength);
-  const aiffView = new DataView(aiffBuffer);
-
-  const writeString = (offset, string) => {
-    for (let i = 0; i < string.length; i++) {
-      aiffView.setUint8(offset + i, string.charCodeAt(i));
-    }
-  };
-
-  writeString(0, 'FORM');
-  aiffView.setUint32(4, aiffBuffer.byteLength - 8, false);
-  writeString(8, 'AIFF');
-
-  for (let i = 12; i < wavBuffer.byteLength; i++) {
-    aiffView.setUint8(i, view.getUint8(i));
-  }
-
-  return new Blob([aiffBuffer], { type: 'audio/aiff' });
+// ---------- Byte-Helfer ----------
+const textEnc = new TextEncoder();
+function concatBytes(parts) {
+  let n = 0;
+  for (const p of parts) n += p.length;
+  const out = new Uint8Array(n);
+  let o = 0;
+  for (const p of parts) { out.set(p, o); o += p.length; }
+  return out;
 }
+function u8(...v) { return Uint8Array.from(v); }
+function u16be(v) { return u8((v >>> 8) & 255, v & 255); }
+function u32be(v) { return u8((v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255); }
+function u16le(v) { return u8(v & 255, (v >>> 8) & 255); }
+function u32le(v) { return u8(v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255); }
+function ascii(s) { return Uint8Array.from(s, c => c.charCodeAt(0) & 255); }
 
-// Phase 30.2: Opus encoding (WASM fallback)
-async function encodeOpus(buffer) {
-  try {
-    if (!window.OpusEncoder) {
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/opus-wasm@0.1.0/dist/opus.min.js';
-      await new Promise((resolve, reject) => {
-        script.onload = resolve;
-        script.onerror = reject;
-        document.head.appendChild(script);
-      });
-    }
-
-    const encoder = new window.OpusEncoder(buffer.sampleRate, buffer.numberOfChannels);
-    const samples = [];
-    for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-      samples.push(Array.from(buffer.getChannelData(ch)));
-    }
-
-    const opusData = [];
-    const frameSize = 960;
-    for (let i = 0; i < buffer.length; i += frameSize) {
-      const frame = [];
-      for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-        frame.push(samples[ch].slice(i, i + frameSize));
+// ---------- PCM mit TPDF-Dither ----------
+// Dreieck-verteilter Dither von +/-1 LSB vor der Rundung (deterministischer PRNG, damit Exporte
+// reproduzierbar sind). Ohne Dither wuerde die Quantisierung leise Ausklaenge verzerren.
+function quantizePCM(channels, length, bitDepth, littleEndian) {
+  const bytesPer = bitDepth / 8;
+  const nch = channels.length;
+  const out = new Uint8Array(length * nch * bytesPer);
+  const max = Math.pow(2, bitDepth - 1);
+  let seed = 0x9e3779b9;
+  const rnd = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) / 4294967296; };
+  let o = 0;
+  for (let i = 0; i < length; i++) {
+    for (let ch = 0; ch < nch; ch++) {
+      const x = channels[ch][i] * max + (rnd() - rnd());
+      let q = Math.round(x);
+      if (q > max - 1) q = max - 1; else if (q < -max) q = -max;
+      if (bitDepth === 16) {
+        if (littleEndian) { out[o] = q & 255; out[o + 1] = (q >> 8) & 255; } else { out[o] = (q >> 8) & 255; out[o + 1] = q & 255; }
+      } else {
+        if (littleEndian) { out[o] = q & 255; out[o + 1] = (q >> 8) & 255; out[o + 2] = (q >> 16) & 255; } else { out[o] = (q >> 16) & 255; out[o + 1] = (q >> 8) & 255; out[o + 2] = q & 255; }
       }
-      const encoded = encoder.encode(frame);
-      if (encoded) opusData.push(encoded);
+      o += bytesPer;
     }
-
-    return new Blob(opusData, { type: 'audio/opus' });
-  } catch (e) {
-    console.warn('Opus encoding failed, returning WAV fallback:', e);
-    return encodeWAV(buffer);
   }
+  return out;
 }
 
-// Phase 30.2: AAC encoding (fallback)
-async function encodeAAC(buffer) {
-  try {
-    console.warn('AAC encoding not yet implemented in browser, using WAV fallback');
-    return encodeWAV(buffer);
-  } catch (e) {
-    return encodeWAV(buffer);
-  }
+function bufferChannels(buffer) {
+  const ch = [];
+  for (let c = 0; c < buffer.numberOfChannels; c++) ch.push(buffer.getChannelData(c));
+  return ch;
 }
 
-// Phase 30.2: Main format dispatcher
-async function encodeToFormat(buffer, format, bitrate, metadata) {
-  try {
-    switch (format) {
-      case 'mp3':
-        return encodeMP3(buffer, bitrate || 320);
-      case 'aiff':
-        return encodeAIFF(buffer);
-      case 'aac':
-        return encodeAAC(buffer);
-      case 'opus':
-        return encodeOpus(buffer);
-      case 'wav':
-      default:
-        return Promise.resolve(encodeWAV(buffer));
+// ---------- WAV ----------
+function riffChunk(id, data) {
+  const pad = data.length & 1 ? u8(0) : new Uint8Array(0);
+  return concatBytes([ascii(id), u32le(data.length), data, pad]);
+}
+
+function encodeWAV(buffer, opts = {}) {
+  const bitDepth = opts.bitDepth === 24 ? 24 : 16;
+  const nch = buffer.numberOfChannels, sr = buffer.sampleRate;
+  const blockAlign = nch * bitDepth / 8;
+  const fmt = concatBytes([u16le(1), u16le(nch), u32le(sr), u32le(sr * blockAlign), u16le(blockAlign), u16le(bitDepth)]);
+  const data = quantizePCM(bufferChannels(buffer), buffer.length, bitDepth, true);
+  const chunks = [riffChunk('fmt ', fmt), riffChunk('data', data)];
+  const m = opts.metadata;
+  if (m) {
+    const info = [];
+    const add = (id, v) => { if (v) info.push(riffChunk(id, concatBytes([textEnc.encode(v), u8(0)]))); };
+    add('INAM', m.title); add('IART', m.artist); add('IPRD', m.album); add('IGNR', m.genre);
+    add('ICRD', m.date); add('ICMT', m.isrc ? 'ISRC ' + m.isrc : ''); add('ISFT', DELIVERY_ENCODER_NAME);
+    if (info.length) chunks.push(riffChunk('LIST', concatBytes([ascii('INFO'), ...info])));
+  }
+  const body = concatBytes([ascii('WAVE'), ...chunks]);
+  return new Blob([concatBytes([ascii('RIFF'), u32le(body.length), body])], { type: 'audio/wav' });
+}
+
+// ---------- AIFF ----------
+// Abtastrate als 80-Bit IEEE-754 Extended (big-endian), wie es der COMM-Chunk verlangt
+function float80(value) {
+  const out = new Uint8Array(10);
+  if (!(value > 0)) return out;
+  let exp = Math.floor(Math.log2(value));
+  let mant = value / Math.pow(2, exp);           // 1 <= mant < 2
+  if (mant >= 2) { mant /= 2; exp++; }
+  const e = exp + 16383;
+  out[0] = (e >> 8) & 0x7f; out[1] = e & 255;
+  const hi = Math.floor(mant * 2147483648);       // 2^31: explizites fuehrendes Bit
+  const lo = Math.floor((mant * 2147483648 - hi) * 4294967296);
+  out.set(u32be(hi >>> 0), 2); out.set(u32be(lo >>> 0), 6);
+  return out;
+}
+
+function iffChunk(id, data) {
+  const pad = data.length & 1 ? u8(0) : new Uint8Array(0);
+  return concatBytes([ascii(id), u32be(data.length), data, pad]);
+}
+
+function encodeAIFF(buffer, opts = {}) {
+  const bitDepth = opts.bitDepth === 24 ? 24 : 16;
+  const nch = buffer.numberOfChannels;
+  const comm = concatBytes([u16be(nch), u32be(buffer.length), u16be(bitDepth), float80(buffer.sampleRate)]);
+  const ssnd = concatBytes([u32be(0), u32be(0), quantizePCM(bufferChannels(buffer), buffer.length, bitDepth, false)]);
+  const chunks = [iffChunk('COMM', comm)];
+  const m = opts.metadata;
+  if (m) {
+    if (m.title) chunks.push(iffChunk('NAME', textEnc.encode(m.title)));
+    if (m.artist) chunks.push(iffChunk('AUTH', textEnc.encode(m.artist)));
+    const anno = [m.album && 'Album: ' + m.album, m.genre && 'Genre: ' + m.genre, m.date && 'Date: ' + m.date,
+      m.isrc && 'ISRC: ' + m.isrc, 'Encoder: ' + DELIVERY_ENCODER_NAME].filter(Boolean).join('; ');
+    chunks.push(iffChunk('ANNO', textEnc.encode(anno)));
+  }
+  chunks.push(iffChunk('SSND', ssnd));
+  const body = concatBytes([ascii('AIFF'), ...chunks]);
+  return new Blob([concatBytes([ascii('FORM'), u32be(body.length), body])], { type: 'audio/aiff' });
+}
+
+// ---------- ID3v2.4 ----------
+function synchsafe(n) { return u8((n >>> 21) & 127, (n >>> 14) & 127, (n >>> 7) & 127, n & 127); }
+
+function buildID3v24(meta, cover) {
+  const frames = [];
+  const frame = (id, data) => frames.push(concatBytes([ascii(id), synchsafe(data.length), u8(0, 0), data]));
+  const text = (id, v) => { if (v) frame(id, concatBytes([u8(3), textEnc.encode(v)])); }; // 3 = UTF-8
+  text('TIT2', meta.title); text('TPE1', meta.artist); text('TALB', meta.album); text('TCON', meta.genre);
+  text('TDRC', meta.date); text('TSRC', meta.isrc); text('TSSE', DELIVERY_ENCODER_NAME);
+  if (cover) frame('APIC', concatBytes([u8(3), ascii(cover.mime), u8(0), u8(3), u8(0), cover.bytes])); // 3 = Front Cover
+  const body = concatBytes(frames);
+  return concatBytes([ascii('ID3'), u8(4, 0, 0), synchsafe(body.length), body]);
+}
+
+// ---------- MP3 (lamejs) ----------
+let lamejsLoading = null;
+function loadLamejs() {
+  if (window.lamejs) return Promise.resolve(window.lamejs);
+  if (!lamejsLoading) {
+    lamejsLoading = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = LAMEJS_URL;
+      s.onload = () => (window.lamejs ? resolve(window.lamejs) : reject(new Error('lamejs nicht initialisiert')));
+      s.onerror = () => reject(new Error('lamejs nicht ladbar'));
+      document.head.appendChild(s);
+    }).catch(e => { lamejsLoading = null; throw e; });
+  }
+  return lamejsLoading;
+}
+
+async function encodeMP3(buffer, opts = {}) {
+  const kbps = opts.bitrate || 320;
+  if (![32000, 44100, 48000].includes(buffer.sampleRate)) {
+    throw new DeliveryEncodeError(`MP3: ${buffer.sampleRate} Hz wird nicht unterstuetzt (32/44,1/48 kHz)`);
+  }
+  let lame;
+  try { lame = await loadLamejs(); } catch (e) {
+    throw new DeliveryEncodeError('MP3-Encoder (lamejs) nicht ladbar: keine Verbindung zum CDN. Bitte WAV exportieren.');
+  }
+  const nch = Math.min(2, buffer.numberOfChannels);
+  // lamejs erwartet Int16-Samples; vorher wurden Float32-Werte uebergeben (Ergebnis: Stille/Rauschen)
+  const pcm = quantizePCM(bufferChannels(buffer).slice(0, nch), buffer.length, 16, true);
+  const inter = new Int16Array(pcm.buffer);
+  const left = new Int16Array(buffer.length), right = nch > 1 ? new Int16Array(buffer.length) : null;
+  for (let i = 0; i < buffer.length; i++) { left[i] = inter[i * nch]; if (right) right[i] = inter[i * nch + 1]; }
+  const enc = new lame.Mp3Encoder(nch, buffer.sampleRate, kbps);
+  const parts = [buildID3v24(opts.metadata || {}, opts.cover)];
+  const block = 1152 * 8;
+  for (let i = 0; i < buffer.length; i += block) {
+    const l = left.subarray(i, i + block);
+    const out = right ? enc.encodeBuffer(l, right.subarray(i, i + block)) : enc.encodeBuffer(l);
+    if (out.length) parts.push(new Uint8Array(out.buffer, out.byteOffset, out.length).slice());
+    if (opts.onProgress) opts.onProgress(i / buffer.length);
+  }
+  const tail = enc.flush();
+  if (tail.length) parts.push(new Uint8Array(tail.buffer, tail.byteOffset, tail.length).slice());
+  return { blob: new Blob(parts, { type: 'audio/mpeg' }), info: `MP3 ${kbps} kbps CBR, ${buffer.sampleRate / 1000} kHz` };
+}
+
+// ---------- WebCodecs (gemeinsam fuer Opus und AAC) ----------
+async function encodeWithWebCodecs(buffer, config, onProgress) {
+  if (typeof AudioEncoder === 'undefined' || typeof AudioData === 'undefined') {
+    throw new DeliveryEncodeError('WebCodecs (AudioEncoder) fehlt in diesem Browser');
+  }
+  let support;
+  try { support = await AudioEncoder.isConfigSupported(config); } catch (e) { support = { supported: false }; }
+  if (!support.supported) return null;
+  const chunks = [];
+  let decoderConfig = null, failure = null;
+  const encoder = new AudioEncoder({
+    output: (chunk, meta) => {
+      const data = new Uint8Array(chunk.byteLength);
+      chunk.copyTo(data);
+      chunks.push({ data, timestamp: chunk.timestamp, duration: chunk.duration });
+      if (meta && meta.decoderConfig) decoderConfig = meta.decoderConfig;
+    },
+    error: e => { failure = e; }
+  });
+  encoder.configure(config);
+  const nch = config.numberOfChannels, sr = config.sampleRate;
+  const step = sr; // 1 s je AudioData
+  for (let i = 0; i < buffer.length && !failure; i += step) {
+    const n = Math.min(step, buffer.length - i);
+    const planar = new Float32Array(n * nch);
+    for (let ch = 0; ch < nch; ch++) planar.set(buffer.getChannelData(Math.min(ch, buffer.numberOfChannels - 1)).subarray(i, i + n), ch * n);
+    const ad = new AudioData({ format: 'f32-planar', sampleRate: sr, numberOfFrames: n, numberOfChannels: nch, timestamp: Math.round(i * 1e6 / sr), data: planar });
+    encoder.encode(ad);
+    ad.close();
+    if (encoder.encodeQueueSize > 8) await new Promise(r => setTimeout(r, 0));
+    if (onProgress) onProgress(i / buffer.length);
+  }
+  await encoder.flush();
+  encoder.close();
+  if (failure) throw new DeliveryEncodeError(`${config.codec}-Encoder: ${failure.message || failure}`);
+  return { chunks, decoderConfig };
+}
+
+async function ensureSampleRate(buffer, sr) {
+  if (buffer.sampleRate === sr) return buffer;
+  return await resampleAudio(buffer, sr);
+}
+
+// ---------- Opus im Ogg-Container (RFC 7845 / RFC 3533) ----------
+const OGG_CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let r = i << 24;
+    for (let k = 0; k < 8; k++) r = r & 0x80000000 ? (r << 1) ^ 0x04c11db7 : r << 1;
+    t[i] = r >>> 0;
+  }
+  return t;
+})();
+
+function oggCrc(bytes) {
+  let crc = 0;
+  for (let i = 0; i < bytes.length; i++) crc = ((crc << 8) ^ OGG_CRC_TABLE[((crc >>> 24) ^ bytes[i]) & 255]) >>> 0;
+  return crc >>> 0;
+}
+
+function oggPage(packets, granule, serial, seq, flags) {
+  const lacing = [];
+  for (const p of packets) {
+    let n = p.length;
+    while (n >= 255) { lacing.push(255); n -= 255; }
+    lacing.push(n);
+  }
+  const header = new Uint8Array(27 + lacing.length);
+  const dv = new DataView(header.buffer);
+  header.set(ascii('OggS'), 0);
+  header[4] = 0; header[5] = flags;
+  dv.setUint32(6, granule % 4294967296, true); dv.setUint32(10, Math.floor(granule / 4294967296), true);
+  dv.setUint32(14, serial, true); dv.setUint32(18, seq, true); dv.setUint32(22, 0, true);
+  header[26] = lacing.length; header.set(lacing, 27);
+  const page = concatBytes([header, ...packets]);
+  new DataView(page.buffer).setUint32(22, oggCrc(page), true);
+  return page;
+}
+
+function vorbisComments(vendor, comments) {
+  const v = textEnc.encode(vendor);
+  const parts = [u32le(v.length), v, u32le(comments.length)];
+  for (const c of comments) { const b = textEnc.encode(c); parts.push(u32le(b.length), b); }
+  return concatBytes(parts);
+}
+
+// packets: [{ data, samples }] mit samples = Dauer in 48-kHz-Samples
+function buildOggOpus({ packets, channels, inputSampleRate, preSkip, totalSamples, metadata }) {
+  const serial = (Math.random() * 4294967295) >>> 0;
+  const head = concatBytes([ascii('OpusHead'), u8(1, channels), u16le(preSkip), u32le(inputSampleRate), u16le(0), u8(0)]);
+  const m = metadata || {};
+  const comments = [['TITLE', m.title], ['ARTIST', m.artist], ['ALBUM', m.album], ['GENRE', m.genre], ['DATE', m.date], ['ISRC', m.isrc], ['ENCODER', DELIVERY_ENCODER_NAME]]
+    .filter(([, v]) => v).map(([k, v]) => `${k}=${v}`);
+  const tags = concatBytes([ascii('OpusTags'), vorbisComments('Beat Architekt', comments)]);
+  const pages = [oggPage([head], 0, serial, 0, 0x02), oggPage([tags], 0, serial, 1, 0)];
+  // Granule = Zahl der decodierten Samples inkl. der Pre-Skip-Samples (RFC 7845, Abschnitt 4); sie beginnt bei 0.
+  // Erst die letzte Seite wird auf Pre-Skip + Originallaenge begrenzt.
+  let seq = 2, granule = 0, page = [], segs = 0;
+  const endGranule = preSkip + totalSamples;
+  for (let i = 0; i < packets.length; i++) {
+    const p = packets[i];
+    const need = Math.floor(p.data.length / 255) + 1;
+    if (page.length && segs + need > 255) {
+      pages.push(oggPage(page, granule, serial, seq++, 0));
+      page = []; segs = 0;
     }
-  } catch (e) {
-    console.error('Encoding error:', e);
-    return Promise.resolve(encodeWAV(buffer));
+    page.push(p.data); segs += need; granule += p.samples;
   }
+  // Letzte Seite: Granule auf das Ende der Originallaenge setzen (schneidet das Encoder-Padding ab)
+  pages.push(oggPage(page, Math.min(granule, endGranule), serial, seq, 0x04));
+  return concatBytes(pages);
 }
 
-// Phase 30.2: Embed metadata
-function embedMetadata(blob, metadata, format) {
-  return blob;
+async function encodeOpus(buffer, opts = {}) {
+  const kbps = opts.bitrate || 160;
+  const pcm = await ensureSampleRate(buffer, 48000); // Ogg-Opus rechnet immer mit 48 kHz
+  const nch = Math.min(2, pcm.numberOfChannels);
+  const res = await encodeWithWebCodecs(pcm, { codec: 'opus', sampleRate: 48000, numberOfChannels: nch, bitrate: kbps * 1000 }, opts.onProgress);
+  if (!res) throw new DeliveryEncodeError('Opus-Encoder in diesem Browser nicht verfuegbar');
+  // Pre-Skip aus dem OpusHead des Encoders, sonst libopus-Standard (312 Samples bei 48 kHz)
+  let preSkip = 312;
+  const d = res.decoderConfig && res.decoderConfig.description;
+  if (d) {
+    const b = new Uint8Array(d.buffer ? d.buffer : d, d.byteOffset || 0, d.byteLength);
+    if (b.length >= 12 && String.fromCharCode(...b.subarray(0, 8)) === 'OpusHead') preSkip = b[10] | (b[11] << 8);
+  }
+  const packets = res.chunks.map(c => ({ data: c.data, samples: Math.round((c.duration || 20000) * 48000 / 1e6) }));
+  const bytes = buildOggOpus({ packets, channels: nch, inputSampleRate: buffer.sampleRate, preSkip, totalSamples: pcm.length, metadata: opts.metadata });
+  return { blob: new Blob([bytes], { type: 'audio/ogg; codecs=opus' }), info: `Opus ${kbps} kbps, 48 kHz, ${packets.length} Pakete` };
+}
+
+// ---------- AAC im M4A-Container (ISO/IEC 14496-12/-14) ----------
+function mp4box(type, ...payload) {
+  const body = concatBytes(payload);
+  return concatBytes([u32be(body.length + 8), ascii(type), body]);
+}
+function mp4full(type, version, flags, ...payload) {
+  return mp4box(type, u8(version, (flags >>> 16) & 255, (flags >>> 8) & 255, flags & 255), ...payload);
+}
+function mp4descr(tag, body) { // Deskriptor-Laenge immer 4-Byte-codiert
+  const n = body.length;
+  return concatBytes([u8(tag, 0x80 | ((n >>> 21) & 127), 0x80 | ((n >>> 14) & 127), 0x80 | ((n >>> 7) & 127), n & 127), body]);
+}
+const MP4_MATRIX = concatBytes([u32be(0x00010000), u32be(0), u32be(0), u32be(0), u32be(0x00010000), u32be(0), u32be(0), u32be(0), u32be(0x40000000)]);
+
+function ilstItems(meta, cover) {
+  const items = [];
+  const text = (name, v) => { if (v) items.push(mp4box(name, mp4box('data', u32be(1), u32be(0), textEnc.encode(v)))); };
+  text('©nam', meta.title); text('©ART', meta.artist); text('©alb', meta.album);
+  text('©gen', meta.genre); text('©day', meta.date); text('©too', DELIVERY_ENCODER_NAME);
+  if (meta.isrc) {
+    items.push(mp4box('----', mp4full('mean', 0, 0, textEnc.encode('com.apple.iTunes')), mp4full('name', 0, 0, textEnc.encode('ISRC')),
+      mp4box('data', u32be(1), u32be(0), textEnc.encode(meta.isrc))));
+  }
+  if (cover) items.push(mp4box('covr', mp4box('data', u32be(cover.mime === 'image/png' ? 14 : 13), u32be(0), cover.bytes)));
+  return items;
+}
+
+// frames: rohe AAC-Frames (ohne ADTS-Header), asc: AudioSpecificConfig
+function buildM4A({ frames, asc, sampleRate, channels, samplesPerFrame = 1024, bitrate = 0, metadata, cover, primingSamples = 0, totalSamples }) {
+  const n = frames.length;
+  const mediaDur = n * samplesPerFrame;
+  const playDur = totalSamples ? Math.min(totalSamples, mediaDur - primingSamples) : mediaDur - primingSamples;
+  const ftyp = mp4box('ftyp', ascii('M4A '), u32be(0), ascii('M4A '), ascii('mp42'), ascii('isom'));
+  const sizes = frames.map(f => f.length);
+  const maxSize = Math.max(...sizes, 0);
+  const avg = bitrate || Math.round(sizes.reduce((a, b) => a + b, 0) * 8 * sampleRate / Math.max(1, mediaDur));
+  const esds = mp4full('esds', 0, 0, mp4descr(3, concatBytes([
+    u16be(1), u8(0),
+    mp4descr(4, concatBytes([u8(0x40, 0x15), u8((maxSize >>> 16) & 255, (maxSize >>> 8) & 255, maxSize & 255), u32be(avg), u32be(avg), mp4descr(5, asc)])),
+    mp4descr(6, u8(2))
+  ])));
+  const mp4a = mp4box('mp4a', new Uint8Array(6), u16be(1), new Uint8Array(8), u16be(channels), u16be(16), u16be(0), u16be(0), u32be((sampleRate & 0xffff) * 65536), esds);
+  const buildMoov = mdatOffset => {
+    const stbl = mp4box('stbl',
+      mp4full('stsd', 0, 0, u32be(1), mp4a),
+      mp4full('stts', 0, 0, u32be(1), u32be(n), u32be(samplesPerFrame)),
+      mp4full('stsc', 0, 0, u32be(1), u32be(1), u32be(n), u32be(1)),
+      mp4full('stsz', 0, 0, u32be(0), u32be(n), ...sizes.map(u32be)),
+      mp4full('stco', 0, 0, u32be(1), u32be(mdatOffset)));
+    const minf = mp4box('minf', mp4full('smhd', 0, 0, u32be(0)),
+      mp4box('dinf', mp4full('dref', 0, 0, u32be(1), mp4full('url ', 0, 1))), stbl);
+    const mdia = mp4box('mdia',
+      mp4full('mdhd', 0, 0, u32be(0), u32be(0), u32be(sampleRate), u32be(mediaDur), u16be(0x55c4), u16be(0)),
+      mp4full('hdlr', 0, 0, u32be(0), ascii('soun'), new Uint8Array(12), textEnc.encode('SoundHandler'), u8(0)),
+      minf);
+    // Edit-Liste ueberspringt die Encoder-Vorlaufsamples (gapless)
+    const edts = primingSamples > 0
+      ? mp4box('edts', mp4full('elst', 0, 0, u32be(1), u32be(playDur), u32be(primingSamples), u32be(0x00010000)))
+      : new Uint8Array(0);
+    const tkhd = mp4full('tkhd', 0, 7, u32be(0), u32be(0), u32be(1), u32be(0), u32be(playDur), new Uint8Array(8),
+      u16be(0), u16be(0), u16be(0x0100), u16be(0), MP4_MATRIX, u32be(0), u32be(0));
+    const trak = mp4box('trak', tkhd, edts, mdia);
+    const mvhd = mp4full('mvhd', 0, 0, u32be(0), u32be(0), u32be(sampleRate), u32be(playDur), u32be(0x00010000), u16be(0x0100),
+      new Uint8Array(10), MP4_MATRIX, new Uint8Array(24), u32be(2));
+    const meta = mp4full('meta', 0, 0, mp4full('hdlr', 0, 0, u32be(0), ascii('mdir'), ascii('appl'), new Uint8Array(8), u8(0)),
+      mp4box('ilst', ...ilstItems(metadata || {}, cover)));
+    return mp4box('moov', mvhd, trak, mp4box('udta', meta));
+  };
+  const probe = buildMoov(0);
+  const mdatOffset = ftyp.length + probe.length + 8;
+  const moov = buildMoov(mdatOffset);
+  const mdat = concatBytes([u32be(8 + sizes.reduce((a, b) => a + b, 0)), ascii('mdat'), ...frames]);
+  return concatBytes([ftyp, moov, mdat]);
+}
+
+async function encodeAAC(buffer, opts = {}) {
+  const kbps = opts.bitrate || 256;
+  const nch = Math.min(2, buffer.numberOfChannels);
+  const res = await encodeWithWebCodecs(buffer, { codec: 'mp4a.40.2', sampleRate: buffer.sampleRate, numberOfChannels: nch, bitrate: kbps * 1000 }, opts.onProgress);
+  if (!res) {
+    throw new DeliveryEncodeError('AAC-Encoder in diesem Browser nicht verfuegbar (Chrome und Edge unter Windows/macOS bringen ihn mit). Alternative: WAV exportieren.');
+  }
+  const d = res.decoderConfig && res.decoderConfig.description;
+  if (!d) throw new DeliveryEncodeError('AAC: Encoder lieferte keine AudioSpecificConfig');
+  const asc = new Uint8Array(d.buffer ? d.buffer.slice(d.byteOffset || 0, (d.byteOffset || 0) + d.byteLength) : d);
+  const first = res.chunks[0];
+  const priming = first && first.timestamp < 0 ? Math.round(-first.timestamp * buffer.sampleRate / 1e6) : 0;
+  const bytes = buildM4A({ frames: res.chunks.map(c => c.data), asc, sampleRate: buffer.sampleRate, channels: nch, bitrate: kbps * 1000,
+    metadata: opts.metadata, cover: opts.cover, primingSamples: priming, totalSamples: buffer.length });
+  return { blob: new Blob([bytes], { type: 'audio/mp4' }), info: `AAC-LC ${kbps} kbps, ${buffer.sampleRate / 1000} kHz (M4A)` };
+}
+
+// ---------- Dispatcher ----------
+// opts: { bitDepth, metadata, onProgress }. Rueckgabe { blob, ext, mime, info }; Fehler als DeliveryEncodeError.
+async function encodeToFormat(buffer, format, bitrate, metadata, opts = {}) {
+  const fmt = DELIVERY_FORMATS[format];
+  if (!fmt) throw new DeliveryEncodeError(`Unbekanntes Format: ${format}`);
+  const meta = metadata || deliveryMetadata();
+  const cover = await deliveryCover(meta);
+  const common = { bitrate, metadata: meta, cover, onProgress: opts.onProgress, bitDepth: opts.bitDepth };
+  let res;
+  switch (format) {
+    case 'wav': res = { blob: encodeWAV(buffer, common), info: `WAV ${common.bitDepth === 24 ? 24 : 16} Bit, ${buffer.sampleRate / 1000} kHz` }; break;
+    case 'aiff': res = { blob: encodeAIFF(buffer, common), info: `AIFF ${common.bitDepth === 24 ? 24 : 16} Bit, ${buffer.sampleRate / 1000} kHz` }; break;
+    case 'mp3': res = await encodeMP3(buffer, common); break;
+    case 'aac': res = await encodeAAC(buffer, common); break;
+    case 'opus': res = await encodeOpus(buffer, common); break;
+  }
+  return { ...res, ext: fmt.ext, mime: fmt.mime };
 }
 
 // Phase 30: Initialize mastering
@@ -11975,7 +12247,7 @@ function toggleVideoExportVisualizer(analyzer) {
   </div>
 
   <div style="font-size:10px;color:var(--text-secondary);margin-bottom:10px;padding:8px;background:rgba(170,255,0,0.05);border-radius:4px;border-left:2px solid rgba(170,255,0,0.3)">
-    Export your master mix to WAV, MP3, AIFF, Opus, or AAC with loudness normalization and metadata embedding.
+    Export your master mix to WAV/AIFF (16/24 Bit), MP3, AAC (M4A) or Opus with loudness normalization, true-peak limiting and metadata (title, artist, album, genre, date, ISRC, cover) from the release editor.
   </div>
 
   <div style="margin-bottom:10px">
@@ -11984,7 +12256,8 @@ function toggleVideoExportVisualizer(analyzer) {
       <option value="spotify">🎵 Spotify (MP3, 320kbps, -14 LUFS)</option>
       <option value="appleMusic">🎵 Apple Music (AAC, 256kbps, -16 LKFS)</option>
       <option value="youtube">🎵 YouTube Music (WAV, 48kHz, -13 LUFS)</option>
-      <option value="archiveQuality">🎵 Archive Quality (AIFF, 48kHz, -18 LUFS)</option>
+      <option value="archiveQuality">🎵 Archive Quality (AIFF 24 Bit, 48kHz, -18 LUFS)</option>
+      <option value="webOpus">🎵 Web-Stream (Opus 160kbps, 48kHz, -14 LUFS)</option>
     </select>
   </div>
 
@@ -11994,6 +12267,7 @@ function toggleVideoExportVisualizer(analyzer) {
     <button onclick="queueExport('appleMusic')" style="padding:6px;background:rgba(0,240,255,0.15);border:1px solid var(--cyan);color:var(--cyan);border-radius:4px;cursor:pointer;font-size:9px;font-weight:600">📤 Apple</button>
     <button onclick="queueExport('youtube')" style="padding:6px;background:rgba(255,51,85,0.15);border:1px solid var(--red);color:var(--red);border-radius:4px;cursor:pointer;font-size:9px;font-weight:600">📤 YouTube</button>
     <button onclick="queueExport('archiveQuality')" style="padding:6px;background:rgba(255,204,0,0.15);border:1px solid var(--gold);color:var(--gold);border-radius:4px;cursor:pointer;font-size:9px;font-weight:600">📤 Archive</button>
+    <button onclick="queueExport('webOpus')" style="padding:6px;background:rgba(170,120,255,0.15);border:1px solid #aa78ff;color:#aa78ff;border-radius:4px;cursor:pointer;font-size:9px;font-weight:600;grid-column:1/-1">📤 Web-Stream (Opus)</button>
   </div>
 
   <div style="margin-bottom:10px;padding:8px;background:rgba(170,255,0,0.05);border-radius:4px;border:1px solid rgba(170,255,0,0.2)">
@@ -12004,7 +12278,7 @@ function toggleVideoExportVisualizer(analyzer) {
     </div>
   </div>
 
-  <div id="phase30QueueInfo" style="font-size:9px;color:var(--text-secondary);max-height:80px;overflow-y:auto;margin-bottom:10px;padding:8px;background:rgba(100,100,100,0.1);border-radius:4px;border:1px solid rgba(170,255,0,0.2)">
+  <div id="phase30QueueInfo" style="font-size:9px;color:var(--text-secondary);max-height:150px;overflow-y:auto;margin-bottom:10px;padding:8px;background:rgba(100,100,100,0.1);border-radius:4px;border:1px solid rgba(170,255,0,0.2)">
     <div style="color:var(--lime)">Queue empty. Add formats above.</div>
   </div>
 
@@ -13744,9 +14018,11 @@ function queueExport(preset) {
   exportState.queue.push({
     id: `exp_${Date.now()}`,
     filename: filename + '_' + preset,
+    title: filename,
     preset: preset,
     format: presetData.format,
     bitrate: presetData.bitrate,
+    bitDepth: presetData.bitDepth || 16,
     sampleRate: presetData.sampleRate,
     loudness: presetData.loudness,
     truePeak: presetData.truePeak !== undefined ? presetData.truePeak : -1.0,
@@ -13766,10 +14042,15 @@ function updateExportQueueUI() {
   }
 
   let html = `<div style="color:var(--lime);font-weight:600;margin-bottom:4px">📋 Queue (${exportState.queue.length}):</div>`;
+  const esc = v => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   exportState.queue.forEach((exp, idx) => {
-    html += `<div style="font-size:8px;color:var(--text-secondary);margin:4px 0;padding:2px;display:flex;justify-content:space-between">
-      <span>${idx + 1}. ${exp.filename}</span>
-      <span style="color:${exp.status === 'completed' ? 'var(--lime)' : 'var(--text-secondary)'}">${exp.status}</span>
+    const color = exp.status === 'completed' ? 'var(--lime)' : exp.status === 'failed' ? 'var(--red)' : 'var(--text-secondary)';
+    // Bei Fehlern den Grund zeigen (z. B. fehlender AAC-Encoder), sonst die tatsaechlich erzeugte Datei
+    const detail = exp.status === 'failed' && exp.error ? exp.error : (exp.result && exp.result.info) || '';
+    html += `<div style="font-size:8px;color:var(--text-secondary);margin:4px 0;padding:2px">
+      <div style="display:flex;justify-content:space-between"><span>${idx + 1}. ${esc(exp.filename)}</span>
+      <span style="color:${color}">${esc(exp.status)}</span></div>
+      ${detail ? `<div class="export-detail" style="color:${color};opacity:0.85">${esc(detail)}</div>` : ''}
     </div>`;
   });
   queueInfo.innerHTML = html;
@@ -13792,11 +14073,13 @@ async function processExportQueue() {
       updateExportQueueUI();
 
       try {
+        exportTask.error = null;
         await performExport(exportTask);
         exportTask.status = 'completed';
       } catch (err) {
         console.error('Export error:', err);
         exportTask.status = 'failed';
+        exportTask.error = err && err.message ? err.message : String(err);
       }
     }
   } finally {
@@ -13838,16 +14121,19 @@ async function performExport(exportTask) {
       (mastered.limitedDb < -0.05 ? ` · Limiter ${mastered.limitedDb.toFixed(1)} dB` : '');
     document.getElementById('phase30ProgressBar').querySelector('div').style.width = '75%';
 
-    const blob = await encodeToFormat(buffer, exportTask.format, exportTask.bitrate, {
-      title: exportTask.filename,
-      artist: 'Beat Architekt',
-      album: 'Export'
-    });
+    // Phase 35: echte Encoder; Metadaten aus dem Release-Editor (Titel faellt auf den Dateinamen zurueck)
+    const encoded = await encodeToFormat(buffer, exportTask.format, exportTask.bitrate,
+      deliveryMetadata(exportTask.title || exportTask.filename), {
+        bitDepth: exportTask.bitDepth,
+        onProgress: f => { bar.style.width = (75 + f * 25).toFixed(0) + '%'; }
+      });
+    exportTask.result.info = `${encoded.info} · ${mastered.lufs.toFixed(1)} LUFS · ${mastered.truePeak.toFixed(1)} dBTP`;
+    exportTask.result.bytes = encoded.blob.size;
 
-    const url = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(encoded.blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = exportTask.filename + (exportTask.format === 'mp3' ? '.mp3' : exportTask.format === 'aiff' ? '.aiff' : exportTask.format === 'aac' ? '.aac' : exportTask.format === 'opus' ? '.opus' : '.wav');
+    a.download = `${exportTask.filename}.${encoded.ext}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
