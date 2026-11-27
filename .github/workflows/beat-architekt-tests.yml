@@ -1,0 +1,65 @@
+name: Beat Architekt Tests
+
+# Phase 36: Browser-Abnahmetests der Beat-Architekt-Demo (Playwright + Chromium, ffmpeg fuer die Format-Pruefung).
+# Laeuft nur, wenn sich die Demo, ihre Tests oder dieser Workflow aendern.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'demos/beat-architekt/**'
+      - '.github/workflows/beat-architekt-tests.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'demos/beat-architekt/**'
+      - '.github/workflows/beat-architekt-tests.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: beat-architekt-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Beat Architekt (Chromium)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: demos/beat-architekt/tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: demos/beat-architekt/tests/package-lock.json
+
+      - name: ffmpeg installieren
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+
+      - name: Abhaengigkeiten installieren
+        run: npm ci
+
+      - name: Chromium installieren
+        run: npx playwright install --with-deps chromium
+
+      - name: Tests
+        run: npx playwright test
+        env:
+          CI: 'true'
+
+      - name: Bericht hochladen
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: beat-architekt-playwright-report
+          path: |
+            demos/beat-architekt/tests/playwright-report
+            demos/beat-architekt/tests/test-results
+          retention-days: 7
