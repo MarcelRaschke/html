@@ -27,6 +27,7 @@ Der Testserver (`serve.js`) liefert das Demo-Verzeichnis auf `http://127.0.0.1:8
 | `05-master-path` | Sample-Player ueber Limiter und Meter, Master-Recorder (Worklet und ScriptProcessor), Video-Export |
 | `06-crossfade-aimix` | Crossfade-Rampe, Abbruch, MIDI im Fade, KI-Pause, Gain-Trennung, Frequenzbalance und Bass-Toleranz |
 | `07-delivery-encoder` | WAV/AIFF/MP3/Opus mit ffprobe und Rueckdecodierung, AAC-Fehlerpfad, M4A-Muxer, Export ueber die Oberflaeche |
+| `08-loudness-target` | Lautheitsziel auf 0,15 LU bei PLR 8/14/20 dB, Limiting-Grenze 12 dB, Warnungen, Anzeige in der Export-Queue |
 
 Jeder Test schlaegt zusaetzlich fehl, wenn auf der Seite unerwartete Fehler oder Konsolenfehler auftreten (Fixture `app` in `helpers.js`). Erwartete Fehler meldet ein Test ausdruecklich mit `app.allowErrors(/.../)`.
 

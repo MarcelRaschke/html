@@ -3319,31 +3319,79 @@ function limitTruePeak(buffer, ceilingDbTP = -1.0, lookaheadMs = 5, releaseMs = 
   return { buffer: out, maxReductionDb: 20 * Math.log10(minGain) };
 }
 
-// Lieferfertiges Master: auf Ziel-LUFS normalisieren und auf True-Peak-Ziel limitieren.
-// Weil der Limiter die Lautheit leicht senkt, wird die Normalisierung bis zu 3-mal nachgefuehrt.
+// Lieferfertiges Master: auf Ziel-LUFS normalisieren und auf True-Peak-Ziel limitieren (Phase 37).
+// Die Lautheit nach dem Limiter ist eine monotone Funktion des Gains, steigt aber flacher als 1 LU/dB,
+// sobald der Limiter greift: jedes dB mehr Gain wird teilweise wieder weggeregelt. Die fruehere Korrektur
+// "Gain += Ziel - Ist" nahm 1 LU/dB an und blieb bei dynamischem Material weit unter dem Ziel (gemessen:
+// -16,3 statt -14 LUFS bei 8,5 dB Limiting). Jetzt Sekantenverfahren mit gemessener Steigung, Toleranz 0,1 LU.
+// Grenze: hoechstens 12 dB Limiting. Traegt ein Element mit hohen Spitzen die Lautheit (z. B. Kick-dominiertes
+// Material), waere das Ziel nur mit Zerstoerung der Transienten erreichbar (gemessen: 37 dB fuer -14 LUFS).
+// Dann wird leiser geliefert und gewarnt; Streaming-Dienste regeln zu laute Tracks ohnehin herunter.
+// Rueckgabe zusaetzlich: targetLUFS, deviationLU (Ist - Ziel) und warnings (Texte fuer die Export-Queue).
 function masterForDelivery(source, targetLUFS, ceilingDbTP = -1.0, onProgress = null) {
+  const TOLERANCE_LU = 0.1, MAX_PASSES = 8, MAX_STEP_DB = 24, MAX_GR_DB = 12, GR_WARN_DB = 6, MISS_WARN_LU = 0.5;
   const report = (f, step) => { if (onProgress) onProgress(f, step); };
   report(0.05, 'Lautheit messen');
   const sourceLUFS = calculateLUFS(source);
   if (!isFinite(sourceLUFS)) throw new Error('Master-Take ist still (unter -70 LUFS); keine Normalisierung moeglich');
-  let gainDb = targetLUFS - sourceLUFS, result = null;
-  for (let iter = 0; iter < 3; iter++) {
-    report(0.15 + iter * 0.28, `Durchlauf ${iter + 1}: Normalisieren und Limiter`);
-    const normalized = applyGainPcm(source, gainDb);
-    const limited = limitTruePeak(normalized, ceilingDbTP);
+  const runs = [];
+  const pass = (gainDb) => {
+    report(0.1 + runs.length * 0.85 / MAX_PASSES, `Durchlauf ${runs.length + 1}: Gain ${gainDb.toFixed(1)} dB`);
+    const limited = limitTruePeak(applyGainPcm(source, gainDb), ceilingDbTP);
     // Sicherheitsabstand, falls die Glaettung eine Spitze minimal verfehlt
     let out = limited.buffer, tp = measureTruePeak(out);
     if (tp > ceilingDbTP + 0.05) {
       out = limitTruePeak(out, ceilingDbTP - (tp - ceilingDbTP)).buffer;
       tp = measureTruePeak(out);
     }
-    const lufs = calculateLUFS(out);
-    result = { buffer: out, lufs, truePeak: tp, gainDb, limitedDb: limited.maxReductionDb, iterations: iter + 1 };
-    if (Math.abs(lufs - targetLUFS) <= 0.2) break;
-    gainDb += targetLUFS - lufs;
+    const r = { buffer: out, lufs: calculateLUFS(out), truePeak: tp, gainDb, limitedDb: limited.maxReductionDb };
+    runs.push(r);
+    return r;
+  };
+  const allowed = r => r.limitedDb >= -MAX_GR_DB;
+  let cur = pass(targetLUFS - sourceLUFS), prev = null;
+  let lo = allowed(cur) ? cur : null;   // hoechster Gain innerhalb der Limiter-Grenze
+  let hi = allowed(cur) ? null : cur;   // niedrigster Gain jenseits der Grenze
+  while (runs.length < MAX_PASSES) {
+    const err = cur.lufs - targetLUFS;
+    if (allowed(cur) && Math.abs(err) <= TOLERANCE_LU) break;
+    let g;
+    if (!allowed(cur)) {
+      // jenseits der Grenze: zwischen zulaessigem und unzulaessigem Gain halbieren, ohne Stuetzstelle grob zurueck
+      g = lo ? (lo.gainDb + cur.gainDb) / 2 : cur.gainDb - (-cur.limitedDb - MAX_GR_DB) - 1;
+    } else {
+      let slope = 1;
+      if (prev && Math.abs(cur.gainDb - prev.gainDb) > 1e-6) {
+        const s = (cur.lufs - prev.lufs) / (cur.gainDb - prev.gainDb);
+        if (isFinite(s)) slope = Math.min(1, Math.max(0.05, s));
+      }
+      g = cur.gainDb + Math.max(-MAX_STEP_DB, Math.min(MAX_STEP_DB, -err / slope));
+      if (hi && g >= hi.gainDb) g = (cur.gainDb + hi.gainDb) / 2;
+    }
+    // Ziel liegt hinter der Grenze und die Grenze ist eingegabelt: fertig
+    if (lo && hi && hi.gainDb - lo.gainDb < 0.25 && lo.lufs < targetLUFS) break;
+    prev = cur;
+    cur = pass(g);
+    if (allowed(cur)) { if (!lo || cur.gainDb > lo.gainDb) lo = cur; }
+    else if (!hi || cur.gainDb < hi.gainDb) hi = cur;
+  }
+  // Auswahl: zulaessiger Durchlauf am naechsten am Ziel, sonst der mit dem geringsten Limiting
+  const ok = runs.filter(allowed);
+  const best = ok.length
+    ? ok.reduce((a, b) => (Math.abs(b.lufs - targetLUFS) < Math.abs(a.lufs - targetLUFS) ? b : a))
+    : runs.reduce((a, b) => (b.limitedDb > a.limitedDb ? b : a));
+  const deviationLU = best.lufs - targetLUFS;
+  const warnings = [];
+  if (deviationLU < -MISS_WARN_LU && hi) {
+    warnings.push(`Ziel ${targetLUFS} LUFS nicht erreicht (${best.lufs.toFixed(1)} LUFS): dafuer waeren mehr als ${MAX_GR_DB} dB Limiting noetig`);
+  } else if (Math.abs(deviationLU) > MISS_WARN_LU) {
+    warnings.push(`Ziel um ${deviationLU > 0 ? '+' : ''}${deviationLU.toFixed(1)} LU verfehlt`);
+  }
+  if (best.limitedDb < -GR_WARN_DB) {
+    warnings.push(`Limiter regelt ${(-best.limitedDb).toFixed(1)} dB: Transienten werden hoerbar abgeflacht`);
   }
   report(1, 'fertig');
-  return result;
+  return { ...best, iterations: runs.length, targetLUFS, deviationLU, warnings };
 }
 
 // === Live-Limiter: True-Peak-Limiter im Audio-Thread (AudioWorklet) ===
@@ -3521,7 +3569,8 @@ function getExportWorker() {
             (f, step) => self.postMessage({ id, progress: f, step }));
           const out = r.buffer.channels;
           self.postMessage({ id, done: true, channels: out, lufs: r.lufs, truePeak: r.truePeak,
-            gainDb: r.gainDb, limitedDb: r.limitedDb, iterations: r.iterations }, out.map(c => c.buffer));
+            gainDb: r.gainDb, limitedDb: r.limitedDb, iterations: r.iterations, targetLUFS: r.targetLUFS,
+            deviationLU: r.deviationLU, warnings: r.warnings }, out.map(c => c.buffer));
         } catch (err) {
           self.postMessage({ id, error: String(err && err.message || err) });
         }
@@ -3568,7 +3617,8 @@ function masterForDeliveryAsync(buffer, targetLUFS, ceilingDbTP = -1.0, onProgre
   return new Promise((resolve, reject) => {
     exportWorkerJobs.set(id, { onProgress, reject, resolve: (d) => resolve({
       buffer: makePcmBuffer(d.channels.length, d.channels[0].length, buffer.sampleRate, d.channels),
-      lufs: d.lufs, truePeak: d.truePeak, gainDb: d.gainDb, limitedDb: d.limitedDb, iterations: d.iterations, mode: 'worker' }) });
+      lufs: d.lufs, truePeak: d.truePeak, gainDb: d.gainDb, limitedDb: d.limitedDb, iterations: d.iterations,
+      targetLUFS: d.targetLUFS, deviationLU: d.deviationLU, warnings: d.warnings, mode: 'worker' }) });
     worker.postMessage({ id, channels, sampleRate: buffer.sampleRate, targetLUFS, ceiling: ceilingDbTP },
       channels.map(c => c.buffer));
   });
@@ -14047,10 +14097,13 @@ function updateExportQueueUI() {
     const color = exp.status === 'completed' ? 'var(--lime)' : exp.status === 'failed' ? 'var(--red)' : 'var(--text-secondary)';
     // Bei Fehlern den Grund zeigen (z. B. fehlender AAC-Encoder), sonst die tatsaechlich erzeugte Datei
     const detail = exp.status === 'failed' && exp.error ? exp.error : (exp.result && exp.result.info) || '';
+    // Phase 37: Mastering-Warnungen (starkes Limiting, Ziel verfehlt) unter der Datei
+    const warnings = exp.status === 'completed' && exp.result && exp.result.warnings ? exp.result.warnings : [];
     html += `<div style="font-size:8px;color:var(--text-secondary);margin:4px 0;padding:2px">
       <div style="display:flex;justify-content:space-between"><span>${idx + 1}. ${esc(exp.filename)}</span>
       <span style="color:${color}">${esc(exp.status)}</span></div>
       ${detail ? `<div class="export-detail" style="color:${color};opacity:0.85">${esc(detail)}</div>` : ''}
+      ${warnings.map(w => `<div class="export-warning" style="color:var(--gold)">Hinweis: ${esc(w)}</div>`).join('')}
     </div>`;
   });
   queueInfo.innerHTML = html;
@@ -14115,10 +14168,13 @@ async function performExport(exportTask) {
     });
     buffer = pcmToAudioBuffer(mastered.buffer);
     applyLoudnessValue(mastered.lufs);
-    exportTask.result = { lufs: mastered.lufs, truePeak: mastered.truePeak, gainDb: mastered.gainDb, limitedDb: mastered.limitedDb, mode: mastered.mode };
-    document.getElementById('phase30Loudness').textContent =
-      `${mastered.lufs.toFixed(1)} LUFS · ${mastered.truePeak.toFixed(1)} dBTP` +
+    exportTask.result = { lufs: mastered.lufs, truePeak: mastered.truePeak, gainDb: mastered.gainDb, limitedDb: mastered.limitedDb,
+      mode: mastered.mode, targetLUFS: mastered.targetLUFS, deviationLU: mastered.deviationLU, iterations: mastered.iterations,
+      warnings: mastered.warnings || [] };
+    // Phase 37: Ziel, Ist-Wert und Limiting je Datei
+    const loudText = `${mastered.lufs.toFixed(1)} LUFS (Ziel ${exportTask.loudness.toFixed(1)}) · ${mastered.truePeak.toFixed(1)} dBTP` +
       (mastered.limitedDb < -0.05 ? ` · Limiter ${mastered.limitedDb.toFixed(1)} dB` : '');
+    document.getElementById('phase30Loudness').textContent = loudText;
     document.getElementById('phase30ProgressBar').querySelector('div').style.width = '75%';
 
     // Phase 35: echte Encoder; Metadaten aus dem Release-Editor (Titel faellt auf den Dateinamen zurueck)
@@ -14127,7 +14183,7 @@ async function performExport(exportTask) {
         bitDepth: exportTask.bitDepth,
         onProgress: f => { bar.style.width = (75 + f * 25).toFixed(0) + '%'; }
       });
-    exportTask.result.info = `${encoded.info} · ${mastered.lufs.toFixed(1)} LUFS · ${mastered.truePeak.toFixed(1)} dBTP`;
+    exportTask.result.info = `${encoded.info} · ${loudText}`;
     exportTask.result.bytes = encoded.blob.size;
 
     const url = URL.createObjectURL(encoded.blob);
