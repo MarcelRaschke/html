@@ -1,0 +1,13 @@
+{
+  "name": "beat-architekt-tests",
+  "private": true,
+  "description": "Browser-Abnahmetests fuer die Beat-Architekt-Demo (Phase 36)",
+  "type": "commonjs",
+  "scripts": {
+    "test": "playwright test",
+    "serve": "node serve.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}
